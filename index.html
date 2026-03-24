@@ -94,11 +94,31 @@
                    border:none; border-radius:3px; cursor:pointer; font-size:11px;
                    font-weight:bold; opacity:1.0; transition:opacity 0.15s; color:white; }
         .vis-btn.hidden { opacity:0.35; }
+
+        /* WebXR VR/AR ボタン */
+        #xr-buttons { position:fixed; bottom:16px; left:16px; z-index:50; display:flex; gap:8px; }
+        .xr-btn { padding:10px 20px; border:2px solid; border-radius:8px; font-size:14px;
+                   font-weight:bold; cursor:pointer; background:rgba(0,0,0,0.7); transition:all 0.2s; }
+        .xr-btn:hover { transform:scale(1.05); }
+        #btn-vr { color:#4dc0e6; border-color:#4dc0e6; }
+        #btn-vr:hover { background:rgba(77,192,230,0.2); }
+        #btn-ar { color:#7dff7d; border-color:#7dff7d; }
+        #btn-ar:hover { background:rgba(125,255,125,0.2); }
+        .xr-btn:disabled { opacity:0.3; cursor:default; transform:none; }
+        #xr-status { position:fixed; bottom:60px; left:16px; z-index:50;
+                     color:#aaa; font-size:11px; display:none; }
     </style>
 </head>
 <body>
 <canvas id="canvas"></canvas>
 <canvas id="handle-overlay" style="position:absolute;top:0;left:0;pointer-events:none;z-index:2;"></canvas>
+
+<!-- WebXR VR/AR ボタン -->
+<div id="xr-buttons" style="display:none;">
+    <button class="xr-btn" id="btn-vr" disabled>VR</button>
+    <button class="xr-btn" id="btn-ar" disabled>AR</button>
+</div>
+<div id="xr-status"></div>
 
 <!-- Fragment Selection ポップアップ (main.cpp drawFragmentChoicePopup 相当) -->
 <div id="fragment-popup" style="display:none;position:fixed;z-index:20;
@@ -2176,6 +2196,7 @@ function drawMeshEntrySetup(entry, M, V, P, cp) {
 }
 
 function render() {
+    if (xrSession) return;  // XR中は renderXR が回る
     if (!sb) { requestAnimationFrame(render); return; }
     // グラブ中は毎フレームmoveGrab（スクリーン座標 + view/proj）
     if (grab) {
@@ -2893,6 +2914,329 @@ async function runTetrahedralization(classified) {
         showErr('Tetrahedralization error:\n'+e.message+'\n\n'+(e.stack||''));
     }
 }
+
+//=============================================================================
+// WebXR VR/AR 対応 (Quest 3)
+//=============================================================================
+let xrSession = null;
+let xrRefSpace = null;
+let xrGLLayer = null;
+let xrMode = null;  // 'vr' or 'ar'
+
+// VR 空間パラメータ
+const VR_SCALE = 5.0;       // シミュレーション空間 → VR空間のスケール
+const VR_OFFSET = { x: 0, y: 1.2, z: -1.5 };  // モデル位置（目の前1.5m、高さ1.2m）
+
+// VR グラブ状態（左右独立）
+const vrGrabs = {
+    left:  { active: false, inputSource: null },
+    right: { active: false, inputSource: null }
+};
+
+function simToVR(sx, sy, sz) {
+    return [sx * VR_SCALE + VR_OFFSET.x,
+            sy * VR_SCALE + VR_OFFSET.y,
+            sz * VR_SCALE + VR_OFFSET.z];
+}
+function vrToSim(vx, vy, vz) {
+    return [(vx - VR_OFFSET.x) / VR_SCALE,
+            (vy - VR_OFFSET.y) / VR_SCALE,
+            (vz - VR_OFFSET.z) / VR_SCALE];
+}
+
+// WebXR 初期化チェック
+async function initXR() {
+    if (!navigator.xr) {
+        console.log('[XR] WebXR not supported');
+        return;
+    }
+    const xrBtns = document.getElementById('xr-buttons');
+    const btnVR = document.getElementById('btn-vr');
+    const btnAR = document.getElementById('btn-ar');
+
+    const vrOk = await navigator.xr.isSessionSupported('immersive-vr').catch(() => false);
+    const arOk = await navigator.xr.isSessionSupported('immersive-ar').catch(() => false);
+
+    if (vrOk || arOk) xrBtns.style.display = 'flex';
+    if (vrOk) { btnVR.disabled = false; btnVR.onclick = () => startXR('immersive-vr'); }
+    if (arOk) { btnAR.disabled = false; btnAR.onclick = () => startXR('immersive-ar'); }
+    console.log('[XR] VR:', vrOk, 'AR:', arOk);
+}
+
+async function startXR(mode) {
+    if (xrSession) { await xrSession.end(); return; }
+    xrMode = mode === 'immersive-ar' ? 'ar' : 'vr';
+
+    const opts = {
+        requiredFeatures: ['local-floor'],
+        optionalFeatures: ['hand-tracking']
+    };
+
+    try {
+        xrSession = await navigator.xr.requestSession(mode, opts);
+        xrSession.addEventListener('end', onXREnd);
+
+        // WebGL layer
+        await gl.makeXRCompatible();
+        xrGLLayer = new XRWebGLLayer(xrSession, gl);
+        xrSession.updateRenderState({ baseLayer: xrGLLayer });
+
+        xrRefSpace = await xrSession.requestReferenceSpace('local-floor');
+
+        // UI 非表示（通常モードUI）
+        document.getElementById('ctrl').style.display = 'none';
+        document.getElementById('info').style.display = 'none';
+        const xrSt = document.getElementById('xr-status');
+        xrSt.style.display = 'block';
+        xrSt.textContent = xrMode.toUpperCase() + ' active';
+        document.getElementById('btn-' + xrMode).textContent = 'Exit ' + xrMode.toUpperCase();
+
+        // XR レンダーループ開始
+        xrSession.requestAnimationFrame(renderXR);
+        console.log('[XR] Session started:', mode);
+    } catch (e) {
+        console.error('[XR] Failed to start:', e);
+        xrSession = null;
+    }
+}
+
+function onXREnd() {
+    console.log('[XR] Session ended');
+    xrSession = null;
+    xrGLLayer = null;
+    xrRefSpace = null;
+    vrGrabs.left.active = false;
+    vrGrabs.right.active = false;
+
+    // UI 復帰
+    document.getElementById('ctrl').style.display = '';
+    document.getElementById('info').style.display = '';
+    document.getElementById('xr-status').style.display = 'none';
+    document.getElementById('btn-vr').textContent = 'VR';
+    document.getElementById('btn-ar').textContent = 'AR';
+
+    // 通常レンダーループ再開
+    requestAnimationFrame(render);
+}
+
+// XR レンダーループ
+function renderXR(time, frame) {
+    if (!xrSession || !sb) { xrSession?.requestAnimationFrame(renderXR); return; }
+
+    xrSession.requestAnimationFrame(renderXR);
+    const pose = frame.getViewerPose(xrRefSpace);
+    if (!pose) return;
+
+    // 入力処理（コントローラー + ハンドトラッキング）
+    processXRInput(frame);
+
+    // 物理ステップ
+    sb.step(1/72, gravX, gravY, gravZ);
+    updateMesh();
+    if (childBuffers.length > 0) updateChildren();
+
+    // ステレオ描画
+    gl.bindFramebuffer(gl.FRAMEBUFFER, xrGLLayer.framebuffer);
+
+    if (xrMode === 'vr') {
+        gl.clearColor(0.06, 0.06, 0.1, 1);
+    } else {
+        gl.clearColor(0, 0, 0, 0);
+    }
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.enable(gl.DEPTH_TEST);
+
+    for (const view of pose.views) {
+        const vp = xrGLLayer.getViewport(view);
+        gl.viewport(vp.x, vp.y, vp.width, vp.height);
+
+        // VR View / Projection 行列
+        const V = view.transform.inverse.matrix;
+        const P = view.projectionMatrix;
+
+        // モデル行列: シミュレーション空間 → VR空間にスケール＋移動
+        const M = new Float32Array([
+            VR_SCALE, 0, 0, 0,
+            0, VR_SCALE, 0, 0,
+            0, 0, VR_SCALE, 0,
+            VR_OFFSET.x, VR_OFFSET.y, VR_OFFSET.z, 1
+        ]);
+
+        // カメラ位置（ライティング用）
+        const viewerPos = pose.views[0].transform.position;
+        const cp = [viewerPos.x, viewerPos.y, viewerPos.z];
+
+        // メインメッシュ + 子メッシュ描画
+        drawSceneXR(M, V, P, cp);
+    }
+}
+
+function drawSceneXR(M, V, P, cp) {
+    // Liver 描画
+    gl.useProgram(pMain);
+    gl.uniformMatrix4fv(L.uM, false, M);
+    gl.uniformMatrix4fv(L.uV, false, V);
+    gl.uniformMatrix4fv(L.uP, false, P);
+    gl.uniform3fv(L.uLP, cp);
+    gl.uniform3fv(L.uVP, cp);
+    gl.uniform4f(L.uCol, 0.75, 0.22, 0.17, 1.0);
+    gl.uniform1f(L.uAlpha, 1.0);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, bHiPos);
+    gl.enableVertexAttribArray(L.aPos);
+    gl.vertexAttribPointer(L.aPos, 3, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, bHiNrm);
+    gl.enableVertexAttribArray(L.aNrm);
+    gl.vertexAttribPointer(L.aNrm, 3, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bHiIdx);
+
+    const numIdx = sb.getNumHighResSurfaceTriIdsAfterCut
+        ? sb.getNumHighResSurfaceTriIdsAfterCut()
+        : sb.getNumHighResSurfaceTriIds();
+    gl.drawElements(gl.TRIANGLES, numIdx,
+        extUint ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);
+
+    // 子メッシュ描画
+    const CHILD_COLORS = [
+        [0.85, 0.25, 0.60, 1],  // portal
+        [0.09, 0.63, 0.52, 1],  // vein
+        [0.83, 0.63, 0.09, 1],  // tumor
+        [0.15, 0.68, 0.38, 1],  // gb
+    ];
+    for (let ci = 0; ci < childBuffers.length; ci++) {
+        const cb = childBuffers[ci];
+        if (!cb) continue;
+        const cc = CHILD_COLORS[ci] || [0.5, 0.5, 0.5, 1];
+        gl.uniform4f(L.uCol, cc[0], cc[1], cc[2], cc[3]);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, cb.bPos);
+        gl.enableVertexAttribArray(L.aPos);
+        gl.vertexAttribPointer(L.aPos, 3, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, cb.bNrm);
+        gl.enableVertexAttribArray(L.aNrm);
+        gl.vertexAttribPointer(L.aNrm, 3, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cb.bIdx);
+        gl.drawElements(gl.TRIANGLES, cb.numIdx,
+            extUint ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);
+    }
+
+    // ハンドル球描画（VR空間）
+    if (sb.getNumHandleSpheres() > 0 && bSpherePos) {
+        drawHandleSpheres3D(M, V, P, cp);
+    }
+}
+
+// XR 入力処理
+function processXRInput(frame) {
+    if (!xrSession) return;
+
+    for (const src of xrSession.inputSources) {
+        const hand = src.handedness || 'right';  // 'left' or 'right'
+        const grip = src.gripSpace;
+
+        // ハンドトラッキング
+        if (src.hand) {
+            processHandTracking(frame, src, hand);
+            continue;
+        }
+
+        // コントローラー
+        if (grip && src.gamepad) {
+            processController(frame, src, hand);
+        }
+    }
+}
+
+// コントローラー入力
+function processController(frame, src, hand) {
+    const grip = src.gripSpace;
+    const gripPose = frame.getPose(grip, xrRefSpace);
+    if (!gripPose) return;
+
+    const pos = gripPose.transform.position;
+    const ori = gripPose.transform.orientation;
+
+    // トリガー（index 0）
+    const trigger = src.gamepad.buttons[0]?.pressed || false;
+
+    // レイ方向（コントローラーの前方 = -Z）
+    // クォータニオンから方向ベクトルを計算
+    const qx = ori.x, qy = ori.y, qz = ori.z, qw = ori.w;
+    const dirX = 2 * (qx * qz + qy * qw);
+    const dirY = 2 * (qy * qz - qx * qw);
+    const dirZ = 1 - 2 * (qx * qx + qy * qy);
+
+    const grabState = vrGrabs[hand];
+
+    if (trigger && !grabState.active) {
+        // グラブ開始: コントローラー位置からレイ → シミュレーション座標に変換
+        const simO = vrToSim(pos.x, pos.y, pos.z);
+        const simD = [-dirX / VR_SCALE, -dirY / VR_SCALE, -dirZ / VR_SCALE];
+        sb.startGrabVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2]);
+        grabState.active = true;
+        grabState.inputSource = src;
+    } else if (trigger && grabState.active) {
+        // グラブ移動
+        const simO = vrToSim(pos.x, pos.y, pos.z);
+        const simD = [-dirX / VR_SCALE, -dirY / VR_SCALE, -dirZ / VR_SCALE];
+        sb.moveGrabVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2], 1/72);
+    } else if (!trigger && grabState.active) {
+        // グラブ終了
+        sb.endGrabVR();
+        grabState.active = false;
+        grabState.inputSource = null;
+    }
+}
+
+// ハンドトラッキング（ピンチジェスチャー）
+function processHandTracking(frame, src, hand) {
+    const indexTip = src.hand.get('index-finger-tip');
+    const thumbTip = src.hand.get('thumb-tip');
+    const wrist = src.hand.get('wrist');
+    if (!indexTip || !thumbTip || !wrist) return;
+
+    const indexPose = frame.getJointPose(indexTip, xrRefSpace);
+    const thumbPose = frame.getJointPose(thumbTip, xrRefSpace);
+    const wristPose = frame.getJointPose(wrist, xrRefSpace);
+    if (!indexPose || !thumbPose || !wristPose) return;
+
+    const ip = indexPose.transform.position;
+    const tp = thumbPose.transform.position;
+
+    // ピンチ距離
+    const dx = ip.x - tp.x, dy = ip.y - tp.y, dz = ip.z - tp.z;
+    const pinchDist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    const isPinching = pinchDist < 0.025;  // 2.5cm 以内
+
+    // ピンチ中心点
+    const midX = (ip.x + tp.x) / 2;
+    const midY = (ip.y + tp.y) / 2;
+    const midZ = (ip.z + tp.z) / 2;
+
+    // レイ方向：手首からピンチ点へ
+    const wp = wristPose.transform.position;
+    const rayDx = midX - wp.x, rayDy = midY - wp.y, rayDz = midZ - wp.z;
+    const rayLen = Math.sqrt(rayDx * rayDx + rayDy * rayDy + rayDz * rayDz) || 1;
+
+    const grabState = vrGrabs[hand];
+
+    if (isPinching && !grabState.active) {
+        const simO = vrToSim(midX, midY, midZ);
+        const simD = [rayDx / rayLen / VR_SCALE, rayDy / rayLen / VR_SCALE, rayDz / rayLen / VR_SCALE];
+        sb.startGrabVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2]);
+        grabState.active = true;
+    } else if (isPinching && grabState.active) {
+        const simO = vrToSim(midX, midY, midZ);
+        const simD = [rayDx / rayLen / VR_SCALE, rayDy / rayLen / VR_SCALE, rayDz / rayLen / VR_SCALE];
+        sb.moveGrabVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2], 1/72);
+    } else if (!isPinching && grabState.active) {
+        sb.endGrabVR();
+        grabState.active = false;
+    }
+}
+
+// WebXR チェック（WASM不要、ブラウザ機能のみ）
+initXR();
 </script>
 </body>
 </html>
