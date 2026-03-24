@@ -2924,8 +2924,8 @@ let xrGLLayer = null;
 let xrMode = null;  // 'vr' or 'ar'
 
 // VR 空間パラメータ（実行時調整可能）
-let VR_SCALE = 2.0;         // シミュレーション空間 → VR空間のスケール
-let VR_OFFSET = { x: 0, y: 1.0, z: -0.8 };  // モデル位置（目の前0.8m、高さ1.0m）
+let VR_SCALE = 0.1;         // シミュレーション空間 → VR空間のスケール（モデル3単位→30cm）
+let VR_OFFSET = { x: 0, y: 1.0, z: -0.5 };  // モデル位置（目の前0.5m、高さ1.0m）
 
 // VR グラブ状態（左右独立）
 const vrGrabs = {
