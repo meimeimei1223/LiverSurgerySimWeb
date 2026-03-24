@@ -524,10 +524,28 @@ precision mediump float;
 uniform vec4 uCol;
 void main() { gl_FragColor = uCol; }`;
 
+// ポイントシェーダー（VRハンドジョイント描画用）
+const SHADER_VS_PT = `
+attribute vec3 aPos;
+uniform mat4 uV, uP;
+uniform float uSize;
+void main() {
+    gl_Position = uP * uV * vec4(aPos, 1.0);
+    gl_PointSize = uSize;
+}`;
+const SHADER_FS_PT = `
+precision mediump float;
+uniform vec4 uCol;
+void main() {
+    vec2 c = gl_PointCoord - 0.5;
+    if (dot(c,c) > 0.25) discard;
+    gl_FragColor = uCol;
+}`;
+
 //-- Globals -----------------------------------------------------------
 const canvas = document.getElementById('canvas');
 let gl, sb = null;
-let pMain, pWire, L, LW;
+let pMain, pWire, pPoint, L, LW, LPt;
 let bHiPos, bHiNrm, bHiIdx, bWire, extUint, bAxis;
 let numHiIdx = 0, numWireV = 0;
 let drag=false, grab=false, grabD=0, prevPt=[0,0,0];
@@ -2481,6 +2499,16 @@ function initApp() {
             uCol: gl.getUniformLocation(pWire,'uCol'),
         };
 
+        // ポイントシェーダー（VRハンドジョイント用）
+        pPoint = mkProg(SHADER_VS_PT, SHADER_FS_PT);
+        LPt = {
+            aPos:  gl.getAttribLocation(pPoint,'aPos'),
+            uV:    gl.getUniformLocation(pPoint,'uV'),
+            uP:    gl.getUniformLocation(pPoint,'uP'),
+            uCol:  gl.getUniformLocation(pPoint,'uCol'),
+            uSize: gl.getUniformLocation(pPoint,'uSize'),
+        };
+
         // Create GL buffers
         bHiPos = gl.createBuffer();
         bHiNrm = gl.createBuffer();
@@ -2935,6 +2963,8 @@ const vrGrabs = {
     right: { active: false }
 };
 let vrLeftPrev = null;  // { pos:[x,y,z], ori:{x,y,z,w} } 左手の前フレーム状態
+let vrHandJoints = [];  // VRハンドジョイント位置 [{x,y,z,hand}...]
+let bVRHandPts = null;  // GLバッファ
 
 function simToVR(sx, sy, sz) {
     return [sx * VR_SCALE + VR_OFFSET.x,
@@ -3073,7 +3103,62 @@ function renderXR(time, frame) {
 
         // メインメッシュ + 子メッシュ描画
         drawSceneXR(M, V, P, cp);
+
+        // ハンドジョイント描画
+        if (vrHandJoints.length > 0) {
+            drawVRHands(V, P);
+        }
     }
+}
+
+function drawVRHands(V, P) {
+    if (!pPoint || vrHandJoints.length === 0) return;
+
+    // ジョイント座標をバッファに詰める
+    const pts = new Float32Array(vrHandJoints.length * 3);
+    for (let i = 0; i < vrHandJoints.length; i++) {
+        pts[i*3]   = vrHandJoints[i].x;
+        pts[i*3+1] = vrHandJoints[i].y;
+        pts[i*3+2] = vrHandJoints[i].z;
+    }
+
+    if (!bVRHandPts) bVRHandPts = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, bVRHandPts);
+    gl.bufferData(gl.ARRAY_BUFFER, pts, gl.DYNAMIC_DRAW);
+
+    gl.useProgram(pPoint);
+    gl.uniformMatrix4fv(LPt.uV, false, V);
+    gl.uniformMatrix4fv(LPt.uP, false, P);
+    gl.uniform1f(LPt.uSize, 8.0);
+
+    gl.enableVertexAttribArray(LPt.aPos);
+    gl.vertexAttribPointer(LPt.aPos, 3, gl.FLOAT, false, 0, 0);
+
+    // 左手: シアン、右手: オレンジで色分け
+    let leftStart = -1, leftCount = 0, rightStart = -1, rightCount = 0;
+    for (let i = 0; i < vrHandJoints.length; i++) {
+        if (vrHandJoints[i].hand === 'left') {
+            if (leftStart < 0) leftStart = i;
+            leftCount++;
+        } else {
+            if (rightStart < 0) rightStart = i;
+            rightCount++;
+        }
+    }
+
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+    if (leftCount > 0) {
+        gl.uniform4f(LPt.uCol, 0.2, 0.9, 0.9, 0.9);  // シアン
+        gl.drawArrays(gl.POINTS, leftStart, leftCount);
+    }
+    if (rightCount > 0) {
+        gl.uniform4f(LPt.uCol, 1.0, 0.6, 0.2, 0.9);  // オレンジ
+        gl.drawArrays(gl.POINTS, rightStart, rightCount);
+    }
+
+    gl.disable(gl.BLEND);
 }
 
 function drawSceneXR(M, V, P, cp) {
@@ -3134,13 +3219,15 @@ function drawSceneXR(M, V, P, cp) {
 // XR 入力処理
 function processXRInput(frame) {
     if (!xrSession) return;
+    vrHandJoints = [];  // 毎フレームクリア
 
     for (const src of xrSession.inputSources) {
-        const hand = src.handedness || 'right';  // 'left' or 'right'
+        const hand = src.handedness || 'right';
         const grip = src.gripSpace;
 
         // ハンドトラッキング
         if (src.hand) {
+            collectHandJoints(frame, src, hand);
             processHandTracking(frame, src, hand);
             continue;
         }
@@ -3148,6 +3235,17 @@ function processXRInput(frame) {
         // コントローラー
         if (grip && src.gamepad) {
             processController(frame, src, hand);
+        }
+    }
+}
+
+// ハンドジョイント座標の収集（描画用）
+function collectHandJoints(frame, src, hand) {
+    for (const [name, joint] of src.hand) {
+        const pose = frame.getJointPose(joint, xrRefSpace);
+        if (pose) {
+            const p = pose.transform.position;
+            vrHandJoints.push({ x: p.x, y: p.y, z: p.z, hand: hand, radius: pose.radius || 0.005 });
         }
     }
 }
