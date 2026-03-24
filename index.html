@@ -2923,9 +2923,9 @@ let xrRefSpace = null;
 let xrGLLayer = null;
 let xrMode = null;  // 'vr' or 'ar'
 
-// VR 空間パラメータ
-const VR_SCALE = 5.0;       // シミュレーション空間 → VR空間のスケール
-const VR_OFFSET = { x: 0, y: 1.2, z: -1.5 };  // モデル位置（目の前1.5m、高さ1.2m）
+// VR 空間パラメータ（実行時調整可能）
+let VR_SCALE = 2.0;         // シミュレーション空間 → VR空間のスケール
+let VR_OFFSET = { x: 0, y: 1.0, z: -0.8 };  // モデル位置（目の前0.8m、高さ1.0m）
 
 // VR グラブ状態（左右独立）
 const vrGrabs = {
@@ -3148,7 +3148,24 @@ function processXRInput(frame) {
 }
 
 // コントローラー入力
+// 右スティック上下: スケール調整、左スティック上下: 高さ調整、左スティック左右: 奥行き調整
 function processController(frame, src, hand) {
+    // サムスティック（axes[2]=X, axes[3]=Y）でスケール/位置調整
+    if (src.gamepad && src.gamepad.axes.length >= 4) {
+        const stickX = src.gamepad.axes[2] || 0;
+        const stickY = src.gamepad.axes[3] || 0;
+        const deadzone = 0.15;
+        if (hand === 'right') {
+            // 右スティック上下 → スケール
+            if (Math.abs(stickY) > deadzone) {
+                VR_SCALE = Math.max(0.2, Math.min(10.0, VR_SCALE - stickY * 0.02));
+            }
+        } else {
+            // 左スティック上下 → 高さ、左右 → 奥行き
+            if (Math.abs(stickY) > deadzone) VR_OFFSET.y -= stickY * 0.01;
+            if (Math.abs(stickX) > deadzone) VR_OFFSET.z += stickX * 0.01;
+        }
+    }
     const grip = src.gripSpace;
     const gripPose = frame.getPose(grip, xrRefSpace);
     if (!gripPose) return;
