@@ -2924,10 +2924,11 @@ let xrGLLayer = null;
 let xrMode = null;  // 'vr' or 'ar'
 
 // VR 空間パラメータ（実行時調整可能）
-let VR_SCALE = 0.1;         // シミュレーション空間 → VR空間のスケール（モデル3単位→30cm）
+let VR_SCALE = 0.05;        // シミュレーション空間 → VR空間のスケール（モデル3単位→15cm）
 let VR_OFFSET = { x: 0, y: 1.0, z: -0.5 };  // モデル位置（目の前0.5m、高さ1.0m）
 
-// VR グラブ状態（左右独立）
+// VR グラブ状態（物理エンジンはシングルグラブのみ対応 → 片手ずつ）
+let vrActiveHand = null;  // 現在グラブ中の手 ('left'/'right'/null)
 const vrGrabs = {
     left:  { active: false, inputSource: null },
     right: { active: false, inputSource: null }
@@ -3007,6 +3008,7 @@ function onXREnd() {
     xrRefSpace = null;
     vrGrabs.left.active = false;
     vrGrabs.right.active = false;
+    vrActiveHand = null;
 
     // UI 復帰
     document.getElementById('ctrl').style.display = '';
@@ -3186,12 +3188,15 @@ function processController(frame, src, hand) {
     const grabState = vrGrabs[hand];
 
     if (trigger && !grabState.active) {
-        // グラブ開始: コントローラー位置からレイ → シミュレーション座標に変換
+        // 他の手がグラブ中なら無視
+        if (vrActiveHand && vrActiveHand !== hand) return;
+        // グラブ開始
         const simO = vrToSim(pos.x, pos.y, pos.z);
         const simD = [-dirX / VR_SCALE, -dirY / VR_SCALE, -dirZ / VR_SCALE];
         sb.startGrabVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2]);
         grabState.active = true;
         grabState.inputSource = src;
+        vrActiveHand = hand;
     } else if (trigger && grabState.active) {
         // グラブ移動
         const simO = vrToSim(pos.x, pos.y, pos.z);
@@ -3202,6 +3207,7 @@ function processController(frame, src, hand) {
         sb.endGrabVR();
         grabState.active = false;
         grabState.inputSource = null;
+        vrActiveHand = null;
     }
 }
 
@@ -3238,10 +3244,13 @@ function processHandTracking(frame, src, hand) {
     const grabState = vrGrabs[hand];
 
     if (isPinching && !grabState.active) {
+        // 他の手がグラブ中なら無視
+        if (vrActiveHand && vrActiveHand !== hand) return;
         const simO = vrToSim(midX, midY, midZ);
         const simD = [rayDx / rayLen / VR_SCALE, rayDy / rayLen / VR_SCALE, rayDz / rayLen / VR_SCALE];
         sb.startGrabVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2]);
         grabState.active = true;
+        vrActiveHand = hand;
     } else if (isPinching && grabState.active) {
         const simO = vrToSim(midX, midY, midZ);
         const simD = [rayDx / rayLen / VR_SCALE, rayDy / rayLen / VR_SCALE, rayDz / rayLen / VR_SCALE];
@@ -3249,6 +3258,7 @@ function processHandTracking(frame, src, hand) {
     } else if (!isPinching && grabState.active) {
         sb.endGrabVR();
         grabState.active = false;
+        vrActiveHand = null;
     }
 }
 
