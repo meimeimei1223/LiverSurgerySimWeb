@@ -1,0 +1,2879 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SoftBodyDuo WASM - Liver Demo</title>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { background:#1a1a2e; overflow:hidden; font-family:Arial,Helvetica,sans-serif; }
+        #canvas { display:block; width:100vw; height:100vh; }
+
+        .overlay {
+            position:absolute; border-radius:10px;
+            background:rgba(0,0,0,0.72); color:#fff;
+            padding:14px 18px; font-size:13px;
+        }
+        #loading {
+            top:50%; left:50%; transform:translate(-50%,-50%);
+            text-align:center; font-size:20px; min-width:280px;
+        }
+        #loading-bar { width:100%; height:6px; background:#333; border-radius:3px; margin:12px 0 8px; }
+        #loading-fill { height:100%; background:#00d4ff; border-radius:3px; width:0; transition:width .3s; }
+        #loading-sub { font-size:12px; color:#aaa; }
+
+        #info { top:12px; left:12px; display:none; min-width:180px; }
+        #info h3 { color:#00d4ff; margin-bottom:8px; font-size:14px; }
+        #info p { margin:3px 0; }
+        #info .v { color:#7dff7d; font-weight:bold; }
+
+        #ctrl {
+            top:0; right:0; bottom:0; width:310px; border-radius:0;
+            background:rgba(10,12,18,0.92); padding:0; overflow-y:auto; overflow-x:hidden;
+            font-size:13px; display:none; border-left:1px solid rgba(255,255,255,0.08);
+            scrollbar-width:thin; scrollbar-color:#333 transparent;
+        }
+        #ctrl::-webkit-scrollbar { width:4px; }
+        #ctrl::-webkit-scrollbar-thumb { background:#333; border-radius:2px; }
+
+        /* サイドパネル共通 */
+        .sp-mode-bar { font-size:12px; font-weight:bold; color:#ff4444; padding:10px 14px 4px; letter-spacing:0.08em; min-height:22px; }
+        .sp-section-label { display:flex; align-items:center; gap:6px; font-size:11px; color:#888; padding:8px 14px 4px; text-transform:uppercase; letter-spacing:0.1em; }
+        .sp-section-label::before { content:'●'; color:#666; font-size:8px; }
+        .sp-divider { border:none; border-top:1px solid rgba(255,255,255,0.07); margin:2px 0; }
+
+        /* VISIBILITY カード */
+        .vis-grid { display:grid; grid-template-columns:1fr 1fr; gap:5px; padding:4px 10px 8px; }
+        .vis-card { border-radius:6px; border:1.5px solid transparent; padding:6px 8px; cursor:pointer; user-select:none; transition:all 0.15s; background:rgba(255,255,255,0.04); display:flex; flex-direction:column; gap:2px; min-height:54px; }
+        .vis-card:hover { filter:brightness(1.15); }
+        .vis-card.state-off { background:rgba(30,30,30,0.6); opacity:0.5; }
+        .vis-card.state-half { border-color:var(--card-color,#888); background:rgba(255,255,255,0.05); opacity:0.8; }
+        .vis-card.state-on { border-color:var(--card-color,#888); background:rgba(255,255,255,0.07); }
+        .vis-card-top { display:flex; align-items:center; gap:6px; }
+        .vis-card-name { font-size:12px; font-weight:bold; color:var(--card-color,#ccc); }
+        .vis-card-status { font-size:10px; color:#666; padding-left:2px; }
+        .vis-card.state-on .vis-card-status { color:#aaa; }
+
+        /* DISPLAY */
+        .display-btns { display:flex; gap:5px; padding:4px 10px 6px; }
+        .display-btn { flex:1; padding:7px 4px; border:1.5px solid rgba(255,255,255,0.12); border-radius:6px; background:rgba(255,255,255,0.04); color:#888; font-size:11px; cursor:pointer; text-align:center; transition:all 0.15s; }
+        .display-btn:hover { background:rgba(255,255,255,0.09); color:#ccc; }
+        .display-btn.active { background:rgba(0,180,150,0.18); border-color:#00ccaa; color:#00ffdd; font-weight:bold; }
+
+        /* ACTION */
+        .action-section-label { display:flex; align-items:center; gap:6px; font-size:11px; color:#ff4444; font-weight:bold; padding:8px 14px 4px; text-transform:uppercase; letter-spacing:0.1em; }
+        .action-btn { display:flex; align-items:center; gap:8px; width:calc(100% - 20px); margin:3px 10px; padding:9px 10px; border:1.5px solid rgba(255,255,255,0.08); border-radius:6px; background:rgba(255,255,255,0.04); color:#ccc; font-size:13px; font-weight:bold; cursor:pointer; text-align:left; transition:all 0.15s; }
+        .action-btn:hover { background:rgba(255,255,255,0.09); }
+        .action-btn.active { background:rgba(200,50,50,0.25); border-color:#cc3333; color:#ff6666; }
+        .action-btn .icon-wrap { width:28px; height:28px; border-radius:5px; background:rgba(255,255,255,0.08); display:flex; align-items:center; justify-content:center; flex-shrink:0; overflow:hidden; }
+        .action-btn .icon-wrap img { width:24px; height:24px; object-fit:contain; border-radius:3px; }
+        .action-btn .key-hint { margin-left:auto; font-size:11px; color:#555; font-weight:normal; }
+        .action-btn.transform-btn { color:#4dc0e6; border-color:rgba(77,192,230,0.2); }
+        .action-btn.transform-btn.active { background:rgba(30,100,160,0.3); border-color:#4dc0e6; }
+        .action-sub { display:none; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:6px; margin:0 10px 4px; padding:6px 8px; font-size:11px; color:#aaa; }
+        .action-sub.visible { display:block; }
+        .sub-btn { display:inline-block; padding:4px 10px; margin:2px 3px 2px 0; border:1px solid rgba(255,255,255,0.12); border-radius:4px; background:rgba(255,255,255,0.06); color:#bbb; font-size:11px; cursor:pointer; transition:all 0.12s; }
+        .sub-btn:hover { background:rgba(255,255,255,0.12); color:#fff; }
+        .sub-btn.active { background:rgba(0,180,150,0.2); border-color:#00ccaa; color:#00ffdd; }
+        .sub-btn.danger { border-color:rgba(200,60,60,0.4); color:#ff8888; }
+        .sub-btn.danger:hover { background:rgba(200,60,60,0.25); }
+
+        #params { bottom:80px; left:12px; display:none; min-width:190px; }
+        #params h3 { color:#00d4ff; margin-bottom:8px; font-size:14px; }
+        #params label { display:block; margin:6px 0 1px; font-size:12px; }
+        #params input[type=range] { width:100%; margin-bottom:2px; }
+
+        #error {
+            top:50%; left:50%; transform:translate(-50%,-50%);
+            color:#ff6b6b; max-width:540px; display:none;
+        }
+        #error h2 { margin-bottom:10px; }
+        #error pre { background:#1a1a1a; padding:10px; border-radius:6px;
+                     font-size:11px; white-space:pre-wrap; overflow-x:auto; }
+        .vis-btn { display:inline-block; padding:3px 8px; margin:2px 2px 2px 0;
+                   border:none; border-radius:3px; cursor:pointer; font-size:11px;
+                   font-weight:bold; opacity:1.0; transition:opacity 0.15s; color:white; }
+        .vis-btn.hidden { opacity:0.35; }
+    </style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<canvas id="handle-overlay" style="position:absolute;top:0;left:0;pointer-events:none;z-index:2;"></canvas>
+
+<!-- Fragment Selection ポップアップ (main.cpp drawFragmentChoicePopup 相当) -->
+<div id="fragment-popup" style="display:none;position:fixed;z-index:20;
+    top:50px;right:220px;
+    background:rgba(15,18,28,0.95);border:1px solid rgba(75,185,230,0.3);
+    border-radius:10px;padding:0;min-width:340px;color:#fff;font-size:13px;cursor:default;">
+    <div id="fragment-popup-title" style="color:#4dc0e6;font-weight:bold;font-size:14px;
+        padding:12px 20px 8px;cursor:move;user-select:none;border-bottom:1px solid rgba(75,185,230,0.15);">
+        Fragment Selection <span style="float:right;color:#556;font-size:11px;">drag to move</span></div>
+    <div style="padding:10px 20px 16px;">
+    <div style="color:#aab;margin-bottom:12px;font-size:12px;">Choose which fragment to keep:</div>
+    <div id="fragment-buttons"></div>
+    <button id="fragment-cancel" style="width:100%;padding:8px;margin-top:8px;
+        background:#333;color:#aaa;border:1px solid #555;border-radius:6px;
+        cursor:pointer;font-size:12px;" onclick="cancelFragment()">Cancel Cut</button>
+</div></div>
+
+<!-- Reset 確認ポップアップ (C++ drawResetConfirmPopup 準拠) -->
+<div id="reset-popup" style="display:none;position:fixed;z-index:30;top:50%;left:50%;transform:translate(-50%,-50%);
+    background:rgba(15,18,28,0.97);border:1px solid rgba(200,60,60,0.3);border-radius:10px;
+    padding:20px 24px;min-width:260px;color:#fff;font-size:13px;text-align:center;">
+    <div style="font-size:15px;font-weight:bold;margin-bottom:8px;color:#e84c3d;">Reset All?</div>
+    <div style="color:#aab;margin-bottom:16px;">This cannot be undone.</div>
+    <div style="display:flex;gap:10px;justify-content:center;">
+        <button onclick="doReset()" style="padding:8px 24px;background:#cc3322;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:bold;">Reset</button>
+        <button onclick="document.getElementById('reset-popup').style.display='none'" style="padding:8px 24px;background:#4d5060;color:#aaa;border:none;border-radius:6px;cursor:pointer;">Cancel</button>
+    </div>
+</div>
+
+<!-- Exit 確認ポップアップ (C++ drawExitConfirmPopup 準拠) -->
+<div id="exit-popup" style="display:none;position:fixed;z-index:30;top:50%;left:50%;transform:translate(-50%,-50%);
+    background:rgba(15,18,28,0.97);border:1px solid rgba(128,128,140,0.3);border-radius:10px;
+    padding:20px 24px;min-width:260px;color:#fff;font-size:13px;text-align:center;">
+    <div style="font-size:15px;font-weight:bold;margin-bottom:8px;">Exit Application?</div>
+    <div style="color:#aab;margin-bottom:16px;">Unsaved progress will be lost.</div>
+    <div style="display:flex;gap:10px;justify-content:center;">
+        <button onclick="window.close();window.location.reload();" style="padding:8px 24px;background:#808088;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:bold;">Exit</button>
+        <button onclick="document.getElementById('exit-popup').style.display='none'" style="padding:8px 24px;background:#4d5060;color:#aaa;border:none;border-radius:6px;cursor:pointer;">Cancel</button>
+    </div>
+</div>
+
+<!-- CUT ポップアップ (main.cpp drawCutExecutePopup 相当) -->
+<div id="cut-popup" style="display:none;position:fixed;z-index:10;pointer-events:auto;">
+    <button id="cut-popup-btn" style="padding:6px 20px;border:none;border-radius:5px;
+        cursor:pointer;font-size:13px;font-weight:bold;color:white;
+        background:#c0392b;box-shadow:0 2px 8px rgba(0,0,0,0.5);
+        transition:background 0.1s;">CUT</button>
+</div>
+
+<!-- フォルダドロップエリア -->
+<div class="overlay" id="folder-drop-area" style="
+    bottom:12px; left:12px; display:block;
+    border:2px dashed #555; border-radius:10px;
+    padding:18px 24px; cursor:pointer; text-align:center;
+    font-size:14px; color:#aaa; min-width:200px;">
+    OBJ Drop<br>
+    <span style="font-size:11px;color:#666;">or click to select</span>
+    <input type="file" id="folder-input" webkitdirectory multiple style="display:none;">
+</div>
+
+<!-- 四面体化パラメータモーダル -->
+<div id="tet-modal-bg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:100;
+    align-items:center;justify-content:center;">
+  <div style="background:#1e2a3a;color:#fff;border-radius:12px;padding:24px 28px;min-width:340px;max-width:420px;font-size:13px;">
+    <h3 style="color:#00d4ff;margin-bottom:14px;">OBJ Folder</h3>
+    <div id="tet-file-list" style="background:#111a24;border-radius:6px;padding:10px 12px;margin-bottom:16px;font-size:12px;line-height:1.8;"></div>
+    <div style="border-top:1px solid #334;padding-top:14px;">
+      <div style="margin-bottom:10px;"><b style="color:#ff8c8c;">Liver</b>
+        <label style="display:flex;align-items:center;gap:8px;margin:3px 0;"><span style="width:90px;font-size:11px;">Low grid</span>
+          <input type="range" id="gs-liver-low" min="8" max="40" step="4" value="20" style="flex:1;" oninput="document.getElementById('gv-liver-low').textContent=this.value">
+          <span id="gv-liver-low" style="width:28px;text-align:right;color:#ffcc00;">20</span></label>
+        <label style="display:flex;align-items:center;gap:8px;margin:3px 0;"><span style="width:90px;font-size:11px;">High grid</span>
+          <input type="range" id="gs-liver-high" min="20" max="80" step="4" value="40" style="flex:1;" oninput="document.getElementById('gv-liver-high').textContent=this.value">
+          <span id="gv-liver-high" style="width:28px;text-align:right;color:#ffcc00;">40</span></label>
+      </div>
+      <div style="margin-bottom:10px;"><b style="color:#cc88ff;">Vessel</b>
+        <label style="display:flex;align-items:center;gap:8px;margin:3px 0;"><span style="width:90px;font-size:11px;">Low grid</span>
+          <input type="range" id="gs-vessel-low" min="16" max="60" step="4" value="40" style="flex:1;" oninput="document.getElementById('gv-vessel-low').textContent=this.value">
+          <span id="gv-vessel-low" style="width:28px;text-align:right;color:#ffcc00;">40</span></label>
+        <label style="display:flex;align-items:center;gap:8px;margin:3px 0;"><span style="width:90px;font-size:11px;">High grid</span>
+          <input type="range" id="gs-vessel-high" min="40" max="120" step="8" value="80" style="flex:1;" oninput="document.getElementById('gv-vessel-high').textContent=this.value">
+          <span id="gv-vessel-high" style="width:28px;text-align:right;color:#ffcc00;">80</span></label>
+      </div>
+      <div style="margin-bottom:12px;"><b style="color:#88ffaa;">Small</b>
+        <label style="display:flex;align-items:center;gap:8px;margin:3px 0;"><span style="width:90px;font-size:11px;">Low grid</span>
+          <input type="range" id="gs-small-low" min="4" max="20" step="2" value="8" style="flex:1;" oninput="document.getElementById('gv-small-low').textContent=this.value">
+          <span id="gv-small-low" style="width:28px;text-align:right;color:#ffcc00;">8</span></label>
+        <label style="display:flex;align-items:center;gap:8px;margin:3px 0;"><span style="width:90px;font-size:11px;">High grid</span>
+          <input type="range" id="gs-small-high" min="10" max="40" step="2" value="20" style="flex:1;" oninput="document.getElementById('gv-small-high').textContent=this.value">
+          <span id="gv-small-high" style="width:28px;text-align:right;color:#ffcc00;">20</span></label>
+      </div>
+    </div>
+    <details style="margin-bottom:12px;border-top:1px solid #334;padding-top:10px;">
+      <summary style="cursor:pointer;color:#aaa;font-size:12px;">Advanced</summary>
+      <div style="margin-top:10px;font-size:11px;">
+        <div style="margin-bottom:8px;"><b>Scale</b>
+          <label style="display:flex;align-items:center;gap:8px;margin:3px 0;"><span style="width:110px;">normalizeRange</span>
+            <input type="range" id="gs-normalize" min="1.0" max="5.0" step="0.5" value="3.0" style="flex:1;"
+                   oninput="document.getElementById('gv-normalize').textContent=parseFloat(this.value).toFixed(1)">
+            <span id="gv-normalize" style="width:28px;text-align:right;color:#ffcc00;">3.0</span></label>
+        </div>
+        <div style="margin-bottom:8px;"><b style="color:#ff8c8c;">Liver</b>
+          <label style="display:flex;align-items:center;gap:8px;margin:2px 0;"><span style="width:110px;">merge L/H</span>
+            <input type="number" id="gd-liver-merge-low" min="1" max="4" value="1" style="width:36px;background:#1a2a3a;color:#fff;border:1px solid #446;border-radius:3px;text-align:center;"><span>/</span>
+            <input type="number" id="gd-liver-merge-high" min="1" max="4" value="1" style="width:36px;background:#1a2a3a;color:#fff;border:1px solid #446;border-radius:3px;text-align:center;"></label>
+          <label style="display:flex;align-items:center;gap:8px;margin:2px 0;"><span style="width:110px;">protection L/H</span>
+            <input type="number" id="gd-liver-prot-low" min="1" max="5" value="1" style="width:36px;background:#1a2a3a;color:#fff;border:1px solid #446;border-radius:3px;text-align:center;"><span>/</span>
+            <input type="number" id="gd-liver-prot-high" min="1" max="5" value="2" style="width:36px;background:#1a2a3a;color:#fff;border:1px solid #446;border-radius:3px;text-align:center;"></label>
+        </div>
+        <div style="margin-bottom:8px;"><b style="color:#cc88ff;">Vessel</b>
+          <label style="display:flex;align-items:center;gap:8px;margin:2px 0;"><span style="width:110px;">merge L/H</span>
+            <input type="number" id="gd-vessel-merge-low" min="1" max="4" value="1" style="width:36px;background:#1a2a3a;color:#fff;border:1px solid #446;border-radius:3px;text-align:center;"><span>/</span>
+            <input type="number" id="gd-vessel-merge-high" min="1" max="4" value="2" style="width:36px;background:#1a2a3a;color:#fff;border:1px solid #446;border-radius:3px;text-align:center;"></label>
+          <label style="display:flex;align-items:center;gap:8px;margin:2px 0;"><span style="width:110px;">protection L/H</span>
+            <input type="number" id="gd-vessel-prot-low" min="1" max="5" value="1" style="width:36px;background:#1a2a3a;color:#fff;border:1px solid #446;border-radius:3px;text-align:center;"><span>/</span>
+            <input type="number" id="gd-vessel-prot-high" min="1" max="5" value="3" style="width:36px;background:#1a2a3a;color:#fff;border:1px solid #446;border-radius:3px;text-align:center;"></label>
+        </div>
+        <div style="margin-bottom:8px;"><b style="color:#88ffaa;">Small</b>
+          <label style="display:flex;align-items:center;gap:8px;margin:2px 0;"><span style="width:110px;">merge L/H</span>
+            <input type="number" id="gd-small-merge-low" min="1" max="4" value="1" style="width:36px;background:#1a2a3a;color:#fff;border:1px solid #446;border-radius:3px;text-align:center;"><span>/</span>
+            <input type="number" id="gd-small-merge-high" min="1" max="4" value="2" style="width:36px;background:#1a2a3a;color:#fff;border:1px solid #446;border-radius:3px;text-align:center;"></label>
+          <label style="display:flex;align-items:center;gap:8px;margin:2px 0;"><span style="width:110px;">protection L/H</span>
+            <input type="number" id="gd-small-prot-low" min="1" max="5" value="1" style="width:36px;background:#1a2a3a;color:#fff;border:1px solid #446;border-radius:3px;text-align:center;"><span>/</span>
+            <input type="number" id="gd-small-prot-high" min="1" max="5" value="2" style="width:36px;background:#1a2a3a;color:#fff;border:1px solid #446;border-radius:3px;text-align:center;"></label>
+        </div>
+        <div style="margin-bottom:6px;"><b>Smoothing</b>
+          <div style="color:#aaa;font-size:10px;margin:4px 0 2px;">LowRes</div>
+          <label style="display:flex;align-items:center;gap:8px;margin:2px 0;"><span style="width:110px;">factor</span>
+            <input type="range" id="gd-smooth-factor-low" min="0.1" max="1.0" step="0.1" value="0.9" style="flex:1;"
+                   oninput="document.getElementById('gdv-smooth-factor-low').textContent=parseFloat(this.value).toFixed(1)">
+            <span id="gdv-smooth-factor-low" style="width:28px;text-align:right;color:#666;">0.9</span></label>
+          <label style="display:flex;align-items:center;gap:8px;margin:2px 0;"><span style="width:110px;">iterations</span>
+            <input type="range" id="gd-smooth-iter-low" min="0" max="10" step="1" value="0" style="flex:1;"
+                   oninput="document.getElementById('gdv-smooth-iter-low').textContent=this.value">
+            <span id="gdv-smooth-iter-low" style="width:28px;text-align:right;color:#666;">0</span></label>
+          <div style="color:#aaa;font-size:10px;margin:6px 0 2px;">HighRes</div>
+          <label style="display:flex;align-items:center;gap:8px;margin:2px 0;"><span style="width:110px;">factor</span>
+            <input type="range" id="gd-smooth-factor-high" min="0.1" max="1.0" step="0.1" value="0.5" style="flex:1;"
+                   oninput="document.getElementById('gdv-smooth-factor-high').textContent=parseFloat(this.value).toFixed(1)">
+            <span id="gdv-smooth-factor-high" style="width:28px;text-align:right;color:#ffcc00;">0.5</span></label>
+          <label style="display:flex;align-items:center;gap:8px;margin:2px 0;"><span style="width:110px;">iterations</span>
+            <input type="range" id="gd-smooth-iter-high" min="0" max="10" step="1" value="3" style="flex:1;"
+                   oninput="document.getElementById('gdv-smooth-iter-high').textContent=this.value">
+            <span id="gdv-smooth-iter-high" style="width:28px;text-align:right;color:#ffcc00;">3</span></label>
+        </div>
+      </div>
+    </details>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button id="tet-cancel-btn" style="background:#444;color:#fff;border:none;border-radius:6px;padding:8px 18px;cursor:pointer;">Cancel</button>
+      <button id="tet-start-btn" style="background:#0077cc;color:#fff;border:none;border-radius:6px;padding:8px 18px;cursor:pointer;font-weight:bold;">Generate</button>
+    </div>
+  </div>
+</div>
+
+<!-- 四面体化進捗 -->
+<div id="tet-progress" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:101;
+    align-items:center;justify-content:center;flex-direction:column;">
+  <div style="color:#fff;font-size:16px;margin-bottom:12px;" id="tet-progress-msg">Processing...</div>
+  <div style="width:280px;height:8px;background:#333;border-radius:4px;">
+    <div id="tet-progress-bar" style="height:100%;background:#00d4ff;border-radius:4px;width:0%;transition:width 0.3s;"></div>
+  </div>
+</div>
+
+<div class="overlay" id="loading">
+    WASM Loading...<br>
+    <div id="loading-bar"><div id="loading-fill"></div></div>
+    <div id="loading-sub"></div>
+</div>
+<div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
+
+<div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation</div>
+    <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
+    <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
+    <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
+    <span style="color:#aaa;">Smooth:</span> <span class="v" id="sm-t">-</span> tris
+</div>
+
+<div class="overlay" id="ctrl">
+    <!-- モード表示ヘッダー -->
+    <div class="sp-mode-bar" id="sp-mode-bar">LIVER SIMULATION</div>
+    <hr class="sp-divider">
+
+    <!-- VISIBILITY -->
+    <div class="sp-section-label">VISIBILITY</div>
+    <div class="vis-grid" id="organ-grid"></div>
+    <div id="liver-alpha-row" style="padding:2px 12px 8px;display:none;">
+        <div style="font-size:10px;color:#aaa;text-align:right;">Liver Alpha <span id="liver-alpha-pct">100%</span></div>
+        <input type="range" id="liver-alpha-slider" min="5" max="100" step="1" value="100"
+               style="width:100%;accent-color:#cc3333;" oninput="onLiverAlphaSlider(this.value)">
+    </div>
+    <hr class="sp-divider">
+
+    <!-- DISPLAY -->
+    <div class="sp-section-label">DISPLAY</div>
+    <div class="display-btns" id="visual-mode-btns" style="display:none;">
+        <button class="display-btn active" id="btn-vm-normal" onclick="setVisualMode(false)">Normal</button>
+        <button class="display-btn" id="btn-vm-auto" onclick="setVisualMode('skeleton')">Auto Seg</button>
+        <button class="display-btn" id="btn-vm-preset" onclick="setVisualMode('obj')">Preset Seg</button>
+    </div>
+    <div class="display-btns" id="display-placeholder">
+        <button class="display-btn active" disabled>Normal</button>
+        <button class="display-btn" disabled style="opacity:0.3;">Auto Seg</button>
+        <button class="display-btn" disabled style="opacity:0.3;">Preset Seg</button>
+    </div>
+    <button class="action-btn" id="btn-volume" style="display:none;color:#4dc0e6;border-color:rgba(77,192,230,0.2);" onclick="toggleVolumePanel()">
+        <span>Volume</span><span class="key-hint">B</span>
+    </button>
+    <div style="padding:0 12px 4px;font-size:10px;color:#666;min-height:14px;" id="skel-status"></div>
+    <hr class="sp-divider">
+
+    <!-- ACTION -->
+    <div class="action-section-label">ACTION</div>
+
+    <!-- Deform -->
+    <button class="action-btn" id="btn-action-deform" onclick="setActionMode(actionMode==='deform'?'none':'deform')">
+        <span class="icon-wrap"><img src="data/deform_icon.png" onerror="this.style.display='none';if(this.nextElementSibling)this.nextElementSibling.style.display='inline'"><span style="display:none;font-size:16px;">🎯</span></span>
+        <span>Deform</span><span class="key-hint">D</span>
+    </button>
+    <div class="action-sub" id="deform-sub">
+        <div style="color:#666;font-size:10px;margin-bottom:4px;">Click mesh to place handle sphere</div>
+        <button class="sub-btn" id="btn-handle-mode">Handle Place <span style="color:#555;font-size:10px;">D</span></button>
+        <button class="sub-btn" id="btn-deform-mode">Deform</button>
+        <button class="sub-btn" id="btn-undo-handle">Undo Handle</button>
+        <button class="sub-btn danger" id="btn-clear-handles">Clear All</button>
+        <span id="handle-count" style="color:#ffcc00;font-size:10px;margin-left:4px;"></span>
+    </div>
+
+    <!-- Free Cut -->
+    <button class="action-btn" id="btn-action-freecut" onclick="setActionMode(actionMode==='freeCut'?'none':'freeCut')">
+        <span class="icon-wrap"><img src="data/cut_icon.png" onerror="this.style.display='none';if(this.nextElementSibling)this.nextElementSibling.style.display='inline'"><span style="display:none;font-size:16px;">✂</span></span>
+        <span>Free Cut</span><span class="key-hint">X</span>
+    </button>
+    <div class="action-sub" id="freecut-sub">
+        <div style="color:#666;font-size:10px;margin-bottom:4px;" id="cut-status">Click mesh to place cutter</div>
+        <button class="sub-btn" id="btn-seg-overlay" onclick="toggleSegOverlay()">Seg Overlay <span style="color:#555;font-size:10px;">Q</span></button>
+        <button class="sub-btn danger" id="btn-undo-cut">Undo Cut <span style="color:#555;font-size:10px;">U</span></button>
+        <div style="margin-top:4px;color:#777;font-size:10px;">
+            Size: <span id="cut-scale-v">1.0</span>
+            <input type="range" id="cut-scale" min="0.1" max="5.0" step="0.1" value="1.0"
+                   style="width:80px;vertical-align:middle;margin-left:4px;accent-color:#e67e00;">
+        </div>
+        <button id="btn-preview-cut" style="display:none;">Preview</button>
+        <button id="btn-exec-cut" style="display:none;">Execute Cut</button>
+        <button id="btn-cut-mode" style="display:none;">Cut Mode</button>
+    </div>
+
+    <!-- Seg Cut -->
+    <button class="action-btn" id="btn-action-segcut" style="display:none;" onclick="setActionMode(actionMode==='segCut'?'none':'segCut')">
+        <span class="icon-wrap"><img src="data/segment_icon.png" onerror="this.style.display='none';if(this.nextElementSibling)this.nextElementSibling.style.display='inline'"><span style="display:none;font-size:16px;">🔲</span></span>
+        <span>Seg Cut</span><span class="key-hint">Q</span>
+    </button>
+    <div class="action-sub" id="segcut-sub">
+        <button class="sub-btn" id="btn-liver-select" onclick="toggleSegSelect('liver')">Liver Select <span style="color:#555;font-size:10px;">F</span></button>
+        <button class="sub-btn" id="btn-portal-select" onclick="toggleSegSelect('portal')">Portal Select <span style="color:#555;font-size:10px;">G</span></button><br>
+        <button class="sub-btn danger" id="btn-seg-cut" onclick="doSegCut()" style="margin-top:4px;">Seg Cut <span style="color:#555;font-size:10px;">Z</span></button>
+        <button class="sub-btn" id="btn-seg-undo" onclick="doSegUndo()">Seg Undo</button>
+        <button class="sub-btn" id="btn-clear-selection" onclick="doClearSelection()">Clear <span style="color:#555;font-size:10px;">K</span></button>
+        <div><span id="seg-select-status" style="color:#ffcc00;font-size:10px;"></span></div>
+    </div>
+
+    <!-- Transform -->
+    <button class="action-btn transform-btn" id="btn-transform" onclick="setActionMode(actionMode==='transform'?'none':'transform')">
+        <span class="icon-wrap"><img src="data/transform_icon.png" onerror="this.style.display='none';if(this.nextElementSibling)this.nextElementSibling.style.display='inline'"><span style="display:none;font-size:16px;">⟳</span></span>
+        <span>Transform</span><span class="key-hint">T</span>
+    </button>
+
+    <hr class="sp-divider" style="margin-top:6px;">
+
+    <!-- Reset / Exit -->
+    <div style="padding:4px 10px 12px;display:flex;flex-direction:column;gap:3px;">
+        <button class="action-btn" style="color:#aaa;" onclick="document.getElementById('reset-popup').style.display='block'">Reset</button>
+        <button class="action-btn" style="color:#555;border-color:rgba(255,255,255,0.04);" onclick="document.getElementById('exit-popup').style.display='block'">
+            <span>Exit</span><span class="key-hint">Esc</span>
+        </button>
+    </div>
+
+    <!-- 隠し互換要素 -->
+    <div style="display:none;">
+        <span id="btn-analyze-skel"></span>
+        <span id="btn-apply-objseg"></span>
+        <div id="visibility-ui"></div>
+        <div id="deform-section"></div>
+        <div id="freecutdetails"></div>
+        <div id="segcut-section"></div>
+        <span id="status-mode"></span>
+    </div>
+</div>
+
+<div class="overlay" id="params">
+    <h3>Parameters</h3>
+    <label>Edge Compliance: <span id="ev">1e+0</span></label>
+    <input type="range" id="es" min="-3" max="4" step="0.1" value="0"
+           oninput="updateEdge(this.value)">
+    <label>Vol Compliance: <span id="vv">0</span></label>
+    <input type="range" id="vs" min="-6" max="2" step="0.1" value="-99"
+           oninput="updateVol(this.value)">
+    <label>Damping: <span id="dv">0.980</span></label>
+    <input type="range" id="ds" min="0.90" max="1.00" step="0.005" value="0.98"
+           oninput="updateDamp(this.value)">
+    <label>Substeps: <span id="sv">3</span></label>
+    <input type="range" id="ss" min="1" max="8" step="1" value="3"
+           oninput="updateSubsteps(this.value)">
+    <label>Gravity X: <span id="gxv">0.0</span></label>
+    <input type="range" id="gxs" min="-20" max="20" step="0.5" value="0"
+           oninput="updateGravity()">
+    <label>Gravity Y: <span id="gyv">0.0</span></label>
+    <input type="range" id="gys" min="-20" max="20" step="0.5" value="0"
+           oninput="updateGravity()">
+    <label>Gravity Z: <span id="gzv">0.0</span></label>
+    <input type="range" id="gzs" min="-20" max="20" step="0.5" value="0"
+           oninput="updateGravity()">
+</div>
+
+<!-- ボリューム表示パネル (main.cpp drawVolumeWindow 準拠) -->
+<div class="overlay" id="volume-panel" style="top:160px; left:12px; display:none; min-width:200px; font-size:12px; line-height:1.6; cursor:default;">
+    <div id="vol-title" style="color:#4dc0e6;font-weight:bold;margin-bottom:6px;cursor:move;user-select:none;">Volume Monitor <span style="float:right;color:#556;font-size:10px;">drag</span></div>
+    <div id="vol-content"></div>
+</div>
+
+<script>
+// Pre-define Module BEFORE softbody.js loads (Emscripten 4.x needs window.Module)
+window.onerror = function(msg, url, line, col, err) {
+    // 画像読み込みエラーは無視
+    if (msg && msg.toString().includes('img')) return;
+    console.error('[ERROR]', msg, url, line, col, err);
+    document.getElementById('loading').style.display='none';
+    document.getElementById('error').style.display='block';
+    document.getElementById('err-msg').textContent =
+        msg + '\n' + url + ':' + line + ':' + col + '\n' + (err&&err.stack||'');
+};
+window.Module = {
+    canvas: document.getElementById('canvas'),
+    print: function(text) { console.log('[WASM]', text); },
+    printErr: function(text) { console.warn('[WASM ERR]', text); },
+    onRuntimeInitialized: function() {
+        console.log('[WASM] Runtime initialized');
+        window._wasmRuntimeReady = true;
+        if (window._onWasmReady) window._onWasmReady();
+    },
+    locateFile: function(path) { return path; }
+};
+</script>
+<script src="softbody.js"></script>
+<script>
+'use strict';
+
+// Shader source as JS strings (not from DOM) to avoid softbody.js clearing script tags
+const SHADER_VS = `
+attribute vec3 aPos; attribute vec3 aNrm;
+uniform mat4 uM, uV, uP;
+varying vec3 vNrm, vFrag;
+void main() {
+    vec4 wp = uM * vec4(aPos, 1.0);
+    vFrag = wp.xyz;
+    vNrm = mat3(uM) * aNrm;
+    gl_Position = uP * uV * wp;
+}`;
+const SHADER_FS = `
+precision mediump float;
+varying vec3 vNrm, vFrag;
+uniform vec3 uLP, uVP;
+uniform vec4 uCol;
+uniform float uAlpha;
+void main() {
+    vec3 n = normalize(vNrm);
+    vec3 l = normalize(uLP - vFrag);
+    vec3 v = normalize(uVP - vFrag);
+    float d = max(dot(n,l), 0.0);
+    float s = pow(max(dot(reflect(-l,n),v), 0.0), 32.0) * 0.5;
+    gl_FragColor = vec4((0.3 + d + s) * uCol.rgb, uCol.a * uAlpha);
+}`;
+// セグメントカラー描画シェーダー（per-vertex RGBA）
+const SHADER_VS_SEG = `
+attribute vec3 aPos; attribute vec3 aNrm; attribute vec4 aCol;
+uniform mat4 uM, uV, uP;
+varying vec3 vNrm, vFrag; varying vec4 vCol;
+void main() {
+    vec4 wp = uM * vec4(aPos, 1.0);
+    vFrag = wp.xyz; vNrm = mat3(uM) * aNrm; vCol = aCol;
+    gl_Position = uP * uV * wp;
+}`;
+const SHADER_FS_SEG = `
+precision mediump float;
+varying vec3 vNrm, vFrag; varying vec4 vCol;
+uniform vec3 uLP, uVP;
+uniform float uAlpha;
+void main() {
+    vec3 n = normalize(vNrm);
+    vec3 l = normalize(uLP - vFrag);
+    vec3 v = normalize(uVP - vFrag);
+    float d = max(dot(n,l), 0.0);
+    float s = pow(max(dot(reflect(-l,n),v), 0.0), 32.0) * 0.5;
+    gl_FragColor = vec4((0.3 + d + s) * vCol.rgb, vCol.a * uAlpha);
+}`;
+const SHADER_VSW = `
+attribute vec3 aPos;
+uniform mat4 uM, uV, uP;
+void main() { gl_Position = uP * uV * uM * vec4(aPos, 1.0); }`;
+const SHADER_FSW = `
+precision mediump float;
+uniform vec4 uCol;
+void main() { gl_FragColor = uCol; }`;
+
+//-- Globals -----------------------------------------------------------
+const canvas = document.getElementById('canvas');
+let gl, sb = null;
+let pMain, pWire, L, LW;
+let bHiPos, bHiNrm, bHiIdx, bWire, extUint, bAxis;
+let numHiIdx = 0, numWireV = 0;
+let drag=false, grab=false, grabD=0, prevPt=[0,0,0];
+let last={x:0,y:0}, wireOn=false;
+let gravX=0, gravY=0, gravZ=0;
+const childBuffers = [];
+let liverVisible = true;
+// ActionMode 排他制御 (C++ ActionMode enum 準拠)
+let actionMode = 'none'; // 'none'|'deform'|'freeCut'|'segCut'|'transform'
+let transformMode = false;
+let transformDragging = false;
+
+// 臓器アルファ管理 (C++ meshAlphaValues 準拠)
+// index: 0=Liver, 1=Portal, 2=Vein, 3=Tumor, 4=GB, 5=Sphere
+const meshAlphaValues = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
+const organAlphaStates = [2, 2, 2, 2, 2, 1]; // 0=OFF, 1=50%, 2=ON
+const ORGAN_NUM_STATES = [3, 3, 3, 3, 3, 2];
+let liverAlphaValue = 1.0;
+
+// カット操作 (Step 4a)
+let cutMode = false;
+let bCutterPos = null, bCutterIdx = null, bCutterNrm = null;
+let numCutterIdx = 0;
+let bHighlightIdx = null;
+let numHighlightIdx = 0;
+let cutterInitialized = false;
+
+// Step 5: セグメント色分け
+let pSegment = null, LSeg = {};
+let bSegCol = null;
+let segmentColorMode = false;  // false, 'skeleton', 'obj'
+let bOBJSegCol = null;
+let bLiverHL = null, bPortalHL = null;
+let segSelectMode = null;  // null, 'liver', 'portal'
+let cutTargetMeshIdx = -1; // -1=liver, 0..N=child
+let cutterPlaced = false;
+// C++ TargetScales 準拠: 臓器別カッタースケール保持
+const cutterTargetScales = { liver: 1.0, vessel: 0.5 };
+let cutterDragging = false;  // right drag = move
+let cutterRotating = false;  // left drag = rotate
+let cutterYaw = 0, cutterPitch = 0;
+let segOverlayMode = false;  // Seg Overlay (Q key)
+// 臓器別カッターカラー: C++のCutterMeshManager準拠
+const CUTTER_COLORS = {
+    '-1': [0.8, 0.8, 0.0, 0.5],  // Liver: yellow
+    '0':  [0.8, 0.2, 0.8, 0.5],  // Portal: magenta
+    '1':  [0.2, 0.8, 0.8, 0.5],  // Vein: cyan
+    'none': [0.2, 0.8, 0.2, 0.5] // No hit: green
+};
+
+function setLoad(msg, pct) {
+    document.getElementById('loading-sub').textContent = msg;
+    document.getElementById('loading-fill').style.width = pct + '%';
+}
+function showErr(msg) {
+    document.getElementById('loading').style.display='none';
+    document.getElementById('error').style.display='block';
+    document.getElementById('err-msg').textContent=msg;
+    console.error(msg);
+}
+
+//-- Shader compile (deferred) -----------------------------------------
+function mkShader(type, src) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+    return s;
+}
+function mkProg(vsSrc, fsSrc) {
+    const p = gl.createProgram();
+    gl.attachShader(p, mkShader(gl.VERTEX_SHADER, vsSrc));
+    gl.attachShader(p, mkShader(gl.FRAGMENT_SHADER, fsSrc));
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+    return p;
+}
+
+//-- Vector/Matrix math (from reference impl) -------------------------
+function sub(a,b){return[a[0]-b[0],a[1]-b[1],a[2]-b[2]];}
+function vcross(a,b){return[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];}
+function vdot(a,b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];}
+function vnorm(v){const l=Math.sqrt(vdot(v,v));return l>0?[v[0]/l,v[1]/l,v[2]/l]:v;}
+const I4 = () => new Float32Array([1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]);
+function perspective(fov, asp, n, f) {
+    const t = 1/Math.tan(fov/2), nf = 1/(n-f), m = new Float32Array(16);
+    m[0]=t/asp; m[5]=t; m[10]=(f+n)*nf; m[11]=-1; m[14]=2*f*n*nf; return m;
+}
+function lookAt(e, c, u) {
+    const z=vnorm(sub(e,c)), x=vnorm(vcross(u,z)), y=vcross(z,x);
+    return new Float32Array([
+        x[0],y[0],z[0],0, x[1],y[1],z[1],0, x[2],y[2],z[2],0,
+        -vdot(x,e),-vdot(y,e),-vdot(z,e),1]);
+}
+function mat4multiply(a,b){
+    const o=new Float32Array(16);
+    for(let i=0;i<4;i++)for(let j=0;j<4;j++)
+        o[i*4+j]=a[j]*b[i*4]+a[4+j]*b[i*4+1]+a[8+j]*b[i*4+2]+a[12+j]*b[i*4+3];
+    return o;
+}
+function mat4invert(m){
+    const o=new Float32Array(16);
+    const m00=m[0],m01=m[1],m02=m[2],m03=m[3],m10=m[4],m11=m[5],m12=m[6],m13=m[7];
+    const m20=m[8],m21=m[9],m22=m[10],m23=m[11],m30=m[12],m31=m[13],m32=m[14],m33=m[15];
+    const b00=m00*m11-m01*m10,b01=m00*m12-m02*m10,b02=m00*m13-m03*m10;
+    const b03=m01*m12-m02*m11,b04=m01*m13-m03*m11,b05=m02*m13-m03*m12;
+    const b06=m20*m31-m21*m30,b07=m20*m32-m22*m30,b08=m20*m33-m23*m30;
+    const b09=m21*m32-m22*m31,b10=m21*m33-m23*m31,b11=m22*m33-m23*m32;
+    let det=b00*b11-b01*b10+b02*b09+b03*b08-b04*b07+b05*b06;
+    if(!det)return null; det=1/det;
+    o[0]=(m11*b11-m12*b10+m13*b09)*det;o[1]=(m02*b10-m01*b11-m03*b09)*det;
+    o[2]=(m31*b05-m32*b04+m33*b03)*det;o[3]=(m22*b04-m21*b05-m23*b03)*det;
+    o[4]=(m12*b08-m10*b11-m13*b07)*det;o[5]=(m00*b11-m02*b08+m03*b07)*det;
+    o[6]=(m32*b02-m30*b05-m33*b01)*det;o[7]=(m20*b05-m22*b02+m23*b01)*det;
+    o[8]=(m10*b10-m11*b08+m13*b06)*det;o[9]=(m01*b08-m00*b10-m03*b06)*det;
+    o[10]=(m30*b04-m31*b02+m33*b00)*det;o[11]=(m21*b02-m20*b04-m23*b00)*det;
+    o[12]=(m11*b07-m10*b09-m12*b06)*det;o[13]=(m00*b09-m01*b07+m02*b06)*det;
+    o[14]=(m31*b01-m30*b03-m32*b00)*det;o[15]=(m20*b03-m21*b01+m22*b00)*det;
+    return o;
+}
+
+//-- Camera ------------------------------------------------------------
+// FullSphereCamera (C++ 側で計算、JS はキャッシュ参照のみ)
+const cam = {
+    _V: null, _P: null,
+    _pos: [0,0,20], _right: [1,0,0], _up: [0,1,0], _fwd: [0,0,-1], _target: [0,0,0],
+    update() {
+        if (!sb) return;
+        sb.cameraUpdate();
+        this._V = new Float32Array(sb.getCameraViewMatrix());
+        this._P = new Float32Array(sb.getCameraProjectionMatrix());
+        const p = sb.getCameraPosition();
+        this._pos = [p[0], p[1], p[2]];
+        const r = sb.getCameraRight();
+        this._right = [r[0], r[1], r[2]];
+        const u = sb.getCameraUp();
+        this._up = [u[0], u[1], u[2]];
+        const d = sb.getCameraDirection();
+        this._fwd = [d[0], d[1], d[2]];
+        const t = sb.getCameraTarget();
+        this._target = [t[0], t[1], t[2]];
+    },
+    pos() { return this._pos; },
+    V() { return this._V || lookAt([0,0,20],[0,0,0],[0,1,0]); },
+    P(asp) { return this._P || perspective(45*Math.PI/180, asp, 0.1, 500); },
+    // カメラ操作（C++ FullSphereCamera に委譲）
+    rotate(dx, dy) { if (sb) sb.cameraRotate(dx, dy); },
+    pan(dx, dy) { if (sb) sb.cameraPan(dx, dy); },
+    zoom(delta) { if (sb) sb.cameraZoom(delta); },
+};
+
+//-- Raycast (inverse VP matrix method from reference) -----------------
+function screenToWorldRay(sx, sy) {
+    const rect = canvas.getBoundingClientRect();
+    const x = ((sx - rect.left) / rect.width) * 2 - 1;
+    const y = 1 - ((sy - rect.top) / rect.height) * 2;
+    const invVP = mat4invert(mat4multiply(cam.P(), cam.V()));
+    function tp(m, p) {
+        const w = m[3]*p[0]+m[7]*p[1]+m[11]*p[2]+m[15];
+        return [(m[0]*p[0]+m[4]*p[1]+m[8]*p[2]+m[12])/w,
+                (m[1]*p[0]+m[5]*p[1]+m[9]*p[2]+m[13])/w,
+                (m[2]*p[0]+m[6]*p[1]+m[10]*p[2]+m[14])/w];
+    }
+    const near=tp(invVP,[x,y,-1]), far=tp(invVP,[x,y,1]);
+    return { origin:near, direction:vnorm(sub(far,near)) };
+}
+function rayTriIntersect(origin, dir, v0, v1, v2) {
+    const e1=sub(v1,v0), e2=sub(v2,v0);
+    const h=vcross(dir,e2), a=vdot(e1,h);
+    if(Math.abs(a)<1e-6)return null;
+    const f=1/a, s=sub(origin,v0), u=f*vdot(s,h);
+    if(u<0||u>1)return null;
+    const q=vcross(s,e1), v=f*vdot(dir,q);
+    if(v<0||u+v>1)return null;
+    const t=f*vdot(e2,q);
+    if(t>1e-4)return{t,point:[origin[0]+dir[0]*t,origin[1]+dir[1]*t,origin[2]+dir[2]*t]};
+    return null;
+}
+function raycastMesh(ray) {
+    const pos=sb.getHighResPositions(), idx=sb.getHighResSurfaceTriIds();
+    let best=null;
+    let bestMeshIdx = -1; // -1=liver, 0..N=child
+    for(let i=0;i<idx.length;i+=3){
+        const i0=idx[i],i1=idx[i+1],i2=idx[i+2];
+        const hit=rayTriIntersect(ray.origin,ray.direction,
+            [pos[i0*3],pos[i0*3+1],pos[i0*3+2]],
+            [pos[i1*3],pos[i1*3+1],pos[i1*3+2]],
+            [pos[i2*3],pos[i2*3+1],pos[i2*3+2]]);
+        if(hit&&(!best||hit.t<best.t)){best=hit; bestMeshIdx=-1;}
+    }
+    // 子メッシュもレイキャスト
+    for(let ci=0; ci<childBuffers.length; ci++){
+        if(!childBuffers[ci].visible) continue;
+        const cpos=sb.getChildHighResPositions(ci);
+        const cidx=sb.getChildHighResSurfaceTriIds(ci);
+        for(let i=0;i<cidx.length;i+=3){
+            const i0=cidx[i],i1=cidx[i+1],i2=cidx[i+2];
+            const hit=rayTriIntersect(ray.origin,ray.direction,
+                [cpos[i0*3],cpos[i0*3+1],cpos[i0*3+2]],
+                [cpos[i1*3],cpos[i1*3+1],cpos[i1*3+2]],
+                [cpos[i2*3],cpos[i2*3+1],cpos[i2*3+2]]);
+            if(hit&&(!best||hit.t<best.t)){best=hit; bestMeshIdx=ci;}
+        }
+    }
+    if(best) best.meshIdx = bestMeshIdx;
+    return best;
+}
+// raycast + 最近頂点インデックスも返す
+function raycastMeshWithVertex(ray) {
+    const hit = raycastMesh(ray);
+    if (!hit) return null;
+    // ヒット点に最も近い頂点を見つける
+    const pos = (hit.meshIdx < 0) ? sb.getHighResPositions()
+                                   : sb.getChildHighResPositions(hit.meshIdx);
+    const idx = (hit.meshIdx < 0) ? sb.getHighResSurfaceTriIds()
+                                   : sb.getChildHighResSurfaceTriIds(hit.meshIdx);
+    let bestDist = Infinity, bestVid = -1;
+    const p = hit.point;
+    // ヒット三角形の3頂点の中で最近のものを返す（全頂点探索より高速）
+    for (let i = 0; i < idx.length; i += 3) {
+        for (let j = 0; j < 3; j++) {
+            const vid = idx[i+j];
+            const dx = pos[vid*3]-p[0], dy = pos[vid*3+1]-p[1], dz = pos[vid*3+2]-p[2];
+            const d = dx*dx+dy*dy+dz*dz;
+            if (d < bestDist) { bestDist = d; bestVid = vid; }
+        }
+        // 近い三角形だけチェック（パフォーマンス）
+        if (bestDist < 0.001) break;
+    }
+    hit.vertexIdx = bestVid;
+    return hit;
+}
+// C++準拠: ターゲットメッシュのみにレイキャスト（他メッシュを無視）
+// meshIdx: -1=liver, 0..N=child
+function raycastTargetMeshWithVertex(ray, meshIdx) {
+    let pos, idx;
+    if (meshIdx < 0) {
+        pos = sb.getHighResPositions();
+        idx = sb.getHighResSurfaceTriIds();
+    } else {
+        if (meshIdx >= childBuffers.length) return null;
+        pos = sb.getChildHighResPositions(meshIdx);
+        idx = sb.getChildHighResSurfaceTriIds(meshIdx);
+    }
+    let best = null;
+    for (let i = 0; i < idx.length; i += 3) {
+        const i0=idx[i],i1=idx[i+1],i2=idx[i+2];
+        const hit = rayTriIntersect(ray.origin, ray.direction,
+            [pos[i0*3],pos[i0*3+1],pos[i0*3+2]],
+            [pos[i1*3],pos[i1*3+1],pos[i1*3+2]],
+            [pos[i2*3],pos[i2*3+1],pos[i2*3+2]]);
+        if (hit && (!best || hit.t < best.t)) best = hit;
+    }
+    if (!best) return null;
+    let bestDist = Infinity, bestVid = -1;
+    const p = best.point;
+    for (let i = 0; i < idx.length; i += 3) {
+        for (let j = 0; j < 3; j++) {
+            const vid = idx[i+j];
+            const dx=pos[vid*3]-p[0], dy=pos[vid*3+1]-p[1], dz=pos[vid*3+2]-p[2];
+            const d = dx*dx+dy*dy+dz*dz;
+            if (d < bestDist) { bestDist=d; bestVid=vid; }
+        }
+        if (bestDist < 0.001) break;
+    }
+    best.vertexIdx = bestVid;
+    best.meshIdx = meshIdx;
+    return best;
+}
+
+//-- GL helpers --------------------------------------------------------
+function initIdxBuffer() {
+    const idx = sb.getHighResSurfaceTriIds();
+    numHiIdx = idx.length;
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bHiIdx);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,
+        extUint ? new Uint32Array(idx) : new Uint16Array(idx), gl.STATIC_DRAW);
+}
+function updateWire() {
+    // C++側でエッジ展開済み（無効エッジはスキップ済み、先頭に詰めて格納）
+    const wireVerts = sb.getLowResWireVertices();
+    numWireV = sb.getNumValidWireVerts();
+    gl.bindBuffer(gl.ARRAY_BUFFER, bWire);
+    gl.bufferData(gl.ARRAY_BUFFER, wireVerts, gl.DYNAMIC_DRAW);
+}
+function updateMesh() {
+    // typed_memory_view は gl.bufferData 後に無効化される可能性があるため
+    // Float32Array にコピーしてから渡す
+    gl.bindBuffer(gl.ARRAY_BUFFER, bHiPos);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(sb.getHighResPositions()), gl.DYNAMIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, bHiNrm);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(sb.getHighResNormals()), gl.DYNAMIC_DRAW);
+}
+
+//-- Handle mode -------------------------------------------------------
+let handleMode = false;
+// (旧アコーディオン toggle は action-btn onclick に置き換え済み)
+
+// Deform サブモード (C++ DeformSubMode 準拠)
+let deformSub = 'none'; // 'none'|'place'|'deform'
+
+document.getElementById('btn-handle-mode').addEventListener('click', ()=>{
+    if (actionMode !== 'deform') setActionMode('deform');
+    deformSub = deformSub === 'place' ? 'none' : 'place';
+    handleMode = (deformSub === 'place');
+    updateDeformBtns();
+});
+document.getElementById('btn-deform-mode').addEventListener('click', ()=>{
+    if (actionMode !== 'deform') setActionMode('deform');
+    deformSub = deformSub === 'deform' ? 'none' : 'deform';
+    handleMode = false;
+    updateDeformBtns();
+});
+document.getElementById('btn-undo-handle').addEventListener('click', ()=>{
+    if (sb && sb.getNumHandleSpheres() > 0) {
+        sb.removeLastHandleSphere();
+    }
+    const n = sb ? sb.getNumHandleSpheres() : 0;
+    document.getElementById('handle-count').textContent = n > 0 ? n+' handles' : '';
+});
+document.getElementById('btn-clear-handles').addEventListener('click', ()=>{
+    if (sb) sb.clearHandleSpheres();
+    document.getElementById('handle-count').textContent = '';
+    deformSub = 'none';
+    handleMode = false;
+    updateDeformBtns();
+});
+function updateDeformBtns() {
+    document.getElementById('btn-handle-mode').style.background =
+        deformSub === 'place' ? '#8f45ad' : '#555';
+    document.getElementById('btn-deform-mode').style.background =
+        deformSub === 'deform' ? '#8f45ad' : '#555';
+}
+
+// Cut Mode toggle
+// ===== ActionMode 排他制御 (C++ onActionModeChanged 準拠) =====
+function setActionMode(newMode) {
+    // トグル: 同じモードをクリック → OFF
+    if (actionMode === newMode) newMode = 'none';
+
+    // 全アクションボタンを非アクティブに
+    ['btn-action-deform','btn-action-freecut','btn-action-segcut','btn-transform'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('active');
+    });
+    // 全サブパネルを閉じる
+    ['deform-sub','freecut-sub','segcut-sub'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('visible');
+    });
+
+    // clearSelectionState() 相当
+    if (sb) {
+        sb.clearHighlight();
+        sb.clearSegmentSelection();
+    }
+    cutterPlaced = false;
+    cutterDragging = false;
+    cutterRotating = false;
+    document.getElementById('cut-popup').style.display = 'none';
+    numHighlightIdx = 0;
+    segSelectMode = null;
+    if (segOverlayMode) { segOverlayMode = false; }
+    transformDragging = false;
+    handleMode = false;
+    deformSub = 'none';
+
+    actionMode = newMode;
+    cutMode = (newMode === 'freeCut');
+    transformMode = (newMode === 'transform');
+
+    // 新モードのボタンとサブパネルをアクティブに
+    if (newMode === 'deform') {
+        document.getElementById('btn-action-deform').classList.add('active');
+        document.getElementById('deform-sub').classList.add('visible');
+        handleMode = true;
+        deformSub = 'place';
+    } else if (newMode === 'freeCut') {
+        document.getElementById('btn-action-freecut').classList.add('active');
+        document.getElementById('freecut-sub').classList.add('visible');
+        document.getElementById('cut-status').textContent = 'Click mesh to place cutter';
+    } else if (newMode === 'segCut') {
+        document.getElementById('btn-action-segcut').classList.add('active');
+        document.getElementById('segcut-sub').classList.add('visible');
+    } else if (newMode === 'transform') {
+        document.getElementById('btn-transform').classList.add('active');
+    }
+
+    updateSegSelectBtns();
+    updateModeBar();
+}
+
+function updateModeBar() {
+    const bar = document.getElementById('sp-mode-bar');
+    if (!bar) return;
+    const dispPart = segmentColorMode === 'obj' ? 'PRESET SEG' :
+                     segmentColorMode === 'skeleton' ? 'AUTO SEG' : 'NORMAL';
+    const actPart = actionMode === 'freeCut' ? 'FREE CUT' :
+                    actionMode === 'segCut' ? 'SEG CUT' :
+                    actionMode === 'deform' ? 'DEFORM' :
+                    actionMode === 'transform' ? 'TRANSFORM' : '';
+    bar.textContent = actPart ? `${dispPart} | ${actPart}` : dispPart;
+}
+
+function updateStatusBar() { updateModeBar(); }
+
+// Reset (C++ onReset 準拠)
+function doReset() {
+    document.getElementById('reset-popup').style.display = 'none';
+    if (!sb) return;
+    // 全カットUndo
+    while (sb.canUndo()) sb.undoCut();
+    // 全ハンドル削除
+    sb.clearHandleSpheres();
+    // セグメント選択クリア
+    sb.clearSegmentSelection();
+    sb.clearHighlight();
+    // 形状リセット
+    sb.applyShapeRestoration(1.0);
+    // バッファ更新
+    initIdxBuffer(); updateMesh();
+    for (let ci = 0; ci < childBuffers.length; ci++) {
+        const cidx = new Int32Array(sb.getChildHighResSurfaceTriIds(ci));
+        const c = childBuffers[ci]; c.numIdx = cidx.length;
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, c.bIdx);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, extUint?new Uint32Array(cidx):new Uint16Array(cidx), gl.STATIC_DRAW);
+    }
+    // モードリセット
+    setActionMode('none');
+    setVisualMode(false);
+    updateVolumePanel();
+    document.getElementById('handle-count').textContent = '';
+    console.log('[Reset] All reset complete');
+}
+
+document.getElementById('btn-cut-mode').addEventListener('click', () => {
+    setActionMode(actionMode === 'freeCut' ? 'none' : 'freeCut');
+});
+
+// CUT ポップアップ: クリックで即カット (main.cpp drawCutExecutePopup 準拠)
+document.getElementById('cut-popup-btn').addEventListener('click', ()=>{
+    if (!sb || !cutterPlaced) return;
+
+    let count = 0;
+    if (cutTargetMeshIdx < 0) {
+        // Liver cut
+        sb.testCutIntersection();
+        count = sb.executeCut();
+        if (count === -1) {
+            // フラグメント選択モード: UIを表示
+            console.log('[FreeCut] Fragment selection pending');
+            showFragmentPopup();
+            document.getElementById('cut-popup').style.display = 'none';
+            return;
+        }
+        if (count > 0) {
+            initIdxBuffer();
+            updateMesh();
+            if (wireOn) updateWire();
+        }
+        console.log('[FreeCut] CUT popup → Liver cut', count, 'tets');
+    } else {
+        // Child mesh cut (Portal/Vein/etc)
+        const ci = cutTargetMeshIdx;
+        sb.testChildCutIntersection(ci);
+        count = sb.executeChildCut(ci);
+        if (count === -1) {
+            console.log('[FreeCut] Child fragment selection pending');
+            showFragmentPopup();
+            document.getElementById('cut-popup').style.display = 'none';
+            return;
+        }
+        if (count > 0 && childBuffers[ci]) {
+            const newIdx = new Int32Array(sb.getChildHighResSurfaceTriIds(ci));
+            const c = childBuffers[ci];
+            c.numIdx = newIdx.length;
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, c.bIdx);
+            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,
+                extUint ? new Uint32Array(newIdx) : new Uint16Array(newIdx),
+                gl.STATIC_DRAW);
+        }
+        const label = childBuffers[ci] ? childBuffers[ci].label : 'Child';
+        console.log('[FreeCut] CUT popup →', label, 'cut', count, 'tets');
+    }
+
+    numHighlightIdx = 0;
+    cutterPlaced = false;
+    document.getElementById('cut-popup').style.display = 'none';
+    document.getElementById('cut-status').textContent = count > 0 ? count + ' tets cut' : 'No intersection';
+    if (count > 0) { updateVolumePanel(); syncHandlesAfterCut(); }
+});
+
+// Seg Overlay トグル (Q key, main.cpp cycleCutMode 準拠)
+function toggleSegOverlay() {
+    segOverlayMode = !segOverlayMode;
+    const btn = document.getElementById('btn-seg-overlay');
+    btn.style.background = segOverlayMode ? '#27ae60' : '#555';
+    btn.textContent = segOverlayMode ? 'Overlay ON Q' : 'Seg Overlay Q';
+    if (!segOverlayMode && sb) {
+        sb.clearHighlight();
+    }
+    console.log('[SegOverlay]', segOverlayMode ? 'ON' : 'OFF');
+}
+
+// Seg Overlay: カッター位置でセグメントハイライトを更新しGPU転送
+function updateSegOverlayColors(x, y, z, meshIdx) {
+    const segId = sb.updateSegOverlay(x, y, z, meshIdx);
+    if (segId >= 0) {
+        const lc = new Float32Array(sb.getLiverHighlightColors());
+        gl.bindBuffer(gl.ARRAY_BUFFER, bLiverHL);
+        gl.bufferData(gl.ARRAY_BUFFER, lc, gl.DYNAMIC_DRAW);
+        if (sb.getNumChildren() > 0) {
+            const pc = new Float32Array(sb.getPortalHighlightColors());
+            gl.bindBuffer(gl.ARRAY_BUFFER, bPortalHL);
+            gl.bufferData(gl.ARRAY_BUFFER, pc, gl.DYNAMIC_DRAW);
+        }
+    }
+}
+
+// CUT ポップアップ表示 (main.cpp drawCutExecutePopup 準拠)
+function showCutPopup() {
+    const popup = document.getElementById('cut-popup');
+    const btn = document.getElementById('cut-popup-btn');
+    // 臓器別ボタン色 (main.cpp: Liver=赤, Portal=ピンク, Vein=青)
+    const colors = { '-1':'#c0392b', '0':'#cc4099', '1':'#17a2b8' };
+    btn.style.background = colors[''+cutTargetMeshIdx] || '#c0392b';
+    popup.style.display = 'block';
+    updateCutPopupPosition();
+}
+
+function updateCutPopupPosition() {
+    if (!cutterPlaced || !cutMode) {
+        document.getElementById('cut-popup').style.display = 'none';
+        return;
+    }
+    if (cutterDragging || cutterRotating) {
+        document.getElementById('cut-popup').style.display = 'none';
+        return;
+    }
+    // カッター中心の3D座標を取得
+    const verts = sb.getCutterVertices();
+    if (!verts || verts.length < 3) return;
+    // カッター頂点の平均 = 中心座標
+    let cx=0, cy=0, cz=0;
+    const nv = verts.length / 3;
+    for (let i = 0; i < verts.length; i += 3) {
+        cx += verts[i]; cy += verts[i+1]; cz += verts[i+2];
+    }
+    cx /= nv; cy /= nv; cz /= nv;
+
+    const asp = canvas.width / canvas.height;
+    const V = cam.V(), P = cam.P();
+    const sp = worldToScreen(cx, cy, cz, V, P, canvas.width, canvas.height);
+    if (!sp) return;
+
+    const popup = document.getElementById('cut-popup');
+    // ポップアップ幅/高さ（main.cpp: popupW=90, popupH=32）
+    const pw = 80, ph = 32;
+    let px = sp.x - pw * 0.5;
+    let py = sp.y - ph - 12;  // カッターの上
+    // 画面端クリップ
+    if (px < 8) px = 8;
+    if (px + pw > canvas.width - 8) px = canvas.width - pw - 8;
+    if (py < 8) py = sp.y + 20;  // 上にスペースなければ下に
+    popup.style.left = px + 'px';
+    popup.style.top = py + 'px';
+    popup.style.display = 'block';
+}
+
+// Preview Cut（交差計算 + ハイライト）
+document.getElementById('btn-preview-cut').addEventListener('click', ()=>{
+    if (!sb || !cutterPlaced) {
+        document.getElementById('cut-status').textContent = 'Place cutter first (click mesh)';
+        return;
+    }
+    sendMatricesToCpp();
+    let hitTets, hiTris;
+    const targetLabel = cutTargetMeshIdx < 0 ? 'Liver' : childBuffers[cutTargetMeshIdx].label;
+    if (cutTargetMeshIdx < 0) {
+        hitTets = new Int32Array(sb.testCutIntersection());
+        hiTris = new Int32Array(sb.getIntersectedSurfaceTriIds());
+    } else {
+        const nTets = sb.testChildCutIntersection(cutTargetMeshIdx);
+        hitTets = {length: nTets};
+        hiTris = new Int32Array(sb.getChildIntersectedSurfaceTriIds(cutTargetMeshIdx));
+    }
+    numHighlightIdx = hiTris.length;
+    document.getElementById('cut-status').textContent =
+        targetLabel + ': ' + hitTets.length + ' tets, ' + (numHighlightIdx/3) + ' tris';
+    if (numHighlightIdx > 0) {
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bHighlightIdx);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,
+            extUint ? new Uint32Array(hiTris) : new Uint16Array(hiTris),
+            gl.DYNAMIC_DRAW);
+    }
+});
+// Execute Cut
+document.getElementById('btn-exec-cut').addEventListener('click', ()=>{
+    if (!sb) return;
+
+    if (cutTargetMeshIdx < 0) {
+        // Liver cut
+        const count = sb.executeCut();
+        if (count > 0) {
+            const newIdx = sb.getHighResSurfaceTriIds();
+            numHiIdx = newIdx.length;
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bHiIdx);
+            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,
+                extUint ? new Uint32Array(newIdx) : new Uint16Array(newIdx),
+                gl.STATIC_DRAW);
+            document.getElementById('hi-t').textContent = Math.floor(numHiIdx / 3);
+            document.getElementById('cut-status').textContent = 'Liver: cut ' + count + ' tets';
+        } else {
+            document.getElementById('cut-status').textContent = 'No tets to cut (click mesh first)';
+        }
+    } else {
+        // Child mesh cut
+        const ci = cutTargetMeshIdx;
+        const count = sb.executeChildCut(ci);
+        if (count > 0) {
+            const newIdx = new Int32Array(sb.getChildHighResSurfaceTriIds(ci));
+            const c = childBuffers[ci];
+            c.numIdx = newIdx.length;
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, c.bIdx);
+            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,
+                extUint ? new Uint32Array(newIdx) : new Uint16Array(newIdx),
+                gl.STATIC_DRAW);
+            document.getElementById('cut-status').textContent =
+                c.label + ': cut ' + count + ' tets, ' + Math.floor(c.numIdx/3) + ' tris';
+        } else {
+            document.getElementById('cut-status').textContent = 'No tets to cut (click mesh first)';
+        }
+    }
+    numHighlightIdx = 0;
+});
+// Undo Cut
+document.getElementById('btn-undo-cut').addEventListener('click', ()=>{
+    if (!sb || !sb.canUndo()) {
+        document.getElementById('cut-status').textContent = 'Nothing to undo';
+        return;
+    }
+    sb.undoCut();
+    // Liver インデックスバッファ再構築
+    const newIdx = sb.getHighResSurfaceTriIds();
+    numHiIdx = newIdx.length;
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bHiIdx);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,
+        extUint ? new Uint32Array(newIdx) : new Uint16Array(newIdx), gl.STATIC_DRAW);
+    document.getElementById('hi-t').textContent = Math.floor(numHiIdx / 3);
+    // Children インデックスバッファ再構築
+    for (let ci = 0; ci < childBuffers.length; ci++) {
+        const cidx = new Int32Array(sb.getChildHighResSurfaceTriIds(ci));
+        const c = childBuffers[ci];
+        c.numIdx = cidx.length;
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, c.bIdx);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,
+            extUint ? new Uint32Array(cidx) : new Uint16Array(cidx), gl.STATIC_DRAW);
+    }
+    numHighlightIdx = 0;
+    document.getElementById('cut-status').textContent = 'Undo done';
+    updateVolumePanel();
+});
+document.getElementById('cut-scale').addEventListener('input', function(){
+    const val = parseFloat(this.value);
+    document.getElementById('cut-scale-v').textContent = val.toFixed(2);
+    if (sb) {
+        sb.setCutterScale(val);
+        if (cutTargetMeshIdx >= 0 && cutTargetMeshIdx <= 1) cutterTargetScales.vessel = val;
+        else cutterTargetScales.liver = val;
+    }
+});
+
+//-- Input (pointer events, mouse+touch統一) ---------------------------
+let grabScreenX = 0, grabScreenY = 0;
+let activePointerId = -1;
+let rightBtnDown = false;  // 右ボタン状態トラッキング
+
+canvas.addEventListener('contextmenu', e=>e.preventDefault());
+canvas.addEventListener('touchstart', e=>e.preventDefault(), {passive:false});
+canvas.addEventListener('touchmove', e=>e.preventDefault(), {passive:false});
+
+canvas.addEventListener('pointerdown', e=>{
+    if (!sb || activePointerId >= 0) return;
+    // 右ボタン状態トラッキング
+    if (e.button === 2) rightBtnDown = true;
+    // 中ボタンは無視
+    if (e.button !== 0 && e.button !== 2 && e.pointerType === 'mouse') return;
+
+    // 右クリック処理
+    if (e.button === 2) {
+        activePointerId = e.pointerId;
+        canvas.setPointerCapture(e.pointerId);
+        last = {x: e.clientX, y: e.clientY};
+        if (cutMode && cutterPlaced) {
+            // カットモード + カッター配置済み → カッター平行移動モード
+            cutterDragging = true;
+        } else if (!transformMode) {
+            drag = true;  // カメラPan
+        }
+        return;
+    }
+
+    // Deform: Handle Place モード（クリックで球体配置、ヒットしなければカメラ操作）
+    if (handleMode && deformSub === 'place') {
+        const rect = canvas.getBoundingClientRect();
+        sendMatricesToCpp();
+        const ok = sb.addHandleSphereAtScreen(
+            e.clientX - rect.left, e.clientY - rect.top, 0.5);
+        if (ok) {
+            const n = sb.getNumHandleSpheres();
+            document.getElementById('handle-count').textContent = n > 0 ? n+' handles' : '';
+            return;
+        }
+        // メッシュ外 → カメラ操作にフォールスルー
+    }
+
+    // Deform: Deform モード（GrabberDuo::startSmartGrab でハンドルグラブ）
+    // C++ 準拠: startSmartGrab が自動でハンドル球体のレイ交差判定を行い、
+    // ヒットしたらオフセット補正付きでグラブ開始
+    if (deformSub === 'deform' && sb.getNumHandleSpheres() > 0) {
+        activePointerId = e.pointerId;
+        canvas.setPointerCapture(e.pointerId);
+        last = {x: e.clientX, y: e.clientY};
+        const rect = canvas.getBoundingClientRect();
+        grabScreenX = e.clientX - rect.left;
+        grabScreenY = e.clientY - rect.top;
+        sendMatricesToCpp();
+        sb.startGrab(grabScreenX, grabScreenY);
+        if (sb.isGrabbing()) {
+            grab = true;
+            canvas.style.cursor = 'grabbing';
+        } else {
+            // ハンドルにもメッシュにも当たらなかった → カメラ操作
+            drag = true;
+            canvas.style.cursor = 'move';
+        }
+        return;
+    }
+
+    // Seg Select モード: クリックでセグメント選択ハイライト
+    // C++準拠: ターゲットメッシュのみにレイキャスト（他メッシュを貫通）
+    if (segSelectMode && sb.isSkeletonAnalyzed()) {
+        const rect = canvas.getBoundingClientRect();
+        const sx = e.clientX - rect.left;
+        const sy = e.clientY - rect.top;
+        const ray = screenToWorldRay(sx, sy);
+        // liver=-1, portal=child[0]=0
+        const targetMeshIdx = (segSelectMode === 'liver') ? -1 : 0;
+        const target = (segSelectMode === 'liver') ? 0 : 1;
+        const hit = raycastTargetMeshWithVertex(ray, targetMeshIdx);
+        console.log('[SegSelect]', segSelectMode, 'raycast →',
+            hit ? ('hit vid=' + hit.vertexIdx + ' t=' + hit.t.toFixed(3)) : 'NO HIT');
+        if (hit && hit.vertexIdx >= 0) {
+            const mode = (segmentColorMode === 'obj') ? 1 : 0;
+            const segId = sb.clickMeshForHighlight(target, hit.vertexIdx, mode, e.shiftKey);
+            console.log('[SegSelect] clickMeshForHighlight →', 'target=' + target,
+                'mode=' + mode, 'segId=' + segId);
+            if (segId >= 0) {
+                // liver ハイライト色をGPUに転送
+                const lc = new Float32Array(sb.getLiverHighlightColors());
+                gl.bindBuffer(gl.ARRAY_BUFFER, bLiverHL);
+                gl.bufferData(gl.ARRAY_BUFFER, lc, gl.DYNAMIC_DRAW);
+                // portal ハイライト色
+                if (sb.getNumChildren() > 0) {
+                    const pc = new Float32Array(sb.getPortalHighlightColors());
+                    gl.bindBuffer(gl.ARRAY_BUFFER, bPortalHL);
+                    gl.bufferData(gl.ARRAY_BUFFER, pc, gl.DYNAMIC_DRAW);
+                }
+                document.getElementById('seg-select-status').textContent = 'S' + segId;
+            }
+            return;  // ヒットしたので終了
+        }
+        // ヒットしなかった → カメラ操作にフォールスルー
+    }
+
+    // Transform モード
+    if (transformMode) {
+        activePointerId = e.pointerId;
+        canvas.setPointerCapture(e.pointerId);
+        last = {x: e.clientX, y: e.clientY};
+        transformDragging = true;
+        return;
+    }
+
+    // カットモード（C++準拠: クリック=配置、ドラッグ=回転、スクロール=サイズ）
+    if (cutMode) {
+        activePointerId = e.pointerId;
+        canvas.setPointerCapture(e.pointerId);
+        last = {x: e.clientX, y: e.clientY};
+
+        const rect = canvas.getBoundingClientRect();
+        const sx = e.clientX - rect.left;
+        const sy = e.clientY - rect.top;
+        const ray = screenToWorldRay(sx, sy);
+        const hit = raycastMesh(ray);
+        if (hit) {
+            cutTargetMeshIdx = hit.meshIdx;
+            sb.setCutterPosition(hit.point[0], hit.point[1], hit.point[2]);
+            // C++ TargetScales 準拠: 臓器別保持スケールを適用
+            const isVessel = (cutTargetMeshIdx >= 0 && cutTargetMeshIdx <= 1);
+            const targetScale = isVessel ? cutterTargetScales.vessel : cutterTargetScales.liver;
+            sb.setCutterScale(targetScale);
+            const slider = document.getElementById('cut-scale');
+            slider.value = targetScale;
+            document.getElementById('cut-scale-v').textContent = targetScale.toFixed(2);
+            cutterPlaced = true;
+            cutterDragging = true;
+            numHighlightIdx = 0;
+            const targetLabel = cutTargetMeshIdx < 0 ? 'Liver' : childBuffers[cutTargetMeshIdx].label;
+            document.getElementById('cut-status').textContent =
+                targetLabel + ': placed (drag:rotate, scroll:size)';
+            if (segOverlayMode && sb.isSkeletonAnalyzed()) {
+                updateSegOverlayColors(hit.point[0], hit.point[1], hit.point[2], cutTargetMeshIdx);
+            }
+        } else {
+            // メッシュ外クリック → カッターリセット + カメラ操作
+            if (cutterPlaced) {
+                cutterPlaced = false;
+                numHighlightIdx = 0;
+                document.getElementById('cut-popup').style.display = 'none';
+                document.getElementById('cut-status').textContent = 'Click mesh to place cutter';
+            }
+            drag = true;
+            canvas.style.cursor = 'move';
+        }
+        return;
+    }
+
+    activePointerId = e.pointerId;
+    canvas.setPointerCapture(e.pointerId);
+    last = {x: e.clientX, y: e.clientY};
+    const rect = canvas.getBoundingClientRect();
+    grabScreenX = e.clientX - rect.left;
+    grabScreenY = e.clientY - rect.top;
+    sendMatricesToCpp();
+    sb.startGrab(grabScreenX, grabScreenY);
+    if (sb.isGrabbing()) {
+        grab = true;
+        canvas.style.cursor = 'grabbing';
+    } else {
+        drag = true;
+        canvas.style.cursor = 'move';
+    }
+});
+
+canvas.addEventListener('pointermove', e=>{
+    if (e.pointerId !== activePointerId) return;
+    const dx = e.clientX - last.x;
+    const dy = e.clientY - last.y;
+    last = {x: e.clientX, y: e.clientY};
+    if (transformMode && (transformDragging || rightBtnDown) && sb) {
+        // Transform モード (C++ glfw_onMouseMoveOrbit translationMode 準拠)
+        // FullSphereCamera の cameraRight/Up/Direction を使用
+        const sens = 0.005;
+        const right = cam._right, up = cam._up, fwd = cam._fwd;
+        if (transformDragging && !rightBtnDown) {
+            // 左ドラッグ = 回転 (C++: Y軸 + cameraRight軸)
+            sb.rotateModel(dx * 0.01, 0, 1, 0);
+            sb.rotateModel(dy * 0.01, right[0], right[1], right[2]);
+        } else if (rightBtnDown && !transformDragging) {
+            // 右ドラッグ = 平行移動 (C++: cameraRight * dx + cameraUp * -dy)
+            sb.translateModel(
+                right[0]*dx*sens + up[0]*(-dy)*sens,
+                right[1]*dx*sens + up[1]*(-dy)*sens,
+                right[2]*dx*sens + up[2]*(-dy)*sens);
+        } else if (transformDragging && rightBtnDown) {
+            // 両ドラッグ = 前後移動 (C++: cameraDirection * dy)
+            sb.translateModel(fwd[0]*dy*sens, fwd[1]*dy*sens, fwd[2]*dy*sens);
+        }
+    } else if (cutterDragging || cutterRotating) {
+        // C++ glfw_onMouseMoveOrbit cutMode + isDragging 準拠
+        const leftBtn = (e.buttons & 1) !== 0;
+        const rBtn = rightBtnDown || (e.buttons & 2) !== 0;
+        const r = cam._right, u = cam._up, f = cam._fwd;
+        const sens = 0.005;
+
+        if (leftBtn && !rBtn) {
+            // 左のみ = カッター回転
+            cutterYaw += dx * 0.02;
+            cutterPitch += dy * 0.02;
+            sb.setCutterRotation(cutterYaw, cutterPitch);
+        } else if (rBtn && !leftBtn) {
+            // 右のみ = カッター平行移動 (cameraRight * dx + cameraUp * -dy)
+            const v = sb.getCutterVertices();
+            if (v && v.length >= 3) {
+                const nv = v.length/3;
+                let cx=0,cy=0,cz=0;
+                for(let i=0;i<v.length;i+=3){cx+=v[i];cy+=v[i+1];cz+=v[i+2];}
+                cx/=nv; cy/=nv; cz/=nv;
+                sb.setCutterPosition(
+                    cx + r[0]*dx*sens + u[0]*(-dy)*sens,
+                    cy + r[1]*dx*sens + u[1]*(-dy)*sens,
+                    cz + r[2]*dx*sens + u[2]*(-dy)*sens);
+            }
+        } else if (leftBtn && rBtn) {
+            // 両方 = 前後移動 (cameraDirection * dy)
+            const v = sb.getCutterVertices();
+            if (v && v.length >= 3) {
+                const nv = v.length/3;
+                let cx=0,cy=0,cz=0;
+                for(let i=0;i<v.length;i+=3){cx+=v[i];cy+=v[i+1];cz+=v[i+2];}
+                cx/=nv; cy/=nv; cz/=nv;
+                sb.setCutterPosition(
+                    cx + f[0]*dy*sens,
+                    cy + f[1]*dy*sens,
+                    cz + f[2]*dy*sens);
+            }
+        }
+    } else if (grab) {
+        const rect = canvas.getBoundingClientRect();
+        grabScreenX = e.clientX - rect.left;
+        grabScreenY = e.clientY - rect.top;
+    } else if (drag) {
+        if (rightBtnDown) {
+            cam.pan(dx, dy);  // C++ FullSphereCamera::Pan
+        } else {
+            cam.rotate(dx, dy);  // C++ FullSphereCamera::Rotate (quaternion, no gimbal lock)
+        }
+    }
+});
+
+function handlePointerEnd(e) {
+    if (e.pointerId !== activePointerId) return;
+    activePointerId = -1;
+    if (e.button === 2) rightBtnDown = false;
+    if (transformDragging) { transformDragging = false; return; }
+    if (cutterDragging) {
+        cutterDragging = false;
+        if (cutMode && cutterPlaced) showCutPopup();
+        return;
+    }
+    if (cutterRotating) { cutterRotating = false; return; }
+    if (grab && sb) { sb.endGrab(); grab = false; }
+    drag = false;
+    canvas.style.cursor = 'default';
+}
+canvas.addEventListener('pointerup', handlePointerEnd);
+canvas.addEventListener('pointercancel', handlePointerEnd);
+canvas.addEventListener('lostpointercapture', handlePointerEnd);
+canvas.addEventListener('wheel', e=>{
+    // C++ glfw_onMouseScroll 準拠
+    if (cutMode && cutterPlaced && (e.buttons & 3)) {
+        // カットモード + 左or右ボタン押下中 → カッターサイズ変更 (C++準拠)
+        const slider = document.getElementById('cut-scale');
+        let val = parseFloat(slider.value) * (1 - e.deltaY * 0.002);
+        val = Math.max(0.1, Math.min(5.0, val));
+        slider.value = val;
+        document.getElementById('cut-scale-v').textContent = val.toFixed(2);
+        if (sb) {
+            sb.setCutterScale(val);
+            // 臓器別スケール保持 (C++ setCurrentTargetScale 準拠)
+            if (cutTargetMeshIdx >= 0 && cutTargetMeshIdx <= 1) cutterTargetScales.vessel = val;
+            else cutterTargetScales.liver = val;
+        }
+    } else {
+        // その他 → カメラZoom (C++ FullSphereCamera::Zoom)
+        cam.zoom(-e.deltaY * 0.01);
+    }
+    e.preventDefault();
+}, {passive:false});
+document.addEventListener('keydown', e=>{
+    if(e.key==='F1'){wireOn=!wireOn; e.preventDefault();}
+    if(e.key==='F2'&&sb){sb.applyShapeRestoration(1.0); e.preventDefault();}
+    // ActionMode ショートカット (C++ main.cpp 準拠)
+    if((e.key==='b'||e.key==='B')&&sb&&sb.areVolumesCaptured()){toggleVolumePanel(); e.preventDefault();}
+    if(e.key==='Escape'){document.getElementById('exit-popup').style.display='block'; e.preventDefault();}
+    if((e.key==='d'||e.key==='D')&&sb){
+        if(actionMode!=='deform') setActionMode('deform');
+        document.getElementById('btn-handle-mode').click();
+        e.preventDefault();
+    }
+    if((e.key==='x'||e.key==='X')&&sb){setActionMode(actionMode==='freeCut'?'none':'freeCut'); e.preventDefault();}
+    if((e.key==='q'||e.key==='Q')&&sb&&cutMode){toggleSegOverlay(); e.preventDefault();}
+    if((e.key==='t'||e.key==='T')&&sb){setActionMode(actionMode==='transform'?'none':'transform'); e.preventDefault();}
+    if((e.key==='f'||e.key==='F')&&sb){toggleSegSelect('liver'); e.preventDefault();}
+    if((e.key==='g'||e.key==='G')&&sb){toggleSegSelect('portal'); e.preventDefault();}
+    if((e.key==='z'||e.key==='Z')&&sb&&!e.ctrlKey){doSegCut(); e.preventDefault();}
+    if((e.key==='k'||e.key==='K')&&sb){doClearSelection(); e.preventDefault();}
+});
+
+//-- Parameter sliders -------------------------------------------------
+window.updateEdge = v=>{
+    const val=Math.pow(10,parseFloat(v));
+    document.getElementById('ev').textContent=val.toExponential(1);
+    if(sb) sb.setEdgeCompliance(val);
+};
+window.updateVol = v=>{
+    const val=parseFloat(v)<-10 ? 0 : Math.pow(10,parseFloat(v));
+    document.getElementById('vv').textContent=val===0?'0':val.toExponential(1);
+    if(sb) sb.setVolCompliance(val);
+};
+window.updateDamp = v=>{
+    document.getElementById('dv').textContent=parseFloat(v).toFixed(3);
+    if(sb) sb.setDamping(parseFloat(v));
+};
+window.updateSubsteps = v=>{
+    const n = parseInt(v);
+    document.getElementById('sv').textContent = n;
+    if(sb) sb.setNumSubsteps(n);
+};
+window.updateGravity = ()=>{
+    gravX = parseFloat(document.getElementById('gxs').value);
+    gravY = parseFloat(document.getElementById('gys').value);
+    gravZ = parseFloat(document.getElementById('gzs').value);
+    document.getElementById('gxv').textContent = gravX.toFixed(1);
+    document.getElementById('gyv').textContent = gravY.toFixed(1);
+    document.getElementById('gzv').textContent = gravZ.toFixed(1);
+};
+
+//-- Resize ------------------------------------------------------------
+function resize() {
+    canvas.width=window.innerWidth; canvas.height=window.innerHeight;
+    const ov = document.getElementById('handle-overlay');
+    ov.width=canvas.width; ov.height=canvas.height;
+    if (gl) gl.viewport(0,0,canvas.width,canvas.height);
+}
+resize(); window.addEventListener('resize',resize);
+
+// view/projをC++に送るヘルパー（16個のfloat引数）
+function sendMatricesToCpp() {
+    // FullSphereCamera が cameraUpdate() で既に view/proj を同期済み
+    // ここでは windowSize のみ更新（リサイズ対応）
+    sb.cameraSetWindowSize(canvas.width, canvas.height);
+    sb.setWindowSize(canvas.width, canvas.height);
+}
+
+function updateChildren() {
+    for (let i=0; i<childBuffers.length; i++) {
+        const c = childBuffers[i];
+        gl.bindBuffer(gl.ARRAY_BUFFER, c.bPos);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(sb.getChildHighResPositions(i)), gl.DYNAMIC_DRAW);
+        gl.bindBuffer(gl.ARRAY_BUFFER, c.bNrm);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(sb.getChildHighResNormals(i)), gl.DYNAMIC_DRAW);
+    }
+}
+
+function buildVisibilityUI() {
+    const grid = document.getElementById('organ-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    const CARDS = [
+        ['liver',  'Liver',   '#cc3333', 'data/liver_icon.png',  '🫀', -1],
+        ['portal', 'Portal',  '#cc3399', 'data/portal_icon.png', '🩸',  0],
+        ['vein',   'H.Vein',  '#00cccc', 'data/vein_icon.png',   '💧',  1],
+        ['tumor',  'Tumor',   '#cc8800', 'data/tumor_icon.png',  '🟡',  2],
+        ['gb',     'Gallbldr','#33bb33', 'data/gb_icon.png',     '🟢',  3],
+        ['sphere', 'Sphere',  '#4488cc', 'data/handleSphere_icon.png','⚪', 'sphere'],
+    ];
+    CARDS.forEach(([key, name, color, iconSrc, emoji, cbIdx], i) => {
+        if (cbIdx !== -1 && cbIdx !== 'sphere' && cbIdx >= childBuffers.length) return;
+        const numStates = ORGAN_NUM_STATES[i];
+        const state = organAlphaStates[i];
+        const stateClass = state === 0 ? 'state-off' : state === 1 ? 'state-half' : 'state-on';
+        const card = document.createElement('div');
+        card.className = `vis-card ${stateClass}`;
+        card.style.setProperty('--card-color', color);
+        card.id = 'organ-card-' + i;
+        card.innerHTML = `
+            <div class="vis-card-top">
+                <img src="${iconSrc}" style="width:26px;height:26px;object-fit:contain;border-radius:4px;flex-shrink:0;"
+                     onerror="this.style.display='none';if(this.nextElementSibling)this.nextElementSibling.style.display='inline'">
+                <span style="display:none;font-size:18px;">${emoji}</span>
+                <span class="vis-card-name">${name}</span>
+            </div>
+            <div class="vis-card-status">${numStates===2 ? (state===0?'OFF':'ON') : ['OFF','50%','ON'][state]}</div>
+        `;
+        card.addEventListener('click', () => {
+            organAlphaStates[i] = (organAlphaStates[i]+1) % numStates;
+            onAlphaChanged(i, organAlphaStates[i]);
+            const s = organAlphaStates[i];
+            card.className = `vis-card ${s===0?'state-off':s===1?'state-half':'state-on'}`;
+            card.querySelector('.vis-card-status').textContent =
+                numStates===2 ? (s===0?'OFF':'ON') : ['OFF','50%','ON'][s];
+        });
+        grid.appendChild(card);
+    });
+    updateLiverAlphaRowVisibility();
+}
+function updateLiverAlphaRowVisibility() {
+    const row = document.getElementById('liver-alpha-row');
+    if (row) row.style.display = organAlphaStates[0] > 0 ? 'block' : 'none';
+}
+function onAlphaChanged(index, state) {
+    if (index === 0) {
+        if (state===0) meshAlphaValues[0]=0.0;
+        else if (state===1) { meshAlphaValues[0]=0.5; liverAlphaValue=0.5; syncLiverSlider(0.5); }
+        else { meshAlphaValues[0]=liverAlphaValue=1.0; syncLiverSlider(1.0); }
+        liverVisible = meshAlphaValues[0]>0;
+        updateLiverAlphaRowVisibility();
+    } else if (index === 5) {
+        meshAlphaValues[5] = state===0 ? 0.0 : 1.0;
+    } else {
+        meshAlphaValues[index] = [0.0, 0.5, 1.0][state];
+        const ci = index - 1;
+        if (ci >= 0 && ci < childBuffers.length) childBuffers[ci].visible = meshAlphaValues[index]>0;
+    }
+}
+function onLiverAlphaSlider(val) {
+    const a = parseFloat(val)/100;
+    liverAlphaValue = a<0.05 ? 0.0 : a;
+    meshAlphaValues[0] = liverAlphaValue;
+    liverVisible = liverAlphaValue>0;
+    document.getElementById('liver-alpha-pct').textContent = Math.round(a*100)+'%';
+    if (liverAlphaValue<=0) organAlphaStates[0]=0;
+    else if (liverAlphaValue<1.0) organAlphaStates[0]=1;
+    else organAlphaStates[0]=2;
+    // カードスタイルだけ更新（buildVisibilityUI を再呼びしない）
+    const card = document.getElementById('organ-card-0');
+    if (card) {
+        const s = organAlphaStates[0];
+        card.className = `vis-card ${s===0?'state-off':s===1?'state-half':'state-on'}`;
+        const statusEl = card.querySelector('.vis-card-status');
+        if (statusEl) statusEl.textContent = ['OFF','50%','ON'][s];
+    }
+}
+function syncLiverSlider(val) {
+    const s = document.getElementById('liver-alpha-slider');
+    if (s) s.value = Math.round(val*100);
+    const p = document.getElementById('liver-alpha-pct');
+    if (p) p.textContent = Math.round(val*100)+'%';
+}
+
+// Step 5: Analyze Skeleton ボタン
+document.getElementById('btn-analyze-skel').addEventListener('click', ()=>{
+    if (!sb) return;
+    const btn = document.getElementById('btn-analyze-skel');
+    btn.textContent = 'Analyzing...';
+    btn.disabled = true;
+    document.getElementById('skel-status').textContent = 'Processing...';
+    setTimeout(()=>{
+        try {
+            const ok = sb.analyzePortalSkeleton(70);
+            if (ok) {
+                const colors = new Float32Array(sb.getLiverSegmentColors());
+                gl.bindBuffer(gl.ARRAY_BUFFER, bSegCol);
+                gl.bufferData(gl.ARRAY_BUFFER, colors, gl.STATIC_DRAW);
+                document.getElementById('btn-seg-color').style.display = 'inline-block';
+                document.getElementById('btn-apply-objseg').style.display = 'inline-block';
+                console.log('[Skeleton] OK, colors:', colors.length/4);
+                document.getElementById('skel-status').textContent =
+                    sb.getNumSkeletonNodes() + ' nodes, ' + sb.getNumSkeletonEdges() + ' edges';
+            } else {
+                document.getElementById('skel-status').textContent = 'Failed';
+            }
+        } catch(e) {
+            document.getElementById('skel-status').textContent = 'Error: ' + e.message;
+            console.error('[Skeleton]', e);
+        }
+        btn.textContent = 'Analyze Skeleton';
+        btn.disabled = false;
+    }, 50);
+});
+// Apply OBJ Seg ボタン
+// tet.getOBJSegmentPath(i) からパスを取得（OBJドロップ時にMEMFSに書き出し済み）
+let tetObj = null;  // MultiOBJTetrahedralizerWasm のインスタンスを保持
+document.getElementById('btn-apply-objseg').addEventListener('click', ()=>{
+    if (!sb) return;
+    // OBJセグメントパスを取得（tetObjがあればドロップ由来、なければデフォルトモデル）
+    let paths = '';
+    if (tetObj && tetObj.getNumOBJSegments() > 0) {
+        const arr = [];
+        for (let i = 0; i < tetObj.getNumOBJSegments(); i++) {
+            arr.push(tetObj.getOBJSegmentPath(i));
+        }
+        paths = arr.join(',');
+    }
+    if (!paths) {
+        document.getElementById('skel-status').textContent += ' (No S1-S8 OBJ dropped)';
+        return;
+    }
+    const btn = document.getElementById('btn-apply-objseg');
+    btn.textContent = 'Loading...';
+    btn.disabled = true;
+    setTimeout(()=>{
+        try {
+            const ok = sb.loadAndBindOBJSegments(paths);
+            if (ok) {
+                const objColors = new Float32Array(sb.getLiverOBJSegmentColors());
+                gl.bindBuffer(gl.ARRAY_BUFFER, bOBJSegCol);
+                gl.bufferData(gl.ARRAY_BUFFER, objColors, gl.STATIC_DRAW);
+                console.log('[OBJSeg] OK, colors:', objColors.length/4);
+                document.getElementById('skel-status').textContent += ' + S1-S8';
+            } else {
+                document.getElementById('skel-status').textContent += ' (OBJ bind failed)';
+            }
+        } catch(e) {
+            console.error('[OBJSeg]', e);
+        }
+        btn.textContent = 'Apply OBJ Seg';
+        btn.disabled = false;
+    }, 50);
+});
+// Seg Select toggle
+function toggleSegSelect(target) {
+    if (actionMode !== 'segCut') {
+        setActionMode('segCut');
+    }
+    segSelectMode = (segSelectMode === target) ? null : target;
+    updateSegSelectBtns();
+    updateStatusBar();
+}
+function updateSegSelectBtns() {
+    document.getElementById('btn-liver-select').style.background = (segSelectMode==='liver') ? '#27ae60' : '#555';
+    document.getElementById('btn-portal-select').style.background = (segSelectMode==='portal') ? '#cc4d88' : '#555';
+    document.getElementById('seg-select-status').textContent = segSelectMode ? (segSelectMode + ' select active') : '';
+}
+
+// Volume パネルトグル (main.cpp: B キー, drawSubToggle("Volume") 準拠)
+function toggleVolumePanel() {
+    const panel = document.getElementById('volume-panel');
+    const btn = document.getElementById('btn-volume');
+    const show = panel.style.display === 'none';
+    panel.style.display = show ? 'block' : 'none';
+    btn.style.background = show ? '#1a6b8a' : '#555';
+    if (show) updateVolumePanel();
+}
+
+// Fragment Selection ポップアップ (main.cpp drawFragmentChoicePopup 準拠)
+const FRAG_COLORS = [
+    '#3399ff', // 青
+    '#ff6633', // オレンジ
+    '#33ff66', // 緑
+    '#ffff33', // 黄
+    '#cc33ff', // 紫
+];
+
+function showFragmentPopup() {
+    const popup = document.getElementById('fragment-popup');
+    const btnDiv = document.getElementById('fragment-buttons');
+    const count = sb.getPendingFragmentCount();
+    btnDiv.innerHTML = '';
+    for (let r = 0; r < count; r++) {
+        const size = sb.getPendingFragmentSize(r);
+        const pct = sb.getPendingFragmentPercent(r).toFixed(1);
+        const col = FRAG_COLORS[r % 5];
+        const btn = document.createElement('button');
+        btn.style.cssText = `width:100%;padding:10px;margin-bottom:6px;border:none;
+            border-radius:6px;cursor:pointer;font-size:13px;font-weight:bold;
+            color:white;background:${col};opacity:0.7;transition:opacity 0.15s;`;
+        btn.textContent = `Keep Fragment ${r+1}  (${size} tets, ${pct}%)`;
+        btn.dataset.rank = r;
+        btn.addEventListener('click', () => completeFragment(parseInt(btn.dataset.rank)));
+        btn.addEventListener('mouseenter', () => hoverFragment(parseInt(btn.dataset.rank)));
+        btn.addEventListener('mouseleave', () => hoverFragment(-1));
+        btnDiv.appendChild(btn);
+    }
+    popup.style.display = 'block';
+    // 初期ハイライト（全成分表示）
+    hoverFragment(-1);
+}
+
+function hoverFragment(rank) {
+    if (!sb || !sb.hasPendingFragment()) return;
+    sb.applyFragmentHighlight(rank);
+    // GPU転送（liver or child）
+    const lc = new Float32Array(sb.getLiverHighlightColors());
+    if (lc.length > 0) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, bLiverHL);
+        gl.bufferData(gl.ARRAY_BUFFER, lc, gl.DYNAMIC_DRAW);
+    }
+    if (sb.getNumChildren() > 0) {
+        const pc = new Float32Array(sb.getPortalHighlightColors());
+        if (pc.length > 0) {
+            gl.bindBuffer(gl.ARRAY_BUFFER, bPortalHL);
+            gl.bufferData(gl.ARRAY_BUFFER, pc, gl.DYNAMIC_DRAW);
+        }
+    }
+    // ボタンの opacity 更新
+    const btns = document.getElementById('fragment-buttons').children;
+    for (let i = 0; i < btns.length; i++) {
+        if (rank === -1) btns[i].style.opacity = '0.7';
+        else btns[i].style.opacity = (i === rank) ? '1.0' : '0.25';
+    }
+}
+
+function completeFragment(rank) {
+    if (!sb || !sb.hasPendingFragment()) return;
+    const removed = sb.completePendingCut(rank);
+    console.log('[Fragment] Completed, removed', removed, 'tets');
+    document.getElementById('fragment-popup').style.display = 'none';
+    // liver + 全子メッシュのバッファ更新
+    initIdxBuffer();
+    updateMesh();
+    if (wireOn) updateWire();
+    for (let ci = 0; ci < childBuffers.length; ci++) {
+        const cidx = new Int32Array(sb.getChildHighResSurfaceTriIds(ci));
+        const c = childBuffers[ci];
+        c.numIdx = cidx.length;
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, c.bIdx);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,
+            extUint ? new Uint32Array(cidx) : new Uint16Array(cidx), gl.STATIC_DRAW);
+    }
+    cutterPlaced = false;
+    document.getElementById('cut-popup').style.display = 'none';
+    document.getElementById('cut-status').textContent = 'Fragment ' + (rank+1) + ' kept';
+    updateVolumePanel();
+    syncHandlesAfterCut();
+}
+
+// Fragment popup ドラッグ移動
+{
+    const titleBar = document.getElementById('fragment-popup-title');
+    const popup = document.getElementById('fragment-popup');
+    let dragOfs = {x:0, y:0}, dragging = false;
+    titleBar.addEventListener('pointerdown', e => {
+        dragging = true;
+        dragOfs.x = e.clientX - popup.offsetLeft;
+        dragOfs.y = e.clientY - popup.offsetTop;
+        titleBar.setPointerCapture(e.pointerId);
+        e.stopPropagation();
+    });
+    titleBar.addEventListener('pointermove', e => {
+        if (!dragging) return;
+        popup.style.left = (e.clientX - dragOfs.x) + 'px';
+        popup.style.top = (e.clientY - dragOfs.y) + 'px';
+        popup.style.right = 'auto';
+        popup.style.transform = 'none';
+    });
+    titleBar.addEventListener('pointerup', () => { dragging = false; });
+    titleBar.addEventListener('lostpointercapture', () => { dragging = false; });
+}
+
+// Volume パネル ドラッグ移動
+{
+    const titleBar = document.getElementById('vol-title');
+    const popup = document.getElementById('volume-panel');
+    let dragOfs = {x:0, y:0}, dragging = false;
+    titleBar.addEventListener('pointerdown', e => {
+        dragging = true;
+        dragOfs.x = e.clientX - popup.offsetLeft;
+        dragOfs.y = e.clientY - popup.offsetTop;
+        titleBar.setPointerCapture(e.pointerId);
+        e.stopPropagation();
+    });
+    titleBar.addEventListener('pointermove', e => {
+        if (!dragging) return;
+        popup.style.left = (e.clientX - dragOfs.x) + 'px';
+        popup.style.top = (e.clientY - dragOfs.y) + 'px';
+    });
+    titleBar.addEventListener('pointerup', () => { dragging = false; });
+    titleBar.addEventListener('lostpointercapture', () => { dragging = false; });
+}
+
+function cancelFragment() {
+    if (!sb) return;
+    sb.cancelPendingCut();
+    console.log('[Fragment] Cancelled');
+    document.getElementById('fragment-popup').style.display = 'none';
+    initIdxBuffer();
+    updateMesh();
+    if (wireOn) updateWire();
+    document.getElementById('cut-status').textContent = 'Cut cancelled';
+    updateVolumePanel();
+}
+
+// ボリューム表示パネル更新 (main.cpp renderVolumeOverlay 準拠)
+function updateVolumePanel() {
+    if (!sb || !sb.areVolumesCaptured()) return;
+    const totalVol = sb.getOriginalTotalVolume();
+    const currentVol = sb.calculateTotalVolume();
+    const remnantPct = totalVol > 0 ? (currentVol / totalVol * 100).toFixed(1) : '0.0';
+    let html = '';
+    html += `<span style="color:#aaa;">Total:</span> <b>${totalVol.toFixed(1)}</b> ml<br>`;
+    html += `<span style="color:#7dff7d;">Remnant:</span> <b>${currentVol.toFixed(1)}</b> ml (<b>${remnantPct}%</b>)<br>`;
+    // S1-S8 セグメント別
+    if (sb.isOBJSegmentsBound()) {
+        html += '<div style="margin-top:4px;border-top:1px solid #444;padding-top:4px;font-size:11px;">';
+        for (let id = 1; id <= 8; id++) {
+            const origVol = sb.getOriginalSegmentVolume(id, true);
+            const pct = totalVol > 0 ? (origVol / totalVol * 100).toFixed(1) : '0.0';
+            html += `S${id}: ${origVol.toFixed(1)} ml (${pct}%)<br>`;
+        }
+        html += '</div>';
+    }
+    document.getElementById('vol-content').innerHTML = html;
+}
+
+// Seg Cut 実行
+// カット後の共通ハンドル同期
+function syncHandlesAfterCut() {
+    if (sb && sb.getNumHandleSpheres() > 0) {
+        sb.syncHandleGroupsAfterCut();
+        const n = sb.getNumHandleSpheres();
+        document.getElementById('handle-count').textContent = n > 0 ? n+' handles' : '';
+    }
+}
+
+function doSegCut() {
+    if (!sb || !sb.isSkeletonAnalyzed()) return;
+    console.log('[SegCut] Executing segment cut...');
+    const mode = (segmentColorMode === 'obj') ? 1 : 0;
+    const count = sb.executeSegmentCut(mode);
+    console.log('[SegCut] Result:', count, 'tets cut');
+    if (count === -1) {
+        // フラグメント選択モード
+        console.log('[SegCut] Fragment selection pending');
+        showFragmentPopup();
+        return;
+    }
+    if (count > 0) {
+        // executeCut() 後と同じバッファ更新
+        initIdxBuffer();
+        updateMesh();
+        if (wireOn) updateWire();
+        // ハイライトをクリア（カット後は通常表示に戻す）
+        sb.clearHighlight();
+        segSelectMode = null;
+        updateSegSelectBtns();
+        // OBJセグメント色バッファを再転送（カットで形状が変わるため）
+        if (sb.isOBJSegmentsBound()) {
+            const objColors = new Float32Array(sb.getLiverOBJSegmentColors());
+            gl.bindBuffer(gl.ARRAY_BUFFER, bOBJSegCol);
+            gl.bufferData(gl.ARRAY_BUFFER, objColors, gl.DYNAMIC_DRAW);
+        }
+        // Auto Seg 色バッファも再転送
+        if (sb.isSkeletonAnalyzed()) {
+            const segColors = new Float32Array(sb.getLiverSegmentColors());
+            gl.bindBuffer(gl.ARRAY_BUFFER, bSegCol);
+            gl.bufferData(gl.ARRAY_BUFFER, segColors, gl.DYNAMIC_DRAW);
+        }
+        document.getElementById('seg-select-status').textContent = count + ' tets cut';
+        updateVolumePanel();
+        syncHandlesAfterCut();
+    } else {
+        document.getElementById('seg-select-status').textContent = 'No segments selected';
+    }
+}
+
+// Seg Undo
+function doSegUndo() {
+    if (!sb || !sb.canUndo()) return;
+    console.log('[SegCut] Undoing...');
+    sb.undoCut();
+    initIdxBuffer();
+    updateMesh();
+    if (wireOn) updateWire();
+    // 子メッシュのインデックスバッファも再構築
+    for (let ci = 0; ci < childBuffers.length; ci++) {
+        const cidx = new Int32Array(sb.getChildHighResSurfaceTriIds(ci));
+        const c = childBuffers[ci];
+        c.numIdx = cidx.length;
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, c.bIdx);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,
+            extUint ? new Uint32Array(cidx) : new Uint16Array(cidx), gl.STATIC_DRAW);
+    }
+    sb.clearHighlight();
+    segSelectMode = null;
+    updateSegSelectBtns();
+    // 色バッファ再転送
+    if (sb.isOBJSegmentsBound()) {
+        const objColors = new Float32Array(sb.getLiverOBJSegmentColors());
+        gl.bindBuffer(gl.ARRAY_BUFFER, bOBJSegCol);
+        gl.bufferData(gl.ARRAY_BUFFER, objColors, gl.DYNAMIC_DRAW);
+    }
+    if (sb.isSkeletonAnalyzed()) {
+        const segColors = new Float32Array(sb.getLiverSegmentColors());
+        gl.bindBuffer(gl.ARRAY_BUFFER, bSegCol);
+        gl.bufferData(gl.ARRAY_BUFFER, segColors, gl.DYNAMIC_DRAW);
+    }
+    document.getElementById('seg-select-status').textContent = 'Undo done';
+    updateVolumePanel();
+}
+
+// Clear Selection
+function doClearSelection() {
+    if (!sb) return;
+    sb.clearSegmentSelection();
+    segSelectMode = null;
+    updateSegSelectBtns();
+    // OBJセグメント色バッファを再転送
+    if (sb.isOBJSegmentsBound()) {
+        const objColors = new Float32Array(sb.getLiverOBJSegmentColors());
+        gl.bindBuffer(gl.ARRAY_BUFFER, bOBJSegCol);
+        gl.bufferData(gl.ARRAY_BUFFER, objColors, gl.DYNAMIC_DRAW);
+    }
+    document.getElementById('seg-select-status').textContent = '';
+}
+
+// Visual Mode 切替（3ボタン）
+function setVisualMode(mode) {
+    segmentColorMode = mode;
+    ['btn-vm-normal','btn-vm-auto','btn-vm-preset'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('active');
+    });
+    const activeId = mode===false ? 'btn-vm-normal' : mode==='skeleton' ? 'btn-vm-auto' : 'btn-vm-preset';
+    const activeEl = document.getElementById(activeId);
+    if (activeEl) activeEl.classList.add('active');
+    updateModeBar();
+}
+
+//-- Render loop -------------------------------------------------------
+let fc=0, ft=performance.now();
+const DT=1/60;
+// ===== 深度ソート透明描画 (C++ drawAllSoftBodiesDepthSorted 準拠) =====
+function buildDrawList(fragPending, fragChildIdx) {
+    const list = [];
+    const liverAlpha = meshAlphaValues[0];
+    if (liverAlpha > 0 && liverVisible) {
+        const liverHL = sb.isHighlightActive() && (!fragPending || fragChildIdx === -1);
+        let colBuf = null, useSeg = false;
+        if ((segmentColorMode || liverHL) && sb.isSkeletonAnalyzed()) {
+            useSeg = true;
+            if (liverHL) colBuf = bLiverHL;
+            else if (segmentColorMode === 'obj' && sb.isOBJSegmentsBound()) colBuf = bOBJSegCol;
+            else colBuf = bSegCol;
+        }
+        list.push({ bPos:bHiPos, bNrm:bHiNrm, bIdx:bHiIdx, numIdx:numHiIdx,
+            alpha:liverAlpha, useSeg, colBuf, solidColor:[0.85,0.20,0.15,1.0], label:'liver' });
+    }
+    for (let ci = 0; ci < childBuffers.length; ci++) {
+        const c = childBuffers[ci];
+        const alphaIdx = ci + 1;
+        const alpha = alphaIdx < meshAlphaValues.length ? meshAlphaValues[alphaIdx] : 1.0;
+        if (alpha <= 0 || !c.visible) continue;
+        const isChildHL = (fragPending && fragChildIdx === ci) ||
+                          (!fragPending && ci === 0 && sb.isHighlightActive());
+        let colBuf = null, useSeg = false;
+        if (isChildHL && bPortalHL) { useSeg = true; colBuf = bPortalHL; }
+        list.push({ bPos:c.bPos, bNrm:c.bNrm, bIdx:c.bIdx, numIdx:c.numIdx,
+            alpha, useSeg, colBuf, solidColor:c.color, label:c.label, ci });
+    }
+    return list;
+}
+
+function drawMeshEntry(entry, M, V, P, cp) {
+    if (entry.useSeg && entry.colBuf) {
+        gl.useProgram(pSegment);
+        gl.uniformMatrix4fv(LSeg.uM,false,M); gl.uniformMatrix4fv(LSeg.uV,false,V);
+        gl.uniformMatrix4fv(LSeg.uP,false,P);
+        gl.uniform3fv(LSeg.uLP,cp); gl.uniform3fv(LSeg.uVP,cp);
+        gl.uniform1f(LSeg.uAlpha, entry.alpha);
+        gl.bindBuffer(gl.ARRAY_BUFFER, entry.bPos);
+        gl.enableVertexAttribArray(LSeg.aPos); gl.vertexAttribPointer(LSeg.aPos,3,gl.FLOAT,false,0,0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, entry.bNrm);
+        gl.enableVertexAttribArray(LSeg.aNrm); gl.vertexAttribPointer(LSeg.aNrm,3,gl.FLOAT,false,0,0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, entry.colBuf);
+        gl.enableVertexAttribArray(LSeg.aCol); gl.vertexAttribPointer(LSeg.aCol,4,gl.FLOAT,false,0,0);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, entry.bIdx);
+        gl.drawElements(gl.TRIANGLES, entry.numIdx, extUint?gl.UNSIGNED_INT:gl.UNSIGNED_SHORT, 0);
+    } else {
+        gl.useProgram(pMain);
+        gl.uniformMatrix4fv(L.uM,false,M); gl.uniformMatrix4fv(L.uV,false,V);
+        gl.uniformMatrix4fv(L.uP,false,P);
+        gl.uniform3fv(L.uLP,cp); gl.uniform3fv(L.uVP,cp);
+        const sc = entry.solidColor;
+        gl.uniform4f(L.uCol, sc[0],sc[1],sc[2], sc[3]!==undefined?sc[3]:1.0);
+        gl.uniform1f(L.uAlpha, entry.alpha);
+        gl.bindBuffer(gl.ARRAY_BUFFER, entry.bPos);
+        gl.enableVertexAttribArray(L.aPos); gl.vertexAttribPointer(L.aPos,3,gl.FLOAT,false,0,0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, entry.bNrm);
+        gl.enableVertexAttribArray(L.aNrm); gl.vertexAttribPointer(L.aNrm,3,gl.FLOAT,false,0,0);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, entry.bIdx);
+        gl.drawElements(gl.TRIANGLES, entry.numIdx, extUint?gl.UNSIGNED_INT:gl.UNSIGNED_SHORT, 0);
+    }
+}
+
+function drawAllDepthSorted(drawList, M, V, P, cp) {
+    if (drawList.length === 0) return;
+    // Pass 1: 不透明 (alpha >= 1.0)
+    gl.depthMask(true); gl.disable(gl.BLEND);
+    gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK);
+    let hasTransparent = false;
+    for (const entry of drawList) {
+        if (entry.alpha < 1.0) { hasTransparent = true; continue; }
+        drawMeshEntry(entry, M, V, P, cp);
+    }
+    if (!hasTransparent) return;
+    // Pass 2: 半透明 — C++で全メッシュ三角形をグローバルソート
+    const globalData = new Int32Array(sb.getGlobalSortedTriIndices(
+        cp[0], cp[1], cp[2],
+        meshAlphaValues[0], meshAlphaValues[1], meshAlphaValues[2],
+        meshAlphaValues[3], meshAlphaValues[4]));
+    if (globalData.length === 0) return;
+
+    // drawList から meshId→entry のマップ構築
+    const entryMap = new Map(); // meshId → entry
+    for (const entry of drawList) {
+        const meshId = entry.label === 'liver' ? -1 : entry.ci;
+        entryMap.set(meshId, entry);
+    }
+
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.depthMask(false);
+    gl.disable(gl.CULL_FACE);
+
+    // globalData: [meshId, i0, i1, i2, meshId, i0, i1, i2, ...]
+    // 同一 meshId の連続三角形をバッチ化
+    const tempBuf = gl.createBuffer();
+    let batchMeshId = globalData[0];
+    let batchIndices = [];
+
+    function flushBatch() {
+        if (batchIndices.length === 0) return;
+        const entry = entryMap.get(batchMeshId);
+        if (!entry) { batchIndices = []; return; }
+        const buf = extUint ? new Uint32Array(batchIndices) : new Uint16Array(batchIndices);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, tempBuf);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, buf, gl.DYNAMIC_DRAW);
+        drawMeshEntrySetup(entry, M, V, P, cp);
+        gl.drawElements(gl.TRIANGLES, buf.length,
+            extUint ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);
+        batchIndices = [];
+    }
+
+    for (let i = 0; i < globalData.length; i += 4) {
+        const meshId = globalData[i];
+        if (meshId !== batchMeshId) {
+            flushBatch();
+            batchMeshId = meshId;
+        }
+        batchIndices.push(globalData[i+1], globalData[i+2], globalData[i+3]);
+    }
+    flushBatch();
+    gl.deleteBuffer(tempBuf);
+
+    gl.enable(gl.CULL_FACE);
+    gl.depthMask(true); gl.disable(gl.BLEND);
+}
+
+function drawMeshEntrySetup(entry, M, V, P, cp) {
+    if (entry.useSeg && entry.colBuf) {
+        gl.useProgram(pSegment);
+        gl.uniformMatrix4fv(LSeg.uM,false,M); gl.uniformMatrix4fv(LSeg.uV,false,V);
+        gl.uniformMatrix4fv(LSeg.uP,false,P);
+        gl.uniform3fv(LSeg.uLP,cp); gl.uniform3fv(LSeg.uVP,cp);
+        gl.uniform1f(LSeg.uAlpha, entry.alpha);
+        gl.bindBuffer(gl.ARRAY_BUFFER, entry.bPos);
+        gl.enableVertexAttribArray(LSeg.aPos); gl.vertexAttribPointer(LSeg.aPos,3,gl.FLOAT,false,0,0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, entry.bNrm);
+        gl.enableVertexAttribArray(LSeg.aNrm); gl.vertexAttribPointer(LSeg.aNrm,3,gl.FLOAT,false,0,0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, entry.colBuf);
+        gl.enableVertexAttribArray(LSeg.aCol); gl.vertexAttribPointer(LSeg.aCol,4,gl.FLOAT,false,0,0);
+    } else {
+        gl.useProgram(pMain);
+        gl.uniformMatrix4fv(L.uM,false,M); gl.uniformMatrix4fv(L.uV,false,V);
+        gl.uniformMatrix4fv(L.uP,false,P);
+        gl.uniform3fv(L.uLP,cp); gl.uniform3fv(L.uVP,cp);
+        const sc = entry.solidColor;
+        gl.uniform4f(L.uCol, sc[0],sc[1],sc[2], sc[3]!==undefined?sc[3]:1.0);
+        gl.uniform1f(L.uAlpha, entry.alpha);
+        gl.bindBuffer(gl.ARRAY_BUFFER, entry.bPos);
+        gl.enableVertexAttribArray(L.aPos); gl.vertexAttribPointer(L.aPos,3,gl.FLOAT,false,0,0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, entry.bNrm);
+        gl.enableVertexAttribArray(L.aNrm); gl.vertexAttribPointer(L.aNrm,3,gl.FLOAT,false,0,0);
+    }
+}
+
+function render() {
+    if (!sb) { requestAnimationFrame(render); return; }
+    // グラブ中は毎フレームmoveGrab（スクリーン座標 + view/proj）
+    if (grab) {
+        sendMatricesToCpp();
+        sb.moveGrab(grabScreenX, grabScreenY, DT);
+    }
+    sb.step(DT, gravX, gravY, gravZ);
+    sb.cameraSetWindowSize(canvas.width, canvas.height);  // リサイズ対応
+    cam.update();  // FullSphereCamera 更新（view/proj行列計算）
+    updateMesh();
+    if (wireOn) updateWire();
+    if (childBuffers.length > 0) updateChildren();
+
+    gl.clearColor(0.08,0.08,0.12,1);
+    gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+    gl.enable(gl.DEPTH_TEST);
+    const M=I4(), V=cam.V(), P=cam.P(), cp=cam.pos();
+
+    // ===== 全臓器描画（深度ソート透明対応）=====
+    const fragPending = sb.hasPendingFragment();
+    const fragChildIdx = fragPending ? sb.getPendingFragmentChildIdx() : -2;
+    const drawList = buildDrawList(fragPending, fragChildIdx);
+    drawAllDepthSorted(drawList, M, V, P, cp);
+
+    if (wireOn && numWireV>0) {
+        gl.useProgram(pWire);
+        gl.uniformMatrix4fv(LW.uM,false,M);
+        gl.uniformMatrix4fv(LW.uV,false,V);
+        gl.uniformMatrix4fv(LW.uP,false,P);
+        gl.uniform4f(LW.uCol, 0.0,0.85,0.35,0.8);
+        gl.bindBuffer(gl.ARRAY_BUFFER, bWire);
+        gl.enableVertexAttribArray(LW.aPos);
+        gl.vertexAttribPointer(LW.aPos,3,gl.FLOAT,false,0,0);
+        gl.drawArrays(gl.LINES, 0, numWireV);
+    }
+
+
+    // カッター描画（3Dライティング付き半透明、C++ 準拠）
+    if (cutMode && cutterInitialized && bCutterPos) {
+        const cutVerts = new Float32Array(sb.getCutterVertices());
+        gl.bindBuffer(gl.ARRAY_BUFFER, bCutterPos);
+        gl.bufferData(gl.ARRAY_BUFFER, cutVerts, gl.DYNAMIC_DRAW);
+
+        // 面法線を計算（C++ mCutMesh::faceNormals 準拠）
+        if (!bCutterNrm) bCutterNrm = gl.createBuffer();
+        const nv2 = cutVerts.length / 3;
+        const nrmArr = new Float32Array(cutVerts.length);
+        // インデックスから面法線を計算し、頂点に蓄積
+        const cutIdx = new Int32Array(sb.getCutterIndices());
+        for (let t = 0; t < cutIdx.length; t += 3) {
+            const i0=cutIdx[t],i1=cutIdx[t+1],i2=cutIdx[t+2];
+            const ax=cutVerts[i1*3]-cutVerts[i0*3], ay=cutVerts[i1*3+1]-cutVerts[i0*3+1], az=cutVerts[i1*3+2]-cutVerts[i0*3+2];
+            const bx=cutVerts[i2*3]-cutVerts[i0*3], by=cutVerts[i2*3+1]-cutVerts[i0*3+1], bz=cutVerts[i2*3+2]-cutVerts[i0*3+2];
+            const nx=ay*bz-az*by, ny=az*bx-ax*bz, nz=ax*by-ay*bx;
+            for (const vi of [i0,i1,i2]) { nrmArr[vi*3]+=nx; nrmArr[vi*3+1]+=ny; nrmArr[vi*3+2]+=nz; }
+        }
+        // 正規化
+        for (let i=0;i<nv2;i++){
+            const nx2=nrmArr[i*3],ny2=nrmArr[i*3+1],nz2=nrmArr[i*3+2];
+            const len=Math.sqrt(nx2*nx2+ny2*ny2+nz2*nz2)||1;
+            nrmArr[i*3]/=len; nrmArr[i*3+1]/=len; nrmArr[i*3+2]/=len;
+        }
+        gl.bindBuffer(gl.ARRAY_BUFFER, bCutterNrm);
+        gl.bufferData(gl.ARRAY_BUFFER, nrmArr, gl.DYNAMIC_DRAW);
+
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        gl.depthMask(false);
+        gl.disable(gl.CULL_FACE);
+
+        // pMain シェーダー（ライティング付き3D描画）
+        gl.useProgram(pMain);
+        gl.uniformMatrix4fv(L.uM, false, M);
+        gl.uniformMatrix4fv(L.uV, false, V);
+        gl.uniformMatrix4fv(L.uP, false, P);
+        gl.uniform3fv(L.uLP, cp); gl.uniform3fv(L.uVP, cp);
+        const cc = cutterPlaced ? (CUTTER_COLORS[''+cutTargetMeshIdx] || CUTTER_COLORS['none'])
+                                : CUTTER_COLORS['none'];
+        gl.uniform4f(L.uCol, cc[0], cc[1], cc[2], 1.0);
+        gl.uniform1f(L.uAlpha, cc[3]);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, bCutterPos);
+        gl.enableVertexAttribArray(L.aPos);
+        gl.vertexAttribPointer(L.aPos, 3, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, bCutterNrm);
+        gl.enableVertexAttribArray(L.aNrm);
+        gl.vertexAttribPointer(L.aNrm, 3, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bCutterIdx);
+        gl.drawElements(gl.TRIANGLES, numCutterIdx,
+            extUint ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);
+
+        gl.depthMask(true);
+        gl.disable(gl.BLEND);
+    }
+
+    // 交差ハイライト描画（polygonOffsetでz-fighting回避）
+    if (numHighlightIdx > 0 && bHighlightIdx) {
+        // ハイライト対象のポジション/ノーマルバッファを選択
+        const hlPos = (cutTargetMeshIdx >= 0 && childBuffers[cutTargetMeshIdx])
+            ? childBuffers[cutTargetMeshIdx].bPos : bHiPos;
+        const hlNrm = (cutTargetMeshIdx >= 0 && childBuffers[cutTargetMeshIdx])
+            ? childBuffers[cutTargetMeshIdx].bNrm : bHiNrm;
+
+        gl.enable(gl.POLYGON_OFFSET_FILL);
+        gl.polygonOffset(-1.0, -1.0);
+        gl.depthFunc(gl.LEQUAL);
+
+        gl.useProgram(pMain);
+        gl.uniformMatrix4fv(L.uM, false, M);
+        gl.uniformMatrix4fv(L.uV, false, V);
+        gl.uniformMatrix4fv(L.uP, false, P);
+        gl.uniform3fv(L.uLP, cp); gl.uniform3fv(L.uVP, cp);
+        gl.uniform4f(L.uCol, 1.0, 1.0, 0.0, 1.0);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, hlPos);
+        gl.enableVertexAttribArray(L.aPos);
+        gl.vertexAttribPointer(L.aPos, 3, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, hlNrm);
+        gl.enableVertexAttribArray(L.aNrm);
+        gl.vertexAttribPointer(L.aNrm, 3, gl.FLOAT, false, 0, 0);
+
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bHighlightIdx);
+        gl.drawElements(gl.TRIANGLES, numHighlightIdx,
+            extUint ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);
+
+        gl.depthFunc(gl.LESS);
+        gl.disable(gl.POLYGON_OFFSET_FILL);
+    }
+
+    // ハンドル球の2D overlay描画
+    drawHandleOverlay();      // 2D overlay クリア
+    drawHandleSpheres3D(M, V, P, cp);  // 3D 球体描画
+
+    // CUT ポップアップ位置更新（毎フレーム）
+    if (cutMode && cutterPlaced && !cutterDragging && !cutterRotating) {
+        updateCutPopupPosition();
+    }
+
+    fc++;
+    const now=performance.now();
+    if(now-ft>=1000){
+        document.getElementById('fps').textContent=fc;
+        fc=0; ft=now;
+    }
+    requestAnimationFrame(render);
+}
+
+function updateMeshInfo() {
+    if (!sb) return;
+    document.getElementById('lo-v').textContent = sb.getNumLowResParticles();
+    document.getElementById('lo-t').textContent = sb.getNumLowResTets();
+    document.getElementById('hi-v').textContent = sb.getNumHighResVerts();
+    document.getElementById('hi-t').textContent = sb.getNumHighResTets();
+    document.getElementById('sm-t').textContent = Math.floor(sb.getNumHighResSurfaceTriIdsAfterCut() / 3);
+}
+
+function worldToScreen(wx, wy, wz, V, P, W, H) {
+    function mv(m,x,y,z,w){return[
+        m[0]*x+m[4]*y+m[8]*z+m[12]*w, m[1]*x+m[5]*y+m[9]*z+m[13]*w,
+        m[2]*x+m[6]*y+m[10]*z+m[14]*w, m[3]*x+m[7]*y+m[11]*z+m[15]*w];}
+    const vp=mv(P,...mv(V,wx,wy,wz,1));
+    if(vp[3]<=0)return null;
+    return{x:(vp[0]/vp[3]+1)*0.5*W, y:(1-vp[1]/vp[3])*0.5*H};
+}
+
+// C++ SphereDeformDuo::getPointColorDuo 準拠の色パレット
+const HANDLE_COLORS_F = [
+    [1.0, 0.0, 0.0],  // 赤
+    [0.0, 1.0, 0.0],  // 緑
+    [0.0, 0.0, 1.0],  // 青
+    [1.0, 1.0, 0.0],  // 黄
+    [1.0, 0.0, 1.0],  // マゼンタ
+    [0.0, 1.0, 1.0],  // シアン
+];
+
+// 3D 球体 WebGL バッファ（初回に初期化）
+let bSphereVBO = null, bSphereIBO = null, numSphereIdx = 0;
+
+function initSphereBuffers() {
+    if (bSphereVBO) return;
+    const verts = new Float32Array(sb.getUnitSphereVertices());
+    const idx = new Int32Array(sb.getUnitSphereIndices());
+    numSphereIdx = idx.length;
+
+    bSphereVBO = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, bSphereVBO);
+    gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW);
+
+    bSphereIBO = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bSphereIBO);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,
+        extUint ? new Uint32Array(idx) : new Uint16Array(idx), gl.STATIC_DRAW);
+    console.log('[Sphere] 3D buffers initialized:', verts.length/6, 'verts,', numSphereIdx/3, 'tris');
+}
+
+function drawHandleOverlay() {
+    // 2D overlay をクリア（もう使わない）
+    const ov = document.getElementById('handle-overlay');
+    const ctx2d = ov.getContext('2d');
+    ctx2d.clearRect(0, 0, ov.width, ov.height);
+}
+
+// 3D 球体描画 (C++ SphereDeformHandleDuo::draw 準拠)
+function drawHandleSpheres3D(M, V, P, cp) {
+    if (!sb || sb.getNumHandleSpheres() === 0) return;
+    initSphereBuffers();
+    if (!bSphereVBO || numSphereIdx === 0) return;
+
+    const data = sb.getHandleSphereData();
+    const alpha = meshAlphaValues[5]; // Sphere alpha
+    if (alpha <= 0) return;
+
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+    gl.useProgram(pMain);
+    gl.uniformMatrix4fv(L.uV, false, V);
+    gl.uniformMatrix4fv(L.uP, false, P);
+    gl.uniform3fv(L.uLP, cp);
+    gl.uniform3fv(L.uVP, cp);
+    gl.uniform1f(L.uAlpha, alpha * 0.7);
+
+    // stride = 6 floats (pos3 + normal3)
+    gl.bindBuffer(gl.ARRAY_BUFFER, bSphereVBO);
+    gl.enableVertexAttribArray(L.aPos);
+    gl.vertexAttribPointer(L.aPos, 3, gl.FLOAT, false, 24, 0);
+    gl.enableVertexAttribArray(L.aNrm);
+    gl.vertexAttribPointer(L.aNrm, 3, gl.FLOAT, false, 24, 12);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bSphereIBO);
+
+    for (let i = 0; i < data.length; i += 4) {
+        const cx = data[i], cy = data[i+1], cz = data[i+2], r = data[i+3];
+        const idx = (i/4) % HANDLE_COLORS_F.length;
+        const c = HANDLE_COLORS_F[idx];
+
+        // モデル行列: translate(cx,cy,cz) * scale(r)
+        const sm = [
+            r,0,0,0,
+            0,r,0,0,
+            0,0,r,0,
+            cx,cy,cz,1
+        ];
+        gl.uniformMatrix4fv(L.uM, false, sm);
+        gl.uniform4f(L.uCol, c[0], c[1], c[2], 1.0);
+        gl.drawElements(gl.TRIANGLES, numSphereIdx,
+            extUint ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);
+    }
+
+    gl.disable(gl.BLEND);
+}
+
+//-- initApp: called when WASM runtime is ready ------------------------
+function initApp() {
+    try {
+        console.log('[APP] initApp starting');
+
+        // Get the WebGL context (created by Emscripten's initGL)
+        gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+        if (!gl) { showErr('WebGL not supported'); return; }
+        gl.viewport(0, 0, canvas.width, canvas.height);
+
+        // Compile shaders (deferred to avoid softbody.js clearing script tags)
+        setLoad('Compiling shaders...', 20);
+        pMain = mkProg(SHADER_VS, SHADER_FS);
+        pWire = mkProg(SHADER_VSW, SHADER_FSW);
+        L = {
+            aPos: gl.getAttribLocation(pMain,'aPos'),
+            aNrm: gl.getAttribLocation(pMain,'aNrm'),
+            uM:   gl.getUniformLocation(pMain,'uM'),
+            uV:   gl.getUniformLocation(pMain,'uV'),
+            uP:   gl.getUniformLocation(pMain,'uP'),
+            uLP:  gl.getUniformLocation(pMain,'uLP'),
+            uVP:  gl.getUniformLocation(pMain,'uVP'),
+            uCol: gl.getUniformLocation(pMain,'uCol'),
+            uAlpha: gl.getUniformLocation(pMain,'uAlpha'),
+        };
+        LW = {
+            aPos: gl.getAttribLocation(pWire,'aPos'),
+            uM:   gl.getUniformLocation(pWire,'uM'),
+            uV:   gl.getUniformLocation(pWire,'uV'),
+            uP:   gl.getUniformLocation(pWire,'uP'),
+            uCol: gl.getUniformLocation(pWire,'uCol'),
+        };
+
+        // Create GL buffers
+        bHiPos = gl.createBuffer();
+        bHiNrm = gl.createBuffer();
+        bHiIdx = gl.createBuffer();
+        bWire  = gl.createBuffer();
+        // WebGL2 は UNSIGNED_INT ビルトイン。WebGL1 は拡張が必要。
+        extUint = gl instanceof WebGL2RenderingContext || gl.getExtension('OES_element_index_uint');
+
+        // XYZ軸バッファ
+        const axisVerts = new Float32Array([0,0,0, 1,0,0, 0,0,0, 0,1,0, 0,0,0, 0,0,1]);
+        bAxis = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, bAxis);
+        gl.bufferData(gl.ARRAY_BUFFER, axisVerts, gl.STATIC_DRAW);
+
+        // Step 5: セグメントカラーシェーダー + バッファ
+        pSegment = mkProg(SHADER_VS_SEG, SHADER_FS_SEG);
+        LSeg = {
+            aPos: gl.getAttribLocation(pSegment,'aPos'),
+            aNrm: gl.getAttribLocation(pSegment,'aNrm'),
+            aCol: gl.getAttribLocation(pSegment,'aCol'),
+            uM:   gl.getUniformLocation(pSegment,'uM'),
+            uV:   gl.getUniformLocation(pSegment,'uV'),
+            uP:   gl.getUniformLocation(pSegment,'uP'),
+            uLP:  gl.getUniformLocation(pSegment,'uLP'),
+            uVP:  gl.getUniformLocation(pSegment,'uVP'),
+            uAlpha: gl.getUniformLocation(pSegment,'uAlpha'),
+        };
+        bSegCol = gl.createBuffer();
+        bOBJSegCol = gl.createBuffer();
+        bLiverHL = gl.createBuffer();
+        bPortalHL = gl.createBuffer();
+
+        // Initialize Emscripten's WebGL context (required before SoftBodyDuo constructor)
+        Module.initGL();
+        console.log('[APP] Emscripten GL context initialized');
+
+        // Create soft body
+        setLoad('Creating soft body...', 40);
+        console.log('[APP] Creating SoftBodyDuoWasm');
+        sb = Module.createSoftBody(
+            '/model/liver_lowRes_mesh.txt',
+            '/model/liver_highRes_mesh.txt',
+            1.0, 0.0
+        );
+
+        // FullSphereCamera 初期化
+        sb.cameraSetWindowSize(canvas.width, canvas.height);
+        sb.cameraUpdate();
+
+        setLoad('Initializing buffers...', 80);
+        const nHi = sb.getNumHighResVerts();
+        const nLo = sb.getNumLowResParticles();
+        const nTri = sb.getNumHighResSurfaceTriIds() / 3;
+        console.log('[APP] HighRes verts:', nHi, ' LowRes verts:', nLo, ' Tris:', nTri);
+
+        initIdxBuffer();
+        updateWire();
+        updateMesh();
+
+        // カッター用WebGLバッファ初期化
+        bCutterPos = gl.createBuffer();
+        bCutterIdx = gl.createBuffer();
+        bHighlightIdx = gl.createBuffer();
+        {
+            const cutterIdxRaw = new Int32Array(sb.getCutterIndices());
+            numCutterIdx = cutterIdxRaw.length;
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bCutterIdx);
+            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,
+                extUint ? new Uint32Array(cutterIdxRaw) : new Uint16Array(cutterIdxRaw),
+                gl.STATIC_DRAW);
+            cutterInitialized = true;
+            console.log('[Cutter] initialized, tris=', sb.getCutterTriangleCount());
+        }
+
+        updateMeshInfo();
+        ['loading'].forEach(id=>document.getElementById(id).style.display='none');
+        ['info','ctrl','params'].forEach(id=>document.getElementById(id).style.display='block');
+
+        // 子メッシュ登録
+        const childDefs = [
+            {low:'/model/portal_lowRes_mesh.txt', high:'/model/portal_highRes_mesh.txt',
+             color:[0.95,0.30,0.55,1.0], label:'Portal'},
+            {low:'/model/vein_lowRes_mesh.txt', high:'/model/vein_highRes_mesh.txt',
+             color:[0.2,0.8,0.8,1.0], label:'Vein'},
+            {low:'/model/tumor_lowRes_mesh.txt', high:'/model/tumor_highRes_mesh.txt',
+             color:[0.85,0.65,0.10,1.0], label:'Tumor'},
+            {low:'/model/GB_lowRes_mesh.txt', high:'/model/GB_highRes_mesh.txt',
+             color:[0.2,0.8,0.2,1.0], label:'GB'},
+        ];
+        for (let ci=0; ci<childDefs.length; ci++) {
+            const def = childDefs[ci];
+            const ok = sb.addChildMesh(def.low, def.high, ...def.color);
+            if (!ok) { console.warn('[child] Failed:', def.low); continue; }
+            const bPos=gl.createBuffer(), bNrm=gl.createBuffer(), bIdx=gl.createBuffer();
+            const idx = new Int32Array(sb.getChildHighResSurfaceTriIds(ci));
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bIdx);
+            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,
+                extUint ? new Uint32Array(idx) : new Uint16Array(idx), gl.STATIC_DRAW);
+            childBuffers.push({bPos,bNrm,bIdx, numIdx:idx.length,
+                color:def.color, label:def.label, visible:true});
+            console.log('[child]', def.label, 'verts=', sb.getChildNumHighResVerts(ci), 'tris=', idx.length/3);
+        }
+        buildVisibilityUI();
+
+        // Step 5: 初期化時にスケルトン解析 + OBJセグメントバインド（重力落下前）
+        if (sb.getNumChildren() > 0) {
+            try {
+                console.log('[APP] Auto-analyzing skeleton...');
+                const skelOk = sb.analyzePortalSkeleton(70);
+                if (skelOk) {
+                    const colors = new Float32Array(sb.getLiverSegmentColors());
+                    gl.bindBuffer(gl.ARRAY_BUFFER, bSegCol);
+                    gl.bufferData(gl.ARRAY_BUFFER, colors, gl.STATIC_DRAW);
+                    console.log('[Skeleton] OK, colors:', colors.length/4);
+                    // OBJセグメント（デフォルトモデルのsoft_S*.obj）
+                    const objOk = sb.loadAndBindOBJSegments('');
+                    if (objOk) {
+                        const objColors = new Float32Array(sb.getLiverOBJSegmentColors());
+                        gl.bindBuffer(gl.ARRAY_BUFFER, bOBJSegCol);
+                        gl.bufferData(gl.ARRAY_BUFFER, objColors, gl.STATIC_DRAW);
+                        console.log('[OBJSeg] OK, colors:', objColors.length/4);
+                    }
+                    document.getElementById('visual-mode-btns').style.display = 'flex';
+                    document.getElementById('display-placeholder').style.display = 'none';
+                    document.getElementById('btn-action-segcut').style.display = 'flex';
+                    document.getElementById('skel-status').textContent =
+                        sb.getNumSkeletonNodes() + ' nodes' +
+                        (sb.isOBJSegmentsBound() ? ' + S1-S8' : '');
+                }
+            } catch(e) { console.warn('[Skeleton init]', e); }
+        }
+
+        // ボリューム計算: transform_info.txt から scaleFactor を読み込み
+        try {
+            const tiText = Module.FS.readFile('/model/transform_info.txt', {encoding:'utf8'});
+            const lines = tiText.trim().split('\n');
+            if (lines.length >= 1) {
+                const scaleFactor = parseFloat(lines[0]);
+                console.log('[Volume] scaleFactor from transform_info.txt:', scaleFactor);
+                sb.setVolumeScaleFactor(scaleFactor);
+                sb.captureOriginalVolumes();
+                updateVolumePanel();
+                document.getElementById('btn-volume').style.display = 'inline-block';
+            }
+        } catch(e) { console.warn('[Volume] transform_info.txt not found:', e); }
+
+        console.log('[APP] Starting render loop');
+        render();
+    } catch(e) {
+        showErr(e.message + '\n\n' + (e.stack||''));
+    }
+}
+
+// Handle race condition: onRuntimeInitialized may fire before or after this script
+if (window._wasmRuntimeReady) {
+    initApp();
+} else {
+    window._onWasmReady = initApp;
+}
+setTimeout(()=>{ if(!sb) showErr('WASM load timeout (30s)'); }, 30000);
+
+//==========================================================================
+// OBJフォルダドロップ → 四面体化 → シミュレーション再開
+//==========================================================================
+function classifyOBJFiles(files) {
+    const r = {liver:null,portal:null,vein:null,gb:null,tumor:null};
+    for (const f of files) {
+        const basename = (f.webkitRelativePath || f.name || '').replace(/\\/g,'/').split('/').pop();
+        if (!basename.match(/\.obj$/i)) continue;
+        const n = basename.toLowerCase();
+        console.log('[classify]', basename);
+        if (n.includes('liver'))       r.liver=f;
+        else if (n.includes('portal')) r.portal=f;
+        else if (n.includes('vein'))   r.vein=f;
+        else if (n.includes('gb'))     r.gb=f;
+        else if (n.includes('tumor'))  r.tumor=f;
+        // S1-S8 セグメントOBJ（"s1.obj", "S1.obj" 等）
+        else {
+            const sm = basename.match(/^[Ss](\d+)\.obj$/i);
+            if (sm) r['S'+sm[1]] = f;
+        }
+    }
+    console.log('[classify] result:', Object.entries(r).filter(([k,v])=>v).map(([k,v])=>k).join(', '));
+    return r;
+}
+function readFileAsText(file) {
+    return new Promise((res,rej)=>{
+        const r=new FileReader(); r.onload=e=>res(e.target.result); r.onerror=()=>rej(new Error(file.name)); r.readAsText(file);
+    });
+}
+
+// ドロップ・クリック
+const dropArea = document.getElementById('folder-drop-area');
+const folderInput = document.getElementById('folder-input');
+dropArea.addEventListener('click', ()=>folderInput.click());
+folderInput.addEventListener('change', e=>handleFiles(e.target.files));
+dropArea.addEventListener('dragover', e=>{e.preventDefault();dropArea.style.borderColor='#00d4ff';});
+dropArea.addEventListener('dragleave', ()=>{dropArea.style.borderColor='#555';});
+dropArea.addEventListener('drop', e=>{
+    e.preventDefault(); dropArea.style.borderColor='#555';
+    const items = e.dataTransfer.items;
+    if (items && items.length > 0) {
+        const collectedFiles = [];
+        let pending = items.length;
+        function onDone() {
+            if (--pending === 0 && collectedFiles.length > 0) handleFiles(collectedFiles);
+        }
+        function collectFromEntry(entry, done) {
+            if (entry.isFile) {
+                entry.file(f => { collectedFiles.push(f); done(); });
+            } else if (entry.isDirectory) {
+                const reader = entry.createReader();
+                reader.readEntries(entries => {
+                    let p = entries.length;
+                    if (p === 0) { done(); return; }
+                    entries.forEach(en => collectFromEntry(en, () => { if(--p===0) done(); }));
+                });
+            } else { done(); }
+        }
+        for (let i = 0; i < items.length; i++) {
+            const entry = items[i].webkitGetAsEntry && items[i].webkitGetAsEntry();
+            if (entry) collectFromEntry(entry, onDone);
+            else onDone();
+        }
+    } else if (e.dataTransfer.files.length > 0) {
+        handleFiles(e.dataTransfer.files);
+    }
+});
+
+let pendingOBJFiles = null;
+function handleFiles(files) {
+    const c = classifyOBJFiles(Array.from(files));
+    if (!c.liver) { alert('liver.obj not found'); return; }
+    pendingOBJFiles = c;
+    showTetModal(c);
+}
+function showTetModal(c) {
+    const names=['liver','portal','vein','gb','tumor'];
+    const labels={liver:'Liver(parent)',portal:'Portal',vein:'Vein',gb:'GB',tumor:'Tumor'};
+    const el=document.getElementById('tet-file-list');
+    el.innerHTML=names.map(n=>{
+        const f=c[n]; const ok=f?'#7dff7d':'#666';
+        return `<span style="color:${ok}">${f?'OK':'--'} ${labels[n]}: ${f?f.name:'not found'}</span>`;
+    }).join('<br>');
+    document.getElementById('tet-modal-bg').style.display='flex';
+}
+document.getElementById('tet-cancel-btn').addEventListener('click',()=>{
+    document.getElementById('tet-modal-bg').style.display='none';
+});
+
+document.getElementById('tet-start-btn').addEventListener('click', async ()=>{
+    if (!pendingOBJFiles) return;
+    document.getElementById('tet-modal-bg').style.display='none';
+    await runTetrahedralization(pendingOBJFiles);
+});
+
+function getColorForOrgan(name) {
+    const n=name.toLowerCase();
+    if (n.includes('portal')) return [0.95,0.30,0.55,1.0];
+    if (n.includes('vein'))   return [0.2,0.8,0.8,1.0];
+    if (n.includes('tumor'))  return [0.85,0.65,0.10,1.0];
+    if (n.includes('gb'))     return [0.2,0.8,0.2,1.0];
+    return [0.8,0.8,0.8,1.0];
+}
+function rebuildChildBuffers() {
+    for (const c of childBuffers) {
+        if (c.bPos) gl.deleteBuffer(c.bPos);
+        if (c.bNrm) gl.deleteBuffer(c.bNrm);
+        if (c.bIdx) gl.deleteBuffer(c.bIdx);
+    }
+    childBuffers.length=0;
+    const ct=document.getElementById('visibility-ui');
+    if (ct) ct.innerHTML='<div style="font-size:11px;color:#aaa;margin-bottom:4px;">Visibility</div>';
+}
+function addChildBuffer(sbObj, ci, name, color) {
+    const bP=gl.createBuffer(), bN=gl.createBuffer(), bI=gl.createBuffer();
+    const idx=new Int32Array(sbObj.getChildHighResSurfaceTriIds(ci));
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bI);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,
+        extUint ? new Uint32Array(idx) : new Uint16Array(idx), gl.STATIC_DRAW);
+    childBuffers.push({bPos:bP,bNrm:bN,bIdx:bI,numIdx:idx.length,
+        color,label:name.charAt(0).toUpperCase()+name.slice(1),visible:true});
+}
+
+async function runTetrahedralization(classified) {
+    const prog=document.getElementById('tet-progress');
+    const msg=document.getElementById('tet-progress-msg');
+    const bar=document.getElementById('tet-progress-bar');
+    prog.style.display='flex'; msg.textContent='Reading OBJ files...'; bar.style.width='5%';
+    try {
+        const params={
+            liverLow:  +document.getElementById('gs-liver-low').value,
+            liverHigh: +document.getElementById('gs-liver-high').value,
+            vesselLow: +document.getElementById('gs-vessel-low').value,
+            vesselHigh:+document.getElementById('gs-vessel-high').value,
+            smallLow:  +document.getElementById('gs-small-low').value,
+            smallHigh: +document.getElementById('gs-small-high').value,
+            normalizeRange:   parseFloat(document.getElementById('gs-normalize').value),
+            liverMergeLow:    +document.getElementById('gd-liver-merge-low').value,
+            liverMergeHigh:   +document.getElementById('gd-liver-merge-high').value,
+            vesselMergeLow:   +document.getElementById('gd-vessel-merge-low').value,
+            vesselMergeHigh:  +document.getElementById('gd-vessel-merge-high').value,
+            smallMergeLow:    +document.getElementById('gd-small-merge-low').value,
+            smallMergeHigh:   +document.getElementById('gd-small-merge-high').value,
+            liverProtLow:     +document.getElementById('gd-liver-prot-low').value,
+            liverProtHigh:    +document.getElementById('gd-liver-prot-high').value,
+            vesselProtLow:    +document.getElementById('gd-vessel-prot-low').value,
+            vesselProtHigh:   +document.getElementById('gd-vessel-prot-high').value,
+            smallProtLow:     +document.getElementById('gd-small-prot-low').value,
+            smallProtHigh:    +document.getElementById('gd-small-prot-high').value,
+            smoothFactorLow:      parseFloat(document.getElementById('gd-smooth-factor-low').value),
+            smoothIterationsLow:  +document.getElementById('gd-smooth-iter-low').value,
+            smoothFactorHigh:     parseFloat(document.getElementById('gd-smooth-factor-high').value),
+            smoothIterationsHigh: +document.getElementById('gd-smooth-iter-high').value,
+        };
+        const texts={};
+        for (const n of ['liver','portal','vein','gb','tumor']) {
+            if (classified[n]) { msg.textContent='Reading: '+n+'...'; texts[n]=await readFileAsText(classified[n]); }
+        }
+        // S1-S8 セグメントOBJも読み込み
+        for (const n of ['S1','S2','S3','S4','S5','S6','S7','S8']) {
+            if (classified[n]) { msg.textContent='Reading: '+n+'...'; texts[n]=await readFileAsText(classified[n]); }
+        }
+        bar.style.width='15%'; msg.textContent='Initializing tetrahedralizer...';
+        await new Promise(r=>setTimeout(r,50));
+
+        const tet = Module.createTetrahedralizer();
+        tetObj = tet;  // Apply OBJ Seg ボタンで参照するために保持
+        for (const n of ['liver','portal','vein','gb','tumor']) {
+            if (texts[n]) tet.addOBJ(n, texts[n]);
+        }
+        // S1-S8もaddOBJ（正規化のため。tetmesh化はされない）
+        for (const n of ['S1','S2','S3','S4','S5','S6','S7','S8']) {
+            if (texts[n]) tet.addOBJ(n, texts[n]);
+        }
+        bar.style.width='20%'; msg.textContent='Tetrahedralizing (this takes time)...';
+        await new Promise(r=>setTimeout(r,50));
+
+        const ok = tet.execute(
+            params.liverLow, params.liverHigh,
+            params.vesselLow, params.vesselHigh,
+            params.smallLow, params.smallHigh,
+            params.normalizeRange,
+            params.liverMergeLow, params.liverMergeHigh,
+            params.vesselMergeLow, params.vesselMergeHigh,
+            params.smallMergeLow, params.smallMergeHigh,
+            params.liverProtLow, params.liverProtHigh,
+            params.vesselProtLow, params.vesselProtHigh,
+            params.smallProtLow, params.smallProtHigh,
+            params.smoothFactorLow, params.smoothIterationsLow,
+            params.smoothFactorHigh, params.smoothIterationsHigh);
+        if (!ok) throw new Error(tet.getStatusMessage());
+
+        bar.style.width='80%'; msg.textContent='Rebuilding simulation...';
+        await new Promise(r=>setTimeout(r,50));
+
+        // 既存sb破棄（raw pointerなのでdelete()は使えない）
+        sb = null;
+        rebuildChildBuffers();
+
+        // 新パスでsb再作成
+        Module.initGL();
+        sb = Module.createSoftBody(tet.getLiverLowPath(), tet.getLiverHighPath(), 1.0, 0.0);
+        sb.cameraSetWindowSize(canvas.width, canvas.height);
+        sb.cameraUpdate();
+
+        // 子メッシュ再登録
+        const nc=tet.getNumChildren();
+        for (let i=0;i<nc;i++) {
+            const name=tet.getChildName(i);
+            const color=getColorForOrgan(name);
+            const ok2=sb.addChildMesh(tet.getChildLowPath(i),tet.getChildHighPath(i),...color);
+            if (ok2) {
+                const ci = sb.getNumChildren() - 1;
+                addChildBuffer(sb, ci, name, color);
+            }
+        }
+        initIdxBuffer();
+        buildVisibilityUI();
+
+        // info パネル更新
+        document.getElementById('lo-v').textContent = sb.getNumLowResParticles();
+        document.getElementById('hi-v').textContent = sb.getNumHighResVerts();
+        document.getElementById('hi-t').textContent = sb.getNumHighResSurfaceTriIds() / 3;
+
+        // スケルトン解析 + OBJバインド + ボリュームキャプチャ（ドロップモデル）
+        if (sb.getNumChildren() > 0) {
+            try {
+                const skelOk = sb.analyzePortalSkeleton(70);
+                if (skelOk) {
+                    const colors = new Float32Array(sb.getLiverSegmentColors());
+                    gl.bindBuffer(gl.ARRAY_BUFFER, bSegCol);
+                    gl.bufferData(gl.ARRAY_BUFFER, colors, gl.STATIC_DRAW);
+                    // OBJセグメント
+                    let segPaths = '';
+                    const nSeg = tet.getNumOBJSegments();
+                    if (nSeg > 0) {
+                        const arr = [];
+                        for (let i = 0; i < nSeg; i++) arr.push(tet.getOBJSegmentPath(i));
+                        segPaths = arr.join(',');
+                    }
+                    if (segPaths) {
+                        const objOk = sb.loadAndBindOBJSegments(segPaths);
+                        if (objOk) {
+                            const objColors = new Float32Array(sb.getLiverOBJSegmentColors());
+                            gl.bindBuffer(gl.ARRAY_BUFFER, bOBJSegCol);
+                            gl.bufferData(gl.ARRAY_BUFFER, objColors, gl.STATIC_DRAW);
+                        }
+                    }
+                    document.getElementById('visual-mode-btns').style.display = 'flex';
+                    document.getElementById('display-placeholder').style.display = 'none';
+                    document.getElementById('btn-action-segcut').style.display = 'flex';
+                }
+            } catch(e) { console.warn('[Drop Skeleton]', e); }
+        }
+        // ボリューム: ドロップモデルの scaleFactor
+        const dropScale = tet.getScaleFactor();
+        console.log('[Volume] scaleFactor from tet:', dropScale);
+        sb.setVolumeScaleFactor(dropScale);
+        sb.captureOriginalVolumes();
+        updateVolumePanel();
+        document.getElementById('btn-volume').style.display = 'inline-block';
+
+        bar.style.width='100%'; msg.textContent='Done!';
+        await new Promise(r=>setTimeout(r,500));
+        prog.style.display='none';
+        updateMeshInfo();
+        console.log('[TET] Simulation restarted.');
+    } catch(e) {
+        prog.style.display='none';
+        showErr('Tetrahedralization error:\n'+e.message+'\n\n'+(e.stack||''));
+    }
+}
+</script>
+</body>
+</html>
