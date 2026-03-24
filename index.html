@@ -2927,12 +2927,14 @@ let xrMode = null;  // 'vr' or 'ar'
 let VR_SCALE = 0.05;        // シミュレーション空間 → VR空間のスケール（モデル3単位→15cm）
 let VR_OFFSET = { x: 0, y: 1.0, z: -0.5 };  // モデル位置（目の前0.5m、高さ1.0m）
 
-// VR グラブ状態（物理エンジンはシングルグラブのみ対応 → 片手ずつ）
-let vrActiveHand = null;  // 現在グラブ中の手 ('left'/'right'/null)
+// VR 入力状態
+// 右手: メッシュグラブ（startGrabVR）
+// 左手: モデル全体の移動/回転（translateModel/rotateModel）
 const vrGrabs = {
-    left:  { active: false, inputSource: null },
-    right: { active: false, inputSource: null }
+    left:  { active: false },
+    right: { active: false }
 };
+let vrLeftPrev = null;  // { pos:[x,y,z], ori:{x,y,z,w} } 左手の前フレーム状態
 
 function simToVR(sx, sy, sz) {
     return [sx * VR_SCALE + VR_OFFSET.x,
@@ -3008,7 +3010,8 @@ function onXREnd() {
     xrRefSpace = null;
     vrGrabs.left.active = false;
     vrGrabs.right.active = false;
-    vrActiveHand = null;
+    vrLeftPrev = null;
+    if (sb) sb.endGrabVR();
 
     // UI 復帰
     document.getElementById('ctrl').style.display = '';
@@ -3158,12 +3161,9 @@ function processController(frame, src, hand) {
         const stickY = src.gamepad.axes[3] || 0;
         const deadzone = 0.15;
         if (hand === 'right') {
-            // 右スティック上下 → スケール
-            if (Math.abs(stickY) > deadzone) {
-                VR_SCALE = Math.max(0.2, Math.min(10.0, VR_SCALE - stickY * 0.02));
-            }
+            if (Math.abs(stickY) > deadzone)
+                VR_SCALE = Math.max(0.01, Math.min(1.0, VR_SCALE - stickY * 0.001));
         } else {
-            // 左スティック上下 → 高さ、左右 → 奥行き
             if (Math.abs(stickY) > deadzone) VR_OFFSET.y -= stickY * 0.01;
             if (Math.abs(stickX) > deadzone) VR_OFFSET.z += stickX * 0.01;
         }
@@ -3174,40 +3174,77 @@ function processController(frame, src, hand) {
 
     const pos = gripPose.transform.position;
     const ori = gripPose.transform.orientation;
-
-    // トリガー（index 0）
     const trigger = src.gamepad.buttons[0]?.pressed || false;
 
-    // レイ方向（コントローラーの前方 = -Z）
-    // クォータニオンから方向ベクトルを計算
-    const qx = ori.x, qy = ori.y, qz = ori.z, qw = ori.w;
-    const dirX = 2 * (qx * qz + qy * qw);
-    const dirY = 2 * (qy * qz - qx * qw);
-    const dirZ = 1 - 2 * (qx * qx + qy * qy);
+    if (hand === 'right') {
+        // === 右手: メッシュグラブ ===
+        const qx = ori.x, qy = ori.y, qz = ori.z, qw = ori.w;
+        const dirX = 2 * (qx * qz + qy * qw);
+        const dirY = 2 * (qy * qz - qx * qw);
+        const dirZ = 1 - 2 * (qx * qx + qy * qy);
 
-    const grabState = vrGrabs[hand];
+        if (trigger && !vrGrabs.right.active) {
+            const simO = vrToSim(pos.x, pos.y, pos.z);
+            const simD = [-dirX / VR_SCALE, -dirY / VR_SCALE, -dirZ / VR_SCALE];
+            sb.startGrabVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2]);
+            vrGrabs.right.active = true;
+        } else if (trigger && vrGrabs.right.active) {
+            const simO = vrToSim(pos.x, pos.y, pos.z);
+            const simD = [-dirX / VR_SCALE, -dirY / VR_SCALE, -dirZ / VR_SCALE];
+            sb.moveGrabVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2], 1/72);
+        } else if (!trigger && vrGrabs.right.active) {
+            sb.endGrabVR();
+            vrGrabs.right.active = false;
+        }
+    } else {
+        // === 左手: モデル移動/回転 (translateModel + rotateModel) ===
+        processLeftHandTransform(trigger, pos, ori);
+    }
+}
 
-    if (trigger && !grabState.active) {
-        // 他の手がグラブ中なら無視
-        if (vrActiveHand && vrActiveHand !== hand) return;
-        // グラブ開始
-        const simO = vrToSim(pos.x, pos.y, pos.z);
-        const simD = [-dirX / VR_SCALE, -dirY / VR_SCALE, -dirZ / VR_SCALE];
-        sb.startGrabVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2]);
-        grabState.active = true;
-        grabState.inputSource = src;
-        vrActiveHand = hand;
-    } else if (trigger && grabState.active) {
-        // グラブ移動
-        const simO = vrToSim(pos.x, pos.y, pos.z);
-        const simD = [-dirX / VR_SCALE, -dirY / VR_SCALE, -dirZ / VR_SCALE];
-        sb.moveGrabVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2], 1/72);
-    } else if (!trigger && grabState.active) {
-        // グラブ終了
-        sb.endGrabVR();
-        grabState.active = false;
-        grabState.inputSource = null;
-        vrActiveHand = null;
+// 左手 Transform 共通処理（コントローラー/ハンドトラッキング共用）
+function processLeftHandTransform(active, pos, ori) {
+    if (active && !vrGrabs.left.active) {
+        // 開始: 初期位置・向きを保存
+        vrLeftPrev = {
+            pos: [pos.x, pos.y, pos.z],
+            ori: { x: ori.x, y: ori.y, z: ori.z, w: ori.w }
+        };
+        vrGrabs.left.active = true;
+    } else if (active && vrGrabs.left.active && vrLeftPrev) {
+        // 移動中: デルタを計算して translate + rotate
+        const dx = pos.x - vrLeftPrev.pos[0];
+        const dy = pos.y - vrLeftPrev.pos[1];
+        const dz = pos.z - vrLeftPrev.pos[2];
+
+        // 移動（VR空間のデルタ → シミュレーション空間）
+        if (Math.abs(dx) > 1e-5 || Math.abs(dy) > 1e-5 || Math.abs(dz) > 1e-5) {
+            sb.translateModel(dx / VR_SCALE, dy / VR_SCALE, dz / VR_SCALE);
+        }
+
+        // 回転（クォータニオンのデルタから軸角度を抽出）
+        const q1 = vrLeftPrev.ori;
+        const q2 = { x: ori.x, y: ori.y, z: ori.z, w: ori.w };
+        // dq = q2 * inverse(q1)
+        const q1inv = { x: -q1.x, y: -q1.y, z: -q1.z, w: q1.w };
+        const dq = {
+            x: q2.w*q1inv.x + q2.x*q1inv.w + q2.y*q1inv.z - q2.z*q1inv.y,
+            y: q2.w*q1inv.y - q2.x*q1inv.z + q2.y*q1inv.w + q2.z*q1inv.x,
+            z: q2.w*q1inv.z + q2.x*q1inv.y - q2.y*q1inv.x + q2.z*q1inv.w,
+            w: q2.w*q1inv.w - q2.x*q1inv.x - q2.y*q1inv.y - q2.z*q1inv.z
+        };
+        const sinHalf = Math.sqrt(dq.x*dq.x + dq.y*dq.y + dq.z*dq.z);
+        if (sinHalf > 1e-4) {
+            const angle = 2 * Math.atan2(sinHalf, dq.w);
+            sb.rotateModel(angle, dq.x/sinHalf, dq.y/sinHalf, dq.z/sinHalf);
+        }
+
+        vrLeftPrev.pos = [pos.x, pos.y, pos.z];
+        vrLeftPrev.ori = q2;
+    } else if (!active && vrGrabs.left.active) {
+        // 終了
+        vrGrabs.left.active = false;
+        vrLeftPrev = null;
     }
 }
 
@@ -3227,38 +3264,41 @@ function processHandTracking(frame, src, hand) {
     const tp = thumbPose.transform.position;
 
     // ピンチ距離
-    const dx = ip.x - tp.x, dy = ip.y - tp.y, dz = ip.z - tp.z;
-    const pinchDist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-    const isPinching = pinchDist < 0.025;  // 2.5cm 以内
+    const pdx = ip.x - tp.x, pdy = ip.y - tp.y, pdz = ip.z - tp.z;
+    const pinchDist = Math.sqrt(pdx * pdx + pdy * pdy + pdz * pdz);
+    const isPinching = pinchDist < 0.025;
 
     // ピンチ中心点
     const midX = (ip.x + tp.x) / 2;
     const midY = (ip.y + tp.y) / 2;
     const midZ = (ip.z + tp.z) / 2;
 
-    // レイ方向：手首からピンチ点へ
     const wp = wristPose.transform.position;
-    const rayDx = midX - wp.x, rayDy = midY - wp.y, rayDz = midZ - wp.z;
-    const rayLen = Math.sqrt(rayDx * rayDx + rayDy * rayDy + rayDz * rayDz) || 1;
+    const wo = wristPose.transform.orientation;
 
-    const grabState = vrGrabs[hand];
+    if (hand === 'right') {
+        // === 右手: メッシュグラブ ===
+        const rayDx = midX - wp.x, rayDy = midY - wp.y, rayDz = midZ - wp.z;
+        const rayLen = Math.sqrt(rayDx*rayDx + rayDy*rayDy + rayDz*rayDz) || 1;
 
-    if (isPinching && !grabState.active) {
-        // 他の手がグラブ中なら無視
-        if (vrActiveHand && vrActiveHand !== hand) return;
-        const simO = vrToSim(midX, midY, midZ);
-        const simD = [rayDx / rayLen / VR_SCALE, rayDy / rayLen / VR_SCALE, rayDz / rayLen / VR_SCALE];
-        sb.startGrabVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2]);
-        grabState.active = true;
-        vrActiveHand = hand;
-    } else if (isPinching && grabState.active) {
-        const simO = vrToSim(midX, midY, midZ);
-        const simD = [rayDx / rayLen / VR_SCALE, rayDy / rayLen / VR_SCALE, rayDz / rayLen / VR_SCALE];
-        sb.moveGrabVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2], 1/72);
-    } else if (!isPinching && grabState.active) {
-        sb.endGrabVR();
-        grabState.active = false;
-        vrActiveHand = null;
+        if (isPinching && !vrGrabs.right.active) {
+            const simO = vrToSim(midX, midY, midZ);
+            const simD = [rayDx/rayLen/VR_SCALE, rayDy/rayLen/VR_SCALE, rayDz/rayLen/VR_SCALE];
+            sb.startGrabVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2]);
+            vrGrabs.right.active = true;
+        } else if (isPinching && vrGrabs.right.active) {
+            const simO = vrToSim(midX, midY, midZ);
+            const simD = [rayDx/rayLen/VR_SCALE, rayDy/rayLen/VR_SCALE, rayDz/rayLen/VR_SCALE];
+            sb.moveGrabVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2], 1/72);
+        } else if (!isPinching && vrGrabs.right.active) {
+            sb.endGrabVR();
+            vrGrabs.right.active = false;
+        }
+    } else {
+        // === 左手: モデル移動/回転 ===
+        processLeftHandTransform(isPinching,
+            { x: midX, y: midY, z: midZ },
+            { x: wo.x, y: wo.y, z: wo.z, w: wo.w });
     }
 }
 
