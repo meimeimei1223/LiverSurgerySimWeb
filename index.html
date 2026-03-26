@@ -572,12 +572,40 @@ void main() {
     gl_FragColor = uCol;
 }`;
 
+// 板ポリ用シェーダー（Canvas→テクスチャ パネル）
+const SHADER_VS_PANEL = `
+attribute vec3 aPos;
+attribute vec2 aUV;
+uniform mat4 uM, uV, uP;
+varying vec2 vUV;
+void main() {
+    vUV = aUV;
+    gl_Position = uP * uV * uM * vec4(aPos, 1.0);
+}`;
+const SHADER_FS_PANEL = `
+precision mediump float;
+varying vec2 vUV;
+uniform sampler2D uTex;
+uniform float uAlpha;
+void main() {
+    vec4 c = texture2D(uTex, vUV);
+    gl_FragColor = vec4(c.rgb, c.a * uAlpha);
+}`;
+
 //-- Globals -----------------------------------------------------------
 const canvas = document.getElementById('canvas');
 let gl, sb = null;
 let pMain, pWire, pPoint, L, LW, LPt;
 let bHiPos, bHiNrm, bHiIdx, bWire, extUint, bAxis;
 let numHiIdx = 0, numWireV = 0;
+
+// Canvas→テクスチャ パネル
+let pPanel = null, LPanel = {};
+let bPanelVtx = null, bPanelIdx = null, panelTex = null;
+let panelCanvas = null, panelCtx = null;
+const PANEL_W = 512, PANEL_H = 900;
+const PANEL_WORLD_W = 0.35;
+const PANEL_WORLD_H = PANEL_WORLD_W * (PANEL_H / PANEL_W);
 let drag=false, grab=false, grabD=0, prevPt=[0,0,0];
 let last={x:0,y:0}, wireOn=false;
 let gravX=0, gravY=0, gravZ=0;
@@ -2597,6 +2625,7 @@ function initApp() {
         initIdxBuffer();
         updateWire();
         updateMesh();
+        initPanelGL();
 
         // カッター用WebGLバッファ初期化
         bCutterPos = gl.createBuffer();
@@ -3224,10 +3253,118 @@ function renderXR(time, frame) {
 
         // ハンドジョイント描画
         drawVRHands(V, P);
+
+        // Canvas→テクスチャ パネル描画
+        const panelM = makePanelMatrix(pose);
+        drawPanel(panelM, V, P);
     }
 
     // VR パネルのボリューム自動更新
     vrUpdateVolume();
+}
+
+// ===== Canvas→テクスチャ パネル =====
+
+function initPanelGL() {
+    pPanel = mkProg(SHADER_VS_PANEL, SHADER_FS_PANEL);
+    if (!pPanel) { console.error('[Panel] shader compile failed'); return; }
+
+    LPanel = {
+        aPos:   gl.getAttribLocation(pPanel, 'aPos'),
+        aUV:    gl.getAttribLocation(pPanel, 'aUV'),
+        uM:     gl.getUniformLocation(pPanel, 'uM'),
+        uV:     gl.getUniformLocation(pPanel, 'uV'),
+        uP:     gl.getUniformLocation(pPanel, 'uP'),
+        uTex:   gl.getUniformLocation(pPanel, 'uTex'),
+        uAlpha: gl.getUniformLocation(pPanel, 'uAlpha'),
+    };
+
+    const hw = PANEL_WORLD_W / 2, hh = PANEL_WORLD_H / 2;
+    const verts = new Float32Array([
+        -hw,  hh, 0,  0, 0,
+         hw,  hh, 0,  1, 0,
+         hw, -hh, 0,  1, 1,
+        -hw, -hh, 0,  0, 1,
+    ]);
+    const idx = new Uint16Array([0, 1, 2, 0, 2, 3]);
+
+    bPanelVtx = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, bPanelVtx);
+    gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW);
+    bPanelIdx = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bPanelIdx);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
+
+    panelCanvas = document.createElement('canvas');
+    panelCanvas.width = PANEL_W;
+    panelCanvas.height = PANEL_H;
+    panelCtx = panelCanvas.getContext('2d');
+
+    panelTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, panelTex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+    drawPanelCanvas();
+    console.log('[Panel] initPanelGL OK');
+}
+
+function drawPanelCanvas() {
+    if (!panelCtx) return;
+    panelCtx.fillStyle = 'rgba(10, 20, 60, 0.9)';
+    panelCtx.fillRect(0, 0, PANEL_W, PANEL_H);
+    panelCtx.strokeStyle = 'rgba(77, 192, 230, 0.8)';
+    panelCtx.lineWidth = 4;
+    panelCtx.strokeRect(4, 4, PANEL_W - 8, PANEL_H - 8);
+    panelCtx.fillStyle = '#4dc0e6';
+    panelCtx.font = 'bold 36px Arial';
+    panelCtx.textAlign = 'center';
+    panelCtx.fillText('VR PANEL', PANEL_W / 2, 80);
+    panelCtx.fillStyle = '#ffffff';
+    panelCtx.font = '28px Arial';
+    panelCtx.fillText('Step 1: Canvas→Texture OK', PANEL_W / 2, 140);
+    gl.bindTexture(gl.TEXTURE_2D, panelTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, panelCanvas);
+}
+
+function drawPanel(M, V, P) {
+    if (!pPanel || !panelTex) return;
+    gl.useProgram(pPanel);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.depthMask(false);
+    gl.uniformMatrix4fv(LPanel.uM, false, M);
+    gl.uniformMatrix4fv(LPanel.uV, false, V);
+    gl.uniformMatrix4fv(LPanel.uP, false, P);
+    gl.uniform1f(LPanel.uAlpha, 1.0);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, panelTex);
+    gl.uniform1i(LPanel.uTex, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, bPanelVtx);
+    const stride = 5 * 4;
+    gl.enableVertexAttribArray(LPanel.aPos);
+    gl.vertexAttribPointer(LPanel.aPos, 3, gl.FLOAT, false, stride, 0);
+    gl.enableVertexAttribArray(LPanel.aUV);
+    gl.vertexAttribPointer(LPanel.aUV, 2, gl.FLOAT, false, stride, 3 * 4);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bPanelIdx);
+    gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
+    gl.depthMask(true);
+    gl.disable(gl.BLEND);
+}
+
+function makePanelMatrix(pose) {
+    const head = pose.views[0].transform;
+    const px = head.position.x - 0.3;
+    const py = head.position.y + 0.1;
+    const pz = head.position.z - 0.8;
+    return new Float32Array([
+        1, 0, 0, 0,
+        0, 1, 0, 0,
+        0, 0, 1, 0,
+        px, py, pz, 1
+    ]);
 }
 
 function drawVRHands(V, P) {
