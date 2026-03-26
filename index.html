@@ -3077,11 +3077,9 @@ async function startXR(mode) {
     // requiredFeatures を空にして、local-floor は optional に（非対応時もセッション起動可能）
     let opts;
     if (mode === 'immersive-ar') {
-        document.getElementById('vr-panel').style.display = 'block';
         opts = {
-            requiredFeatures: ['dom-overlay'],
-            optionalFeatures: ['local-floor', 'hand-tracking'],
-            domOverlay: { root: document.body }
+            requiredFeatures: [],
+            optionalFeatures: ['local-floor', 'hand-tracking']
         };
     } else {
         opts = {
