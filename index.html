@@ -604,7 +604,7 @@ let pPanel = null, LPanel = {};
 let bPanelVtx = null, bPanelIdx = null, panelTex = null;
 let panelCanvas = null, panelCtx = null;
 const PANEL_W = 512, PANEL_H = 900;
-const PANEL_WORLD_W = 0.35;
+const PANEL_WORLD_W = 1.0;   // デバッグ: 1m幅の巨大パネル
 const PANEL_WORLD_H = PANEL_WORLD_W * (PANEL_H / PANEL_W);
 let drag=false, grab=false, grabD=0, prevPt=[0,0,0];
 let last={x:0,y:0}, wireOn=false;
@@ -3313,20 +3313,18 @@ function initPanelGL() {
 
 function drawPanelCanvas() {
     if (!panelCtx) return;
-    panelCtx.fillStyle = 'rgba(10, 20, 60, 0.9)';
+    // デバッグ: 真っ赤にして確実に見えるようにする
+    panelCtx.fillStyle = '#ff0000';
     panelCtx.fillRect(0, 0, PANEL_W, PANEL_H);
-    panelCtx.strokeStyle = 'rgba(77, 192, 230, 0.8)';
-    panelCtx.lineWidth = 4;
-    panelCtx.strokeRect(4, 4, PANEL_W - 8, PANEL_H - 8);
-    panelCtx.fillStyle = '#4dc0e6';
-    panelCtx.font = 'bold 36px Arial';
-    panelCtx.textAlign = 'center';
-    panelCtx.fillText('VR PANEL', PANEL_W / 2, 80);
     panelCtx.fillStyle = '#ffffff';
-    panelCtx.font = '28px Arial';
-    panelCtx.fillText('Step 1: Canvas→Texture OK', PANEL_W / 2, 140);
+    panelCtx.font = 'bold 48px Arial';
+    panelCtx.textAlign = 'center';
+    panelCtx.fillText('VR PANEL TEST', PANEL_W / 2, PANEL_H / 2);
+
+    // Canvas→テクスチャ転送
     gl.bindTexture(gl.TEXTURE_2D, panelTex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, panelCanvas);
+    console.log('[Panel] texture uploaded', PANEL_W, 'x', PANEL_H);
 }
 
 function drawPanel(M, V, P) {
@@ -3334,7 +3332,7 @@ function drawPanel(M, V, P) {
     gl.useProgram(pPanel);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    gl.depthMask(false);
+    gl.disable(gl.DEPTH_TEST);  // デバッグ: 深度テスト無効で必ず描画
     gl.uniformMatrix4fv(LPanel.uM, false, M);
     gl.uniformMatrix4fv(LPanel.uV, false, V);
     gl.uniformMatrix4fv(LPanel.uP, false, P);
@@ -3350,15 +3348,27 @@ function drawPanel(M, V, P) {
     gl.vertexAttribPointer(LPanel.aUV, 2, gl.FLOAT, false, stride, 3 * 4);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bPanelIdx);
     gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
-    gl.depthMask(true);
+    gl.enable(gl.DEPTH_TEST);  // 復帰
     gl.disable(gl.BLEND);
 }
 
 function makePanelMatrix(pose) {
     const head = pose.views[0].transform;
-    const px = head.position.x - 0.3;
-    const py = head.position.y + 0.1;
-    const pz = head.position.z - 0.8;
+    const p = head.position;
+    const q = head.orientation;
+
+    // クォータニオンから「前方向ベクトル」を計算
+    // forward = q * (0,0,-1) * q^-1
+    const fx = 2 * (q.x * q.z + q.w * q.y);
+    const fy = 2 * (q.y * q.z - q.w * q.x);
+    const fz = 1 - 2 * (q.x * q.x + q.y * q.y);
+
+    // 正面0.6m先、少し左
+    const dist = 0.6;
+    const px = p.x + fx * dist - 0.25;
+    const py = p.y + fy * dist;
+    const pz = p.z + fz * dist;
+
     return new Float32Array([
         1, 0, 0, 0,
         0, 1, 0, 0,
