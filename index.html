@@ -3052,8 +3052,16 @@ async function initXR() {
     const arOk = await navigator.xr.isSessionSupported('immersive-ar').catch(() => false);
 
     if (vrOk || arOk) xrBtns.style.display = 'flex';
-    if (vrOk) { btnVR.disabled = false; btnVR.onclick = () => startXR('immersive-vr'); }
-    if (arOk) { btnAR.disabled = false; btnAR.onclick = () => startXR('immersive-ar'); }
+    // VR: immersive-vr のまま（パネルは将来 Canvas→テクスチャで対応）
+    if (vrOk) {
+        btnVR.disabled = false;
+        btnVR.onclick = () => startXR('immersive-vr');
+    }
+    // AR: immersive-ar + DOM Overlay でパネル表示
+    if (arOk) {
+        btnAR.disabled = false;
+        btnAR.onclick = () => startXR('immersive-ar');
+    }
     console.log('[XR] VR:', vrOk, 'AR:', arOk);
 }
 
@@ -3061,13 +3069,23 @@ async function startXR(mode) {
     if (xrSession) { await xrSession.end(); return; }
     xrMode = mode === 'immersive-ar' ? 'ar' : 'vr';
 
-    // DOM Overlay: VR/AR中にHTML要素を表示するために必要
-    document.getElementById('vr-panel').style.display = 'block';
-    const opts = {
-        requiredFeatures: ['local-floor'],
-        optionalFeatures: ['hand-tracking', 'dom-overlay'],
-        domOverlay: { root: document.getElementById('vr-panel') }
-    };
+    // AR/VR で opts を分岐
+    let opts;
+    if (mode === 'immersive-ar') {
+        // AR: VRパネルを事前表示 → DOM Overlay で渡す
+        document.getElementById('vr-panel').style.display = 'block';
+        opts = {
+            requiredFeatures: ['local-floor'],
+            optionalFeatures: ['hand-tracking', 'dom-overlay'],
+            domOverlay: { root: document.getElementById('vr-panel') }
+        };
+    } else {
+        // VR: DOM Overlay なし（パネルは将来 Canvas→テクスチャで対応）
+        opts = {
+            requiredFeatures: ['local-floor'],
+            optionalFeatures: ['hand-tracking']
+        };
+    }
 
     try {
         xrSession = await navigator.xr.requestSession(mode, opts);
@@ -3080,18 +3098,22 @@ async function startXR(mode) {
 
         xrRefSpace = await xrSession.requestReferenceSpace('local-floor');
 
-        // UI 切替（通常→VR）
+        // UI 切替（通常→XR）
         document.getElementById('ctrl').style.display = 'none';
         document.getElementById('info').style.display = 'none';
         document.getElementById('params').style.display = 'none';
-        document.getElementById('vr-panel').style.display = 'block';
         const xrSt = document.getElementById('xr-status');
         xrSt.style.display = 'block';
         xrSt.textContent = xrMode.toUpperCase() + ' active';
         document.getElementById('btn-' + xrMode).textContent = 'Exit ' + xrMode.toUpperCase();
-        vrBuildVisibilityCards();
-        vrSyncActionMode();
-        vrUpdateVolume();
+
+        if (xrMode === 'ar') {
+            // AR: DOM Overlay パネル初期化
+            document.getElementById('vr-panel').style.display = 'block';
+            vrBuildVisibilityCards();
+            vrSyncActionMode();
+            vrUpdateVolume();
+        }
 
         // XR レンダーループ開始
         xrSession.requestAnimationFrame(renderXR);
