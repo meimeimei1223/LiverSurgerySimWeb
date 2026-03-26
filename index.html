@@ -107,6 +107,36 @@
         .xr-btn:disabled { opacity:0.3; cursor:default; transform:none; }
         #xr-status { position:fixed; bottom:60px; left:16px; z-index:50;
                      color:#aaa; font-size:11px; display:none; }
+
+        /* ===== VR パネル ===== */
+        .vr-sec-label { font-size:10px; letter-spacing:0.12em; color:#4a8ccc; margin-bottom:8px; font-weight:500; }
+        .vr-vis-card { border-radius:9px; border:1px solid rgba(255,255,255,0.1); padding:7px 9px; cursor:pointer; transition:all 0.15s; display:flex; align-items:center; gap:7px; background:rgba(255,255,255,0.04); }
+        .vr-vis-card.on { border-color:rgba(255,255,255,0.28); background:rgba(255,255,255,0.09); }
+        .vr-vis-card .vr-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+        .vr-vis-card .vr-name { font-size:13px; font-weight:500; color:#aaa; }
+        .vr-vis-card.on .vr-name { color:#fff; }
+        .vr-vis-card .vr-state { margin-left:auto; font-size:10px; color:#555; }
+        .vr-vis-card.on .vr-state { color:#4dc0e6; }
+        .vr-disp-btn { flex:1; padding:9px 4px; border-radius:8px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.04); color:#777; font-size:12px; cursor:pointer; transition:all 0.15s; text-align:center; font-family:inherit; }
+        .vr-disp-btn.active { background:rgba(29,158,117,0.2); border-color:#1d9e75; color:#5dcaa5; font-weight:500; }
+        .vr-act-btn { border-radius:11px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.03); cursor:pointer; transition:all 0.18s; overflow:hidden; font-family:inherit; width:100%; text-align:left; }
+        .vr-act-header { display:flex; align-items:center; gap:10px; padding:11px 13px; }
+        .vr-act-icon { width:29px; height:29px; border-radius:7px; display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0; background:rgba(255,255,255,0.07); }
+        .vr-act-label { font-size:14px; font-weight:500; color:#888; }
+        .vr-act-btn.active { border-color:rgba(77,192,230,0.4); background:rgba(77,192,230,0.07); }
+        .vr-act-btn.active .vr-act-label { color:#4dc0e6; font-size:16px; }
+        .vr-act-btn.active .vr-act-icon { background:rgba(77,192,230,0.15); }
+        .vr-sub-panel { padding:0 12px 10px; display:none; flex-direction:column; gap:4px; border-top:1px solid rgba(255,255,255,0.05); }
+        .vr-act-btn.active .vr-sub-panel { display:flex; }
+        .vr-sub-btn { padding:10px 13px; border-radius:8px; border:1px solid rgba(255,255,255,0.09); background:rgba(255,255,255,0.04); color:#bbb; font-size:14px; cursor:pointer; text-align:left; transition:all 0.12s; width:100%; font-family:inherit; }
+        .vr-sub-btn:hover { background:rgba(255,255,255,0.1); color:#fff; }
+        .vr-sub-btn.vr-sub-active { background:rgba(0,200,160,0.15); border-color:#00ccaa; color:#00ffdd; }
+        .vr-sub-btn.vr-sub-danger { border-color:rgba(200,60,60,0.25); color:#ff9999; }
+        .vr-bot-btn { flex:1; padding:11px; border-radius:9px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.04); color:#999; font-size:13px; cursor:pointer; text-align:center; font-family:inherit; transition:all 0.15s; }
+        .vr-bot-btn:hover { background:rgba(255,255,255,0.08); color:#fff; }
+        .vr-bot-params { border-color:rgba(100,200,100,0.3); color:#88cc88; }
+        .vr-bot-reset  { border-color:rgba(200,60,60,0.3); color:#e07070; }
+        .vr-bot-exit   { border-color:rgba(180,140,60,0.3); color:#cc9955; }
     </style>
 </head>
 <body>
@@ -3047,13 +3077,18 @@ async function startXR(mode) {
 
         xrRefSpace = await xrSession.requestReferenceSpace('local-floor');
 
-        // UI 非表示（通常モードUI）
+        // UI 切替（通常→VR）
         document.getElementById('ctrl').style.display = 'none';
         document.getElementById('info').style.display = 'none';
+        document.getElementById('params').style.display = 'none';
+        document.getElementById('vr-panel').style.display = 'block';
         const xrSt = document.getElementById('xr-status');
         xrSt.style.display = 'block';
         xrSt.textContent = xrMode.toUpperCase() + ' active';
         document.getElementById('btn-' + xrMode).textContent = 'Exit ' + xrMode.toUpperCase();
+        vrBuildVisibilityCards();
+        vrSyncActionMode();
+        vrUpdateVolume();
 
         // XR レンダーループ開始
         xrSession.requestAnimationFrame(renderXR);
@@ -3074,9 +3109,11 @@ function onXREnd() {
     vrLeftPrev = null;
     if (sb) sb.endGrabVR();
 
-    // UI 復帰
+    // UI 復帰（VR→通常）
+    document.getElementById('vr-panel').style.display = 'none';
     document.getElementById('ctrl').style.display = '';
     document.getElementById('info').style.display = '';
+    document.getElementById('params').style.display = '';
     document.getElementById('xr-status').style.display = 'none';
     document.getElementById('btn-vr').textContent = 'VR';
     document.getElementById('btn-ar').textContent = 'AR';
@@ -3138,6 +3175,9 @@ function renderXR(time, frame) {
         // ハンドジョイント描画
         drawVRHands(V, P);
     }
+
+    // VR パネルのボリューム自動更新
+    vrUpdateVolume();
 }
 
 function drawVRHands(V, P) {
@@ -3455,6 +3495,248 @@ function processHandTracking(frame, src, hand) {
 
 // WebXR チェック（WASM不要、ブラウザ機能のみ）
 initXR();
+
+// ===== VR パネル関数群 =====
+
+function vrBuildVisibilityCards() {
+    const grid = document.getElementById('vr-vis-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    const ORGAN_DEFS = [
+        { label:'Liver',   color:'#e04040' },
+        { label:'Portal',  color:'#cc44cc' },
+        { label:'H.Vein',  color:'#4488ff' },
+        { label:'Tumor',   color:'#ddaa22' },
+        { label:'Gallbldr',color:'#44bb88' },
+        { label:'Sphere',  color:'#aaaaaa' },
+    ];
+    ORGAN_DEFS.forEach((def, i) => {
+        const card = document.createElement('div');
+        card.className = 'vr-vis-card on';
+        card.dataset.organIdx = i;
+        card.innerHTML = `
+            <div class="vr-dot" style="background:${def.color};"></div>
+            <span class="vr-name">${def.label}</span>
+            <span class="vr-state">ON</span>`;
+        card.addEventListener('click', () => vrToggleVis(card, i));
+        grid.appendChild(card);
+    });
+}
+
+function vrToggleVis(card, organIdx) {
+    const isOn = card.classList.toggle('on');
+    card.style.opacity = isOn ? '1' : '0.45';
+    card.querySelector('.vr-state').textContent = isOn ? 'ON' : 'OFF';
+    const desktopCard = document.getElementById('organ-card-' + organIdx);
+    if (desktopCard) desktopCard.click();
+}
+
+function vrAlphaChange(v) {
+    document.getElementById('vr-alpha-val').textContent = v + '%';
+    const desktopSlider = document.getElementById('liver-alpha-slider');
+    if (desktopSlider) {
+        desktopSlider.value = v;
+        desktopSlider.dispatchEvent(new Event('input'));
+    } else {
+        if (typeof meshAlphaValues !== 'undefined') meshAlphaValues[0] = parseInt(v) / 100;
+    }
+}
+
+function vrSetDisp(mode) {
+    ['normal','auto','preset'].forEach(m => {
+        document.getElementById('vr-disp-'+m).classList.toggle('active', m === mode);
+    });
+    const modeMap = { normal: false, auto: 'skeleton', preset: 'obj' };
+    if (typeof setVisualMode === 'function') setVisualMode(modeMap[mode]);
+}
+
+function vrSetAction(name) {
+    const cur = document.querySelector('.vr-act-btn.active');
+    const el = document.getElementById('vr-act-' + name);
+    if (cur === el) {
+        // 同じボタン再クリック → 閉じる
+        el.classList.remove('active');
+        if (typeof setActionMode === 'function') setActionMode('none');
+        return;
+    }
+    ['deform','freecut','segcut','transform'].forEach(id => {
+        const e = document.getElementById('vr-act-' + id);
+        if (e) e.classList.toggle('active', id === name);
+    });
+    const modeMap = { deform:'deform', freecut:'freeCut', segcut:'segCut', transform:'transform' };
+    if (typeof setActionMode === 'function') setActionMode(modeMap[name] || 'none');
+}
+
+function vrSyncActionMode() {
+    const revMap = { deform:'deform', freeCut:'freecut', segCut:'segcut', transform:'transform' };
+    const vrName = revMap[actionMode] || null;
+    ['deform','freecut','segcut','transform'].forEach(id => {
+        const el = document.getElementById('vr-act-' + id);
+        if (el) el.classList.toggle('active', id === vrName);
+    });
+}
+
+function vrSubClick(action) {
+    const map = {
+        handlePlace: () => { const b = document.getElementById('btn-handle-mode'); if (b) b.click(); },
+        deform:      () => { const b = document.getElementById('btn-deform-mode'); if (b) b.click(); },
+        undoHandle:  () => { const b = document.getElementById('btn-undo-handle'); if (b) b.click(); },
+        clearAll:    () => { const b = document.getElementById('btn-clear-handles'); if (b) b.click(); },
+        segOverlay:  () => { if (typeof toggleSegOverlay==='function') toggleSegOverlay(); },
+        undoCut:     () => { const b = document.getElementById('btn-undo-cut'); if (b) b.click(); },
+        liverSelect: () => { if (typeof toggleSegSelect==='function') toggleSegSelect('liver'); },
+        portalSelect:() => { if (typeof toggleSegSelect==='function') toggleSegSelect('portal'); },
+        segCut:      () => { if (typeof doSegCut==='function') doSegCut(); },
+        segUndo:     () => { if (typeof doSegUndo==='function') doSegUndo(); },
+        clearSel:    () => { if (typeof doClearSelection==='function') doClearSelection(); },
+    };
+    if (map[action]) map[action]();
+}
+
+function vrUpdateVolume() {
+    if (!sb || typeof sb.areVolumesCaptured !== 'function' || !sb.areVolumesCaptured()) return;
+    const total = sb.getOriginalTotalVolume();
+    const current = sb.calculateTotalVolume();
+    const pct = total > 0 ? (current / total * 100) : 0;
+    const numEl = document.getElementById('vr-vol-num');
+    const pctEl = document.getElementById('vr-vol-pct');
+    const barEl = document.getElementById('vr-vol-bar');
+    if (numEl) numEl.textContent = current.toFixed(1) + ' ml';
+    if (pctEl) pctEl.textContent = pct.toFixed(1) + '%';
+    if (barEl) barEl.style.width = pct.toFixed(1) + '%';
+}
+
+function vrToggleParams() {
+    const p = document.getElementById('vr-params-panel');
+    if (p) p.style.display = (p.style.display === 'none') ? 'block' : 'none';
+}
+
+function vrUpdateEC(v) {
+    document.getElementById('vr-ec-val').textContent = v;
+    const s = document.getElementById('es');
+    if (s) { s.value = v; s.dispatchEvent(new Event('input')); }
+}
+function vrUpdateVC(v) {
+    document.getElementById('vr-vc-val').textContent = v;
+    const s = document.getElementById('vs');
+    if (s) { s.value = v; s.dispatchEvent(new Event('input')); }
+}
+function vrUpdateDamp(v) {
+    document.getElementById('vr-damp-val').textContent = (v/100).toFixed(3);
+    const s = document.getElementById('ds');
+    if (s) { s.value = (v/100).toFixed(3); s.dispatchEvent(new Event('input')); }
+}
+function vrUpdateSubsteps(v) {
+    document.getElementById('vr-sub-val').textContent = v;
+    const s = document.getElementById('ss');
+    if (s) { s.value = v; s.dispatchEvent(new Event('input')); }
+}
+function vrUpdateGravity() {
+    const gxS = document.querySelector('#vr-params-panel [data-axis="x"]');
+    const gyS = document.querySelector('#vr-params-panel [data-axis="y"]');
+    const gzS = document.querySelector('#vr-params-panel [data-axis="z"]');
+    if (!gxS) return;
+    const gx = parseFloat(gxS.value), gy = parseFloat(gyS.value), gz = parseFloat(gzS.value);
+    document.getElementById('vr-gx-val').textContent = gx.toFixed(1);
+    document.getElementById('vr-gy-val').textContent = gy.toFixed(1);
+    document.getElementById('vr-gz-val').textContent = gz.toFixed(1);
+    gravX = gx; gravY = gy; gravZ = gz;
+}
+
+function vrDoReset() { document.getElementById('reset-popup').style.display = 'block'; }
+function vrExitVR() { if (xrSession) xrSession.end(); }
 </script>
+
+<!-- VR パネル -->
+<div id="vr-panel" style="display:none; position:fixed; z-index:50; top:12px; left:12px; pointer-events:none;">
+<div id="vr-panel-inner" style="width:380px; background:rgba(10,14,26,0.97); border:1.5px solid rgba(80,140,220,0.35); border-radius:16px; padding:14px; color:#fff; font-family:Arial,Helvetica,sans-serif; font-size:13px; pointer-events:auto; max-height:90vh; overflow-y:auto;">
+
+  <div class="vr-sec-label">VISIBILITY</div>
+  <div id="vr-vis-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:10px;"></div>
+
+  <div id="vr-alpha-row" style="display:flex; align-items:center; gap:10px; margin-bottom:10px; padding:7px 10px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:9px;">
+    <span style="font-size:12px;color:#aaa;white-space:nowrap;min-width:78px;">Liver Alpha</span>
+    <input type="range" id="vr-alpha" min="5" max="100" value="100" style="flex:1;accent-color:#cc3333;" oninput="vrAlphaChange(this.value)">
+    <span id="vr-alpha-val" style="font-size:12px;color:#4dc0e6;min-width:34px;text-align:right;">100%</span>
+  </div>
+
+  <div class="vr-sec-label">DISPLAY</div>
+  <div style="display:flex;gap:6px;margin-bottom:10px;">
+    <button class="vr-disp-btn active" id="vr-disp-normal" onclick="vrSetDisp('normal')">Normal</button>
+    <button class="vr-disp-btn" id="vr-disp-auto" onclick="vrSetDisp('auto')">Auto Seg</button>
+    <button class="vr-disp-btn" id="vr-disp-preset" onclick="vrSetDisp('preset')">Preset Seg</button>
+  </div>
+
+  <div class="vr-sec-label">ACTION</div>
+  <div id="vr-action-list" style="display:flex;flex-direction:column;gap:5px;margin-bottom:10px;">
+    <div class="vr-act-btn" id="vr-act-deform" onclick="vrSetAction('deform')">
+      <div class="vr-act-header"><span class="vr-act-icon">🎯</span><span class="vr-act-label">Deform</span></div>
+      <div class="vr-sub-panel">
+        <button class="vr-sub-btn" id="vr-sub-handle-place" onclick="event.stopPropagation(); vrSubClick('handlePlace')">Handle Place</button>
+        <button class="vr-sub-btn" id="vr-sub-deform" onclick="event.stopPropagation(); vrSubClick('deform')">Deform</button>
+        <button class="vr-sub-btn" id="vr-sub-undo-handle" onclick="event.stopPropagation(); vrSubClick('undoHandle')">Undo Handle</button>
+        <button class="vr-sub-btn vr-sub-danger" onclick="event.stopPropagation(); vrSubClick('clearAll')">Clear All</button>
+      </div>
+    </div>
+    <div class="vr-act-btn" id="vr-act-freecut" onclick="vrSetAction('freecut')">
+      <div class="vr-act-header"><span class="vr-act-icon">✂</span><span class="vr-act-label">Free Cut</span></div>
+      <div class="vr-sub-panel">
+        <button class="vr-sub-btn" id="vr-sub-seg-overlay" onclick="event.stopPropagation(); vrSubClick('segOverlay')">Seg Overlay</button>
+        <button class="vr-sub-btn vr-sub-danger" onclick="event.stopPropagation(); vrSubClick('undoCut')">Undo Cut</button>
+      </div>
+    </div>
+    <div class="vr-act-btn" id="vr-act-segcut" onclick="vrSetAction('segcut')">
+      <div class="vr-act-header"><span class="vr-act-icon">⬡</span><span class="vr-act-label">Seg Cut</span></div>
+      <div class="vr-sub-panel">
+        <button class="vr-sub-btn" onclick="event.stopPropagation(); vrSubClick('liverSelect')">Liver Select</button>
+        <button class="vr-sub-btn" onclick="event.stopPropagation(); vrSubClick('portalSelect')">Portal Select</button>
+        <button class="vr-sub-btn vr-sub-danger" onclick="event.stopPropagation(); vrSubClick('segCut')">Seg Cut</button>
+        <button class="vr-sub-btn" onclick="event.stopPropagation(); vrSubClick('segUndo')">Seg Undo</button>
+        <button class="vr-sub-btn" onclick="event.stopPropagation(); vrSubClick('clearSel')">Clear Selection</button>
+      </div>
+    </div>
+    <div class="vr-act-btn" id="vr-act-transform" onclick="vrSetAction('transform')">
+      <div class="vr-act-header"><span class="vr-act-icon">⟳</span><span class="vr-act-label">Transform</span></div>
+      <div class="vr-sub-panel"></div>
+    </div>
+  </div>
+
+  <div class="vr-sec-label">VOLUME</div>
+  <div id="vr-vol-box" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:9px;padding:9px 13px;margin-bottom:10px;">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px;">
+      <span style="font-size:10px;color:#556;letter-spacing:0.08em;">REMNANT</span>
+      <span><span id="vr-vol-num" style="font-size:18px;font-weight:500;color:#7dff7d;">-- ml</span><span id="vr-vol-pct" style="font-size:13px;color:#4dc0e6;margin-left:6px;">--%</span></span>
+    </div>
+    <div style="height:4px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden;">
+      <div id="vr-vol-bar" style="height:100%;background:#1d9e75;border-radius:2px;width:100%;transition:width 0.3s;"></div>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:5px;">
+    <button class="vr-bot-btn vr-bot-params" onclick="vrToggleParams()">Params</button>
+    <button class="vr-bot-btn vr-bot-reset" onclick="vrDoReset()">Reset</button>
+    <button class="vr-bot-btn vr-bot-exit" onclick="vrExitVR()">Exit VR</button>
+  </div>
+
+  <div id="vr-params-panel" style="display:none; margin-top:10px; border-top:1px solid rgba(255,255,255,0.08); padding-top:10px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <span style="font-size:13px;font-weight:500;color:#88cc88;">Parameters</span>
+      <button onclick="vrToggleParams()" style="font-size:11px;color:#4dc0e6;background:rgba(77,192,230,0.1);border:1px solid rgba(77,192,230,0.3);border-radius:6px;padding:4px 10px;cursor:pointer;">Close</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+      <div><div style="font-size:11px;color:#aaa;margin-bottom:4px;display:flex;justify-content:space-between;">Edge Compliance <span id="vr-ec-val" style="color:#4dc0e6;">0</span></div><input type="range" style="width:100%;accent-color:#4dc0e6;" min="-3" max="4" step="0.1" value="0" oninput="vrUpdateEC(this.value)"></div>
+      <div><div style="font-size:11px;color:#aaa;margin-bottom:4px;display:flex;justify-content:space-between;">Vol Compliance <span id="vr-vc-val" style="color:#4dc0e6;">-99</span></div><input type="range" style="width:100%;accent-color:#4dc0e6;" min="-6" max="2" step="0.1" value="-99" oninput="vrUpdateVC(this.value)"></div>
+    </div>
+    <div style="margin-bottom:10px;"><div style="font-size:11px;color:#aaa;margin-bottom:4px;display:flex;justify-content:space-between;">Damping <span id="vr-damp-val" style="color:#4dc0e6;">0.980</span></div><input type="range" style="width:100%;accent-color:#4dc0e6;" min="90" max="100" value="98" oninput="vrUpdateDamp(this.value)"></div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:8px 12px;"><span style="font-size:11px;color:#aaa;min-width:70px;">Substeps</span><input type="range" style="flex:1;accent-color:#4dc0e6;" min="1" max="8" step="1" value="3" oninput="vrUpdateSubsteps(this.value)"><span id="vr-sub-val" style="font-size:13px;font-weight:500;color:#4dc0e6;min-width:20px;text-align:right;">3</span></div>
+    <div style="font-size:11px;color:#4a8ccc;letter-spacing:0.1em;margin-bottom:6px;">GRAVITY</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+      <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:8px;"><div style="font-size:10px;color:#667;margin-bottom:4px;">X</div><input type="range" data-axis="x" style="width:100%;accent-color:#ff6666;" min="-20" max="20" step="0.5" value="0" oninput="vrUpdateGravity()"><div id="vr-gx-val" style="font-size:13px;font-weight:500;color:#bbb;text-align:center;">0.0</div></div>
+      <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:8px;"><div style="font-size:10px;color:#667;margin-bottom:4px;">Y</div><input type="range" data-axis="y" style="width:100%;accent-color:#66ff66;" min="-20" max="20" step="0.5" value="0" oninput="vrUpdateGravity()"><div id="vr-gy-val" style="font-size:13px;font-weight:500;color:#bbb;text-align:center;">0.0</div></div>
+      <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:8px;"><div style="font-size:10px;color:#667;margin-bottom:4px;">Z</div><input type="range" data-axis="z" style="width:100%;accent-color:#6699ff;" min="-20" max="20" step="0.5" value="0" oninput="vrUpdateGravity()"><div id="vr-gz-val" style="font-size:13px;font-weight:500;color:#bbb;text-align:center;">0.0</div></div>
+    </div>
+  </div>
+</div>
+</div>
 </body>
 </html>
