@@ -3061,9 +3061,12 @@ async function startXR(mode) {
     if (xrSession) { await xrSession.end(); return; }
     xrMode = mode === 'immersive-ar' ? 'ar' : 'vr';
 
+    // DOM Overlay: VR/AR中にHTML要素を表示するために必要
+    document.getElementById('vr-panel').style.display = 'block';
     const opts = {
         requiredFeatures: ['local-floor'],
-        optionalFeatures: ['hand-tracking']
+        optionalFeatures: ['hand-tracking', 'dom-overlay'],
+        domOverlay: { root: document.getElementById('vr-panel') }
     };
 
     try {
@@ -3648,8 +3651,8 @@ function vrExitVR() { if (xrSession) xrSession.end(); }
 </script>
 
 <!-- VR パネル -->
-<div id="vr-panel" style="display:none; position:fixed; z-index:50; top:12px; left:12px; pointer-events:none;">
-<div id="vr-panel-inner" style="width:380px; background:rgba(10,14,26,0.97); border:1.5px solid rgba(80,140,220,0.35); border-radius:16px; padding:14px; color:#fff; font-family:Arial,Helvetica,sans-serif; font-size:13px; pointer-events:auto; max-height:90vh; overflow-y:auto;">
+<div id="vr-panel" style="display:none; position:fixed; z-index:50; top:8px; left:8px; pointer-events:none; width:100%; height:100%;">
+<div id="vr-panel-inner" style="width:340px; background:rgba(10,14,26,0.95); border:1.5px solid rgba(80,140,220,0.35); border-radius:16px; padding:14px; color:#fff; font-family:Arial,Helvetica,sans-serif; font-size:13px; pointer-events:auto; max-height:85vh; overflow-y:auto;">
 
   <div class="vr-sec-label">VISIBILITY</div>
   <div id="vr-vis-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:10px;"></div>
