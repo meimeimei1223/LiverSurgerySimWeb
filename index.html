@@ -3079,9 +3079,9 @@ async function startXR(mode) {
     if (mode === 'immersive-ar') {
         document.getElementById('vr-panel').style.display = 'block';
         opts = {
-            requiredFeatures: [],
-            optionalFeatures: ['local-floor', 'hand-tracking', 'dom-overlay'],
-            domOverlay: { root: document.getElementById('vr-panel') }
+            requiredFeatures: ['dom-overlay'],
+            optionalFeatures: ['local-floor', 'hand-tracking'],
+            domOverlay: { root: document.body }
         };
     } else {
         opts = {
