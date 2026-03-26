@@ -3329,10 +3329,15 @@ function drawPanelCanvas() {
 
 function drawPanel(M, V, P) {
     if (!pPanel || !panelTex) return;
+
+    // 前シェーダーの attribute をすべてクリア
+    // pMain: aPos=loc0, aNrm=loc1 / pSegment: aPos=loc0, aNrm=loc1, aCol=loc2
+    for (let i = 0; i < 4; i++) gl.disableVertexAttribArray(i);
+
     gl.useProgram(pPanel);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    gl.disable(gl.DEPTH_TEST);  // デバッグ: 深度テスト無効で必ず描画
+    gl.disable(gl.DEPTH_TEST);
     gl.uniformMatrix4fv(LPanel.uM, false, M);
     gl.uniformMatrix4fv(LPanel.uV, false, V);
     gl.uniformMatrix4fv(LPanel.uP, false, P);
@@ -3348,8 +3353,12 @@ function drawPanel(M, V, P) {
     gl.vertexAttribPointer(LPanel.aUV, 2, gl.FLOAT, false, stride, 3 * 4);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bPanelIdx);
     gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
-    gl.enable(gl.DEPTH_TEST);  // 復帰
+
+    // 後処理
+    gl.enable(gl.DEPTH_TEST);
     gl.disable(gl.BLEND);
+    gl.disableVertexAttribArray(LPanel.aPos);
+    gl.disableVertexAttribArray(LPanel.aUV);
 }
 
 function makePanelMatrix(pose) {
@@ -3357,23 +3366,23 @@ function makePanelMatrix(pose) {
     const p = head.position;
     const q = head.orientation;
 
-    // クォータニオンから「前方向ベクトル」を計算
-    // forward = q * (0,0,-1) * q^-1
-    const fx = 2 * (q.x * q.z + q.w * q.y);
-    const fy = 2 * (q.y * q.z - q.w * q.x);
-    const fz = 1 - 2 * (q.x * q.x + q.y * q.y);
+    // クォータニオン → 右/上/前ベクトル
+    const rx = 1-2*(q.y*q.y+q.z*q.z), ry = 2*(q.x*q.y+q.w*q.z), rz = 2*(q.x*q.z-q.w*q.y);
+    const ux = 2*(q.x*q.y-q.w*q.z),   uy = 1-2*(q.x*q.x+q.z*q.z), uz = 2*(q.y*q.z+q.w*q.x);
+    const fx = 2*(q.x*q.z+q.w*q.y),   fy = 2*(q.y*q.z-q.w*q.x),   fz = 1-2*(q.x*q.x+q.y*q.y);
 
-    // 正面0.6m先、少し左
-    const dist = 0.6;
-    const px = p.x + fx * dist - 0.25;
-    const py = p.y + fy * dist;
-    const pz = p.z + fz * dist;
+    // 正面0.7m先、左0.3m、少し上
+    const dist = 0.7, left = 0.30, up = 0.05;
+    const px = p.x + fx*dist - rx*left + ux*up;
+    const py = p.y + fy*dist - ry*left + uy*up;
+    const pz = p.z + fz*dist - rz*left + uz*up;
 
+    // column-major: パネルがカメラ正面を向く（ビルボード）
     return new Float32Array([
-        1, 0, 0, 0,
-        0, 1, 0, 0,
-        0, 0, 1, 0,
-        px, py, pz, 1
+         rx,  ry,  rz, 0,
+         ux,  uy,  uz, 0,
+        -fx, -fy, -fz, 0,
+        px,  py,  pz,  1
     ]);
 }
 
