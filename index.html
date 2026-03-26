@@ -3070,20 +3070,19 @@ async function startXR(mode) {
     xrMode = mode === 'immersive-ar' ? 'ar' : 'vr';
 
     // AR/VR で opts を分岐
+    // requiredFeatures を空にして、local-floor は optional に（非対応時もセッション起動可能）
     let opts;
     if (mode === 'immersive-ar') {
-        // AR: VRパネルを事前表示 → DOM Overlay で渡す
         document.getElementById('vr-panel').style.display = 'block';
         opts = {
-            requiredFeatures: ['local-floor'],
-            optionalFeatures: ['hand-tracking', 'dom-overlay'],
+            requiredFeatures: [],
+            optionalFeatures: ['local-floor', 'hand-tracking', 'dom-overlay'],
             domOverlay: { root: document.getElementById('vr-panel') }
         };
     } else {
-        // VR: DOM Overlay なし（パネルは将来 Canvas→テクスチャで対応）
         opts = {
-            requiredFeatures: ['local-floor'],
-            optionalFeatures: ['hand-tracking']
+            requiredFeatures: [],
+            optionalFeatures: ['local-floor', 'hand-tracking']
         };
     }
 
@@ -3096,7 +3095,13 @@ async function startXR(mode) {
         xrGLLayer = new XRWebGLLayer(xrSession, gl);
         xrSession.updateRenderState({ baseLayer: xrGLLayer });
 
-        xrRefSpace = await xrSession.requestReferenceSpace('local-floor');
+        // local-floor が取れない場合は local にフォールバック
+        try {
+            xrRefSpace = await xrSession.requestReferenceSpace('local-floor');
+        } catch(e) {
+            xrRefSpace = await xrSession.requestReferenceSpace('local');
+            console.warn('[XR] local-floor unavailable, using local');
+        }
 
         // UI 切替（通常→XR）
         document.getElementById('ctrl').style.display = 'none';
