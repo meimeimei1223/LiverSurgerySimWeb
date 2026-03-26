@@ -2963,8 +2963,39 @@ const vrGrabs = {
     right: { active: false }
 };
 let vrLeftPrev = null;  // { pos:[x,y,z], ori:{x,y,z,w} } 左手の前フレーム状態
-let vrHandJoints = [];  // VRハンドジョイント位置 [{x,y,z,hand}...]
-let bVRHandPts = null;  // GLバッファ
+let vrHandJoints = { left: {}, right: {} };  // jointName → {x,y,z}
+let bVRHandPts = null, bVRHandLines = null;  // GLバッファ
+
+// 手のボーン接続定義
+const HAND_BONES = [
+    // 親指
+    ['wrist','thumb-metacarpal'],['thumb-metacarpal','thumb-phalanx-proximal'],
+    ['thumb-phalanx-proximal','thumb-phalanx-distal'],['thumb-phalanx-distal','thumb-tip'],
+    // 人差し指
+    ['wrist','index-finger-metacarpal'],['index-finger-metacarpal','index-finger-phalanx-proximal'],
+    ['index-finger-phalanx-proximal','index-finger-phalanx-intermediate'],
+    ['index-finger-phalanx-intermediate','index-finger-phalanx-distal'],
+    ['index-finger-phalanx-distal','index-finger-tip'],
+    // 中指
+    ['wrist','middle-finger-metacarpal'],['middle-finger-metacarpal','middle-finger-phalanx-proximal'],
+    ['middle-finger-phalanx-proximal','middle-finger-phalanx-intermediate'],
+    ['middle-finger-phalanx-intermediate','middle-finger-phalanx-distal'],
+    ['middle-finger-phalanx-distal','middle-finger-tip'],
+    // 薬指
+    ['wrist','ring-finger-metacarpal'],['ring-finger-metacarpal','ring-finger-phalanx-proximal'],
+    ['ring-finger-phalanx-proximal','ring-finger-phalanx-intermediate'],
+    ['ring-finger-phalanx-intermediate','ring-finger-phalanx-distal'],
+    ['ring-finger-phalanx-distal','ring-finger-tip'],
+    // 小指
+    ['wrist','pinky-finger-metacarpal'],['pinky-finger-metacarpal','pinky-finger-phalanx-proximal'],
+    ['pinky-finger-phalanx-proximal','pinky-finger-phalanx-intermediate'],
+    ['pinky-finger-phalanx-intermediate','pinky-finger-phalanx-distal'],
+    ['pinky-finger-phalanx-distal','pinky-finger-tip'],
+    // 掌の横接続
+    ['index-finger-metacarpal','middle-finger-metacarpal'],
+    ['middle-finger-metacarpal','ring-finger-metacarpal'],
+    ['ring-finger-metacarpal','pinky-finger-metacarpal'],
+];
 
 function simToVR(sx, sy, sz) {
     return [sx * VR_SCALE + VR_OFFSET.x,
@@ -3105,57 +3136,69 @@ function renderXR(time, frame) {
         drawSceneXR(M, V, P, cp);
 
         // ハンドジョイント描画
-        if (vrHandJoints.length > 0) {
-            drawVRHands(V, P);
-        }
+        drawVRHands(V, P);
     }
 }
 
 function drawVRHands(V, P) {
-    if (!pPoint || vrHandJoints.length === 0) return;
+    if (!pPoint) return;
+    const I = new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
 
-    // ジョイント座標をバッファに詰める
-    const pts = new Float32Array(vrHandJoints.length * 3);
-    for (let i = 0; i < vrHandJoints.length; i++) {
-        pts[i*3]   = vrHandJoints[i].x;
-        pts[i*3+1] = vrHandJoints[i].y;
-        pts[i*3+2] = vrHandJoints[i].z;
-    }
-
-    if (!bVRHandPts) bVRHandPts = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, bVRHandPts);
-    gl.bufferData(gl.ARRAY_BUFFER, pts, gl.DYNAMIC_DRAW);
-
-    gl.useProgram(pPoint);
-    gl.uniformMatrix4fv(LPt.uV, false, V);
-    gl.uniformMatrix4fv(LPt.uP, false, P);
-    gl.uniform1f(LPt.uSize, 8.0);
-
-    gl.enableVertexAttribArray(LPt.aPos);
-    gl.vertexAttribPointer(LPt.aPos, 3, gl.FLOAT, false, 0, 0);
-
-    // 左手: シアン、右手: オレンジで色分け
-    let leftStart = -1, leftCount = 0, rightStart = -1, rightCount = 0;
-    for (let i = 0; i < vrHandJoints.length; i++) {
-        if (vrHandJoints[i].hand === 'left') {
-            if (leftStart < 0) leftStart = i;
-            leftCount++;
-        } else {
-            if (rightStart < 0) rightStart = i;
-            rightCount++;
-        }
-    }
+    const hands = [
+        { key: 'left',  ptCol: [0.2, 0.9, 0.9, 0.9], lineCol: [0.15, 0.7, 0.7, 0.7] },
+        { key: 'right', ptCol: [1.0, 0.6, 0.2, 0.9], lineCol: [0.8, 0.45, 0.15, 0.7] }
+    ];
 
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-    if (leftCount > 0) {
-        gl.uniform4f(LPt.uCol, 0.2, 0.9, 0.9, 0.9);  // シアン
-        gl.drawArrays(gl.POINTS, leftStart, leftCount);
-    }
-    if (rightCount > 0) {
-        gl.uniform4f(LPt.uCol, 1.0, 0.6, 0.2, 0.9);  // オレンジ
-        gl.drawArrays(gl.POINTS, rightStart, rightCount);
+    for (const h of hands) {
+        const joints = vrHandJoints[h.key];
+        const names = Object.keys(joints);
+        if (names.length === 0) continue;
+
+        // === ポイント描画（関節） ===
+        const pts = new Float32Array(names.length * 3);
+        for (let i = 0; i < names.length; i++) {
+            const j = joints[names[i]];
+            pts[i*3] = j.x; pts[i*3+1] = j.y; pts[i*3+2] = j.z;
+        }
+        if (!bVRHandPts) bVRHandPts = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, bVRHandPts);
+        gl.bufferData(gl.ARRAY_BUFFER, pts, gl.DYNAMIC_DRAW);
+
+        gl.useProgram(pPoint);
+        gl.uniformMatrix4fv(LPt.uV, false, V);
+        gl.uniformMatrix4fv(LPt.uP, false, P);
+        gl.uniform1f(LPt.uSize, 6.0);
+        gl.uniform4f(LPt.uCol, h.ptCol[0], h.ptCol[1], h.ptCol[2], h.ptCol[3]);
+        gl.enableVertexAttribArray(LPt.aPos);
+        gl.vertexAttribPointer(LPt.aPos, 3, gl.FLOAT, false, 0, 0);
+        gl.drawArrays(gl.POINTS, 0, names.length);
+
+        // === ライン描画（ボーン接続） ===
+        const lineVerts = [];
+        for (const [a, b] of HAND_BONES) {
+            if (joints[a] && joints[b]) {
+                lineVerts.push(joints[a].x, joints[a].y, joints[a].z);
+                lineVerts.push(joints[b].x, joints[b].y, joints[b].z);
+            }
+        }
+        if (lineVerts.length > 0) {
+            if (!bVRHandLines) bVRHandLines = gl.createBuffer();
+            const lv = new Float32Array(lineVerts);
+            gl.bindBuffer(gl.ARRAY_BUFFER, bVRHandLines);
+            gl.bufferData(gl.ARRAY_BUFFER, lv, gl.DYNAMIC_DRAW);
+
+            gl.useProgram(pWire);
+            gl.uniformMatrix4fv(LW.uM, false, I);
+            gl.uniformMatrix4fv(LW.uV, false, V);
+            gl.uniformMatrix4fv(LW.uP, false, P);
+            gl.uniform4f(LW.uCol, h.lineCol[0], h.lineCol[1], h.lineCol[2], h.lineCol[3]);
+            gl.enableVertexAttribArray(LW.aPos);
+            gl.vertexAttribPointer(LW.aPos, 3, gl.FLOAT, false, 0, 0);
+            gl.drawArrays(gl.LINES, 0, lineVerts.length / 3);
+        }
     }
 
     gl.disable(gl.BLEND);
@@ -3219,7 +3262,7 @@ function drawSceneXR(M, V, P, cp) {
 // XR 入力処理
 function processXRInput(frame) {
     if (!xrSession) return;
-    vrHandJoints = [];  // 毎フレームクリア
+    vrHandJoints = { left: {}, right: {} };  // 毎フレームクリア
 
     for (const src of xrSession.inputSources) {
         const hand = src.handedness || 'right';
@@ -3241,13 +3284,15 @@ function processXRInput(frame) {
 
 // ハンドジョイント座標の収集（描画用）
 function collectHandJoints(frame, src, hand) {
+    const joints = {};
     for (const [name, joint] of src.hand) {
         const pose = frame.getJointPose(joint, xrRefSpace);
         if (pose) {
             const p = pose.transform.position;
-            vrHandJoints.push({ x: p.x, y: p.y, z: p.z, hand: hand, radius: pose.radius || 0.005 });
+            joints[name] = { x: p.x, y: p.y, z: p.z };
         }
     }
+    vrHandJoints[hand] = joints;
 }
 
 // コントローラー入力
