@@ -3338,7 +3338,7 @@ function processController(frame, src, hand) {
             const simO = vrToSim(pos.x, pos.y, pos.z);
             const simD = [-dirX / VR_SCALE, -dirY / VR_SCALE, -dirZ / VR_SCALE];
             sb.startGrabVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2]);
-            vrGrabs.right.active = true;
+            vrGrabs.right.active = sb.isGrabbingVR();
         } else if (trigger && vrGrabs.right.active) {
             const simO = vrToSim(pos.x, pos.y, pos.z);
             const simD = [-dirX / VR_SCALE, -dirY / VR_SCALE, -dirZ / VR_SCALE];
@@ -3436,7 +3436,7 @@ function processHandTracking(frame, src, hand) {
             const simO = vrToSim(midX, midY, midZ);
             const simD = [rayDx/rayLen/VR_SCALE, rayDy/rayLen/VR_SCALE, rayDz/rayLen/VR_SCALE];
             sb.startGrabVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2]);
-            vrGrabs.right.active = true;
+            vrGrabs.right.active = sb.isGrabbingVR();
         } else if (isPinching && vrGrabs.right.active) {
             const simO = vrToSim(midX, midY, midZ);
             const simD = [rayDx/rayLen/VR_SCALE, rayDy/rayLen/VR_SCALE, rayDz/rayLen/VR_SCALE];
