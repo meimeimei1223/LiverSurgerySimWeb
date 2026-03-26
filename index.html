@@ -673,10 +673,16 @@ function mkShader(type, src) {
     if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
     return s;
 }
-function mkProg(vsSrc, fsSrc) {
+function mkProg(vsSrc, fsSrc, attribs) {
     const p = gl.createProgram();
     gl.attachShader(p, mkShader(gl.VERTEX_SHADER, vsSrc));
     gl.attachShader(p, mkShader(gl.FRAGMENT_SHADER, fsSrc));
+    // link前にattribute locationを強制固定（Quest 3 ドライバー最適化対策）
+    if (attribs) {
+        for (const [name, loc] of Object.entries(attribs)) {
+            gl.bindAttribLocation(p, loc, name);
+        }
+    }
     gl.linkProgram(p);
     if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
     return p;
@@ -3266,12 +3272,13 @@ function renderXR(time, frame) {
 // ===== Canvas→テクスチャ パネル =====
 
 function initPanelGL() {
-    pPanel = mkProg(SHADER_VS_PANEL, SHADER_FS_PANEL);
+    // aPos=0, aUV=1 に強制固定（Quest 3 ドライバーの自動最適化対策）
+    pPanel = mkProg(SHADER_VS_PANEL, SHADER_FS_PANEL, { aPos: 0, aUV: 1 });
     if (!pPanel) { console.error('[Panel] shader compile failed'); return; }
 
     LPanel = {
-        aPos:   gl.getAttribLocation(pPanel, 'aPos'),
-        aUV:    gl.getAttribLocation(pPanel, 'aUV'),
+        aPos:   0,   // bindAttribLocation で固定済み
+        aUV:    1,   // bindAttribLocation で固定済み
         uM:     gl.getUniformLocation(pPanel, 'uM'),
         uV:     gl.getUniformLocation(pPanel, 'uV'),
         uP:     gl.getUniformLocation(pPanel, 'uP'),
@@ -3328,28 +3335,41 @@ function drawPanelCanvas() {
 }
 
 function drawPanel(M, V, P) {
-    // デバッグ: pWire（動作確認済み）で板ポリを描画してみる
-    // これで見えれば位置OK・pPanelシェーダーが問題
-    // 見えなければ位置/ジオメトリが問題
+    if (!pPanel || !panelTex) return;
+
+    // 前シェーダーの attribute をすべてクリア
     for (let i = 0; i < 4; i++) gl.disableVertexAttribArray(i);
 
-    gl.useProgram(pWire);
+    gl.useProgram(pPanel);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.disable(gl.DEPTH_TEST);
     gl.disable(gl.CULL_FACE);
-    gl.uniformMatrix4fv(LW.uM, false, M);
-    gl.uniformMatrix4fv(LW.uV, false, V);
-    gl.uniformMatrix4fv(LW.uP, false, P);
-    gl.uniform4f(LW.uCol, 1.0, 0.0, 0.0, 1.0);  // 真っ赤
+
+    gl.uniformMatrix4fv(LPanel.uM, false, M);
+    gl.uniformMatrix4fv(LPanel.uV, false, V);
+    gl.uniformMatrix4fv(LPanel.uP, false, P);
+    gl.uniform1f(LPanel.uAlpha, 1.0);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, panelTex);
+    gl.uniform1i(LPanel.uTex, 0);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, bPanelVtx);
-    gl.enableVertexAttribArray(LW.aPos);
-    gl.vertexAttribPointer(LW.aPos, 3, gl.FLOAT, false, 5 * 4, 0);  // stride=20, UV分をスキップ
+    const stride = 5 * 4;
+    gl.enableVertexAttribArray(0);  // aPos = 0
+    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, stride, 0);
+    gl.enableVertexAttribArray(1);  // aUV = 1
+    gl.vertexAttribPointer(1, 2, gl.FLOAT, false, stride, 3 * 4);
 
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bPanelIdx);
     gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
 
+    // 後処理
     gl.enable(gl.DEPTH_TEST);
-    gl.disableVertexAttribArray(LW.aPos);
+    gl.disable(gl.BLEND);
+    gl.disableVertexAttribArray(0);
+    gl.disableVertexAttribArray(1);
 }
 
 function makePanelMatrix(pose) {
