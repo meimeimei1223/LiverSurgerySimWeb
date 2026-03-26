@@ -3060,7 +3060,11 @@ async function initXR() {
     // AR: immersive-ar + DOM Overlay でパネル表示
     if (arOk) {
         btnAR.disabled = false;
-        btnAR.onclick = () => startXR('immersive-ar');
+        btnAR.onclick = () => {
+            document.getElementById('xr-status').style.display = 'block';
+            document.getElementById('xr-status').textContent = 'Starting AR...';
+            startXR('immersive-ar');
+        };
     }
     console.log('[XR] VR:', vrOk, 'AR:', arOk);
 }
@@ -3120,11 +3124,29 @@ async function startXR(mode) {
             vrUpdateVolume();
         }
 
+        // DOM Overlay の有効確認
+        if (xrSession.domOverlayState) {
+            console.log('[XR] DOM Overlay type:', xrSession.domOverlayState.type);
+        } else {
+            console.warn('[XR] DOM Overlay NOT available');
+            // パネルにフォールバック表示
+            const st = document.getElementById('xr-status');
+            if (st) { st.style.display = 'block'; st.textContent = 'DOM Overlay not supported'; }
+        }
+
         // XR レンダーループ開始
         xrSession.requestAnimationFrame(renderXR);
-        console.log('[XR] Session started:', mode);
+        console.log('[XR] Session started:', mode, 'domOverlay:', !!xrSession.domOverlayState);
     } catch (e) {
         console.error('[XR] Failed to start:', e);
+        // Quest 3 ではコンソールが見えないのでページ上にエラー表示
+        const errDiv = document.getElementById('xr-status');
+        if (errDiv) {
+            errDiv.style.display = 'block';
+            errDiv.style.color = '#ff6666';
+            errDiv.textContent = 'XR Error: ' + e.message;
+        }
+        document.getElementById('vr-panel').style.display = 'none';
         xrSession = null;
     }
 }
