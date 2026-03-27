@@ -3359,14 +3359,20 @@ function drawPanelCanvas() {
         const by = cardStartY + row * (cardSize + cardGap);
         const alpha = (typeof meshAlphaValues !== 'undefined') ? meshAlphaValues[i] : 1;
         const on = alpha > 0;
-        // カード背景（ホバー中は明るくハイライト）
+        // カード背景（ホバー中は元の色の枠を太く強調）
         const hovered = (panelHoveredBtn === i);
-        c.fillStyle = hovered ? 'rgba(77,192,230,0.25)' :
+        c.fillStyle = hovered ? 'rgba(255,255,255,0.15)' :
                       on ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.02)';
         c.fillRect(bx, by, cardSize, cardSize);
-        c.strokeStyle = hovered ? '#4dc0e6' : on ? o.color : 'rgba(255,255,255,0.06)';
-        c.lineWidth = hovered ? 3 : on ? 2 : 1;
+        c.strokeStyle = hovered ? '#ffffff' : on ? o.color : 'rgba(255,255,255,0.06)';
+        c.lineWidth = hovered ? 5 : on ? 2 : 1;
         c.strokeRect(bx, by, cardSize, cardSize);
+        // ホバー時は内側にも色枠
+        if (hovered) {
+            c.strokeStyle = o.color;
+            c.lineWidth = 2;
+            c.strokeRect(bx + 4, by + 4, cardSize - 8, cardSize - 8);
+        }
         // 色ドット
         c.fillStyle = on ? o.color : '#333';
         c.beginPath(); c.arc(bx + cardSize/2, by + cardSize/2 - 8, 10, 0, Math.PI*2); c.fill();
