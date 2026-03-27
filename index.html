@@ -3384,37 +3384,23 @@ function makePanelMatrix(pose) {
     ]);
 }
 
-// パネル板ポリ（ビルボード: 頭の向きに追従）
+// パネル板ポリ
 let bTestCube = null;
+let panelTestAngle = 0;
 function drawTestCube(V, P, pose) {
     if (!pose) return;
-    const head = pose.views[0].transform;
-    const p = head.position;
-    const q = head.orientation;
 
-    // クォータニオン → 右/上/前ベクトル
-    const rx = 1-2*(q.y*q.y+q.z*q.z), ry = 2*(q.x*q.y+q.w*q.z), rz = 2*(q.x*q.z-q.w*q.y);
-    const ux = 2*(q.x*q.y-q.w*q.z),   uy = 1-2*(q.x*q.x+q.z*q.z), uz = 2*(q.y*q.z+q.w*q.x);
-    const fx = 2*(q.x*q.z+q.w*q.y),   fy = 2*(q.y*q.z-q.w*q.x),   fz = 1-2*(q.x*q.x+q.y*q.y);
+    // デバッグ: 自動回転でバッファ更新を確認
+    panelTestAngle += 0.01;
+    const cx = Math.sin(panelTestAngle) * 0.3;
+    const cy = 1.0;
+    const cz = -0.5 + Math.cos(panelTestAngle) * 0.3;
 
-    // パネル中心: 正面0.7m先、左0.3m、少し上0.05m
-    const dist = 0.7, left = 0.30, up = 0.05;
-    const cx = p.x + fx*dist - rx*left + ux*up;
-    const cy = p.y + fy*dist - ry*left + uy*up;
-    const cz = p.z + fz*dist - rz*left + uz*up;
-
-    // 板ポリの4角をワールド座標で直接計算（ビルボード）
+    // 板ポリの4角をワールド座標で直接計算
     const hw = 0.18, hh = 0.32;
-    // 右方向 × hw、上方向 × hh でオフセット
     const v = [
-        // 三角形1: 左上→右上→右下
-        cx - rx*hw + ux*hh, cy - ry*hw + uy*hh, cz - rz*hw + uz*hh,
-        cx + rx*hw + ux*hh, cy + ry*hw + uy*hh, cz + rz*hw + uz*hh,
-        cx + rx*hw - ux*hh, cy + ry*hw - uy*hh, cz + rz*hw - uz*hh,
-        // 三角形2: 左上→右下→左下
-        cx - rx*hw + ux*hh, cy - ry*hw + uy*hh, cz - rz*hw + uz*hh,
-        cx + rx*hw - ux*hh, cy + ry*hw - uy*hh, cz + rz*hw - uz*hh,
-        cx - rx*hw - ux*hh, cy - ry*hw - uy*hh, cz - rz*hw - uz*hh,
+        cx-hw, cy+hh, cz,  cx+hw, cy+hh, cz,  cx+hw, cy-hh, cz,
+        cx-hw, cy+hh, cz,  cx+hw, cy-hh, cz,  cx-hw, cy-hh, cz,
     ];
 
     if (!bTestCube) bTestCube = gl.createBuffer();
@@ -3437,8 +3423,12 @@ function drawTestCube(V, P, pose) {
     gl.drawArrays(gl.TRIANGLES, 0, 6);
 
     // 枠線
-    const tl = v.slice(0,3), tr = v.slice(3,6), br = v.slice(6,9), bl = v.slice(15,18);
-    const border = [...tl,...tr, ...tr,...br, ...br,...bl, ...bl,...tl];
+    const border = [
+        cx-hw,cy+hh,cz, cx+hw,cy+hh,cz,
+        cx+hw,cy+hh,cz, cx+hw,cy-hh,cz,
+        cx+hw,cy-hh,cz, cx-hw,cy-hh,cz,
+        cx-hw,cy-hh,cz, cx-hw,cy+hh,cz,
+    ];
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(border), gl.DYNAMIC_DRAW);
     gl.uniform4f(LW.uCol, 0.3, 0.75, 0.9, 1.0);
     gl.drawArrays(gl.LINES, 0, 8);
