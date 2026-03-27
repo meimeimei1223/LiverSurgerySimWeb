@@ -572,24 +572,25 @@ void main() {
     gl_FragColor = uCol;
 }`;
 
-// 板ポリ用シェーダー（Canvas→テクスチャ パネル）
-const SHADER_VS_PANEL = `
-attribute vec3 aPos;
-attribute vec2 aUV;
+// 板ポリ用シェーダー（GLSL ES 3.0 — Quest 3 WebGL2 対応）
+const SHADER_VS_PANEL = `#version 300 es
+in vec3 aPos;
+in vec2 aUV;
 uniform mat4 uM, uV, uP;
-varying vec2 vUV;
+out vec2 vUV;
 void main() {
     vUV = aUV;
     gl_Position = uP * uV * uM * vec4(aPos, 1.0);
 }`;
-const SHADER_FS_PANEL = `
+const SHADER_FS_PANEL = `#version 300 es
 precision mediump float;
-varying vec2 vUV;
+in vec2 vUV;
 uniform sampler2D uTex;
 uniform float uAlpha;
+out vec4 fragColor;
 void main() {
-    vec4 c = texture2D(uTex, vUV);
-    gl_FragColor = vec4(c.rgb, c.a * uAlpha);
+    vec4 c = texture(uTex, vUV);
+    fragColor = vec4(c.rgb, c.a * uAlpha);
 }`;
 
 //-- Globals -----------------------------------------------------------
