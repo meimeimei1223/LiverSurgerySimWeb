@@ -3255,7 +3255,7 @@ function renderXR(time, frame) {
         const cp = [viewerPos.x, viewerPos.y, viewerPos.z];
 
         // パネル描画（シーンより先に描画、深度テスト無効）
-        drawTestCube(V, P);
+        drawTestCube(V, P, pose);
 
         // メインメッシュ + 子メッシュ描画
         drawSceneXR(M, V, P, cp);
@@ -3384,52 +3384,63 @@ function makePanelMatrix(pose) {
     ]);
 }
 
-// パネル板ポリ（ハンドと同じ描画方式: pWire + drawArrays + DYNAMIC_DRAW）
+// パネル板ポリ（ビルボード: 頭の向きに追従）
 let bTestCube = null;
-function drawTestCube(V, P) {
-    const head = xrSession ? null : null; // pose は renderXR から渡す
-    // makePanelMatrix で計算済みの位置を使う代わりに、固定位置
-    const I = new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
+function drawTestCube(V, P, pose) {
+    if (!pose) return;
+    const head = pose.views[0].transform;
+    const p = head.position;
+    const q = head.orientation;
 
-    // 板ポリ（三角形2枚、ワールド座標）
-    // (0, 1.0, -0.5) 中心、幅0.4m × 高さ0.7m
-    const cx = 0, cy = 1.0, cz = -0.5;
-    const hw = 0.2, hh = 0.35;
+    // クォータニオン → 右/上/前ベクトル
+    const rx = 1-2*(q.y*q.y+q.z*q.z), ry = 2*(q.x*q.y+q.w*q.z), rz = 2*(q.x*q.z-q.w*q.y);
+    const ux = 2*(q.x*q.y-q.w*q.z),   uy = 1-2*(q.x*q.x+q.z*q.z), uz = 2*(q.y*q.z+q.w*q.x);
+    const fx = 2*(q.x*q.z+q.w*q.y),   fy = 2*(q.y*q.z-q.w*q.x),   fz = 1-2*(q.x*q.x+q.y*q.y);
+
+    // パネル中心: 正面0.7m先、左0.3m、少し上0.05m
+    const dist = 0.7, left = 0.30, up = 0.05;
+    const cx = p.x + fx*dist - rx*left + ux*up;
+    const cy = p.y + fy*dist - ry*left + uy*up;
+    const cz = p.z + fz*dist - rz*left + uz*up;
+
+    // 板ポリの4角をワールド座標で直接計算（ビルボード）
+    const hw = 0.18, hh = 0.32;
+    // 右方向 × hw、上方向 × hh でオフセット
     const v = [
         // 三角形1: 左上→右上→右下
-        cx-hw, cy+hh, cz,  cx+hw, cy+hh, cz,  cx+hw, cy-hh, cz,
+        cx - rx*hw + ux*hh, cy - ry*hw + uy*hh, cz - rz*hw + uz*hh,
+        cx + rx*hw + ux*hh, cy + ry*hw + uy*hh, cz + rz*hw + uz*hh,
+        cx + rx*hw - ux*hh, cy + ry*hw - uy*hh, cz + rz*hw - uz*hh,
         // 三角形2: 左上→右下→左下
-        cx-hw, cy+hh, cz,  cx+hw, cy-hh, cz,  cx-hw, cy-hh, cz,
+        cx - rx*hw + ux*hh, cy - ry*hw + uy*hh, cz - rz*hw + uz*hh,
+        cx + rx*hw - ux*hh, cy + ry*hw - uy*hh, cz + rz*hw - uz*hh,
+        cx - rx*hw - ux*hh, cy - ry*hw - uy*hh, cz - rz*hw - uz*hh,
     ];
-    const verts = new Float32Array(v);
 
     if (!bTestCube) bTestCube = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, bTestCube);
-    gl.bufferData(gl.ARRAY_BUFFER, verts, gl.DYNAMIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.DYNAMIC_DRAW);
 
     gl.useProgram(pWire);
     gl.disable(gl.DEPTH_TEST);
     gl.disable(gl.CULL_FACE);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    const I = new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
     gl.uniformMatrix4fv(LW.uM, false, I);
     gl.uniformMatrix4fv(LW.uV, false, V);
     gl.uniformMatrix4fv(LW.uP, false, P);
-    gl.uniform4f(LW.uCol, 0.05, 0.1, 0.3, 0.9);  // 暗い青（パネル背景色）
+    gl.uniform4f(LW.uCol, 0.04, 0.07, 0.18, 0.92);
 
     gl.enableVertexAttribArray(LW.aPos);
     gl.vertexAttribPointer(LW.aPos, 3, gl.FLOAT, false, 0, 0);
-    gl.drawArrays(gl.TRIANGLES, 0, 6);  // 三角形2枚
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
 
-    // 枠線（同じ位置にライン描画）
-    const border = [
-        cx-hw,cy+hh,cz, cx+hw,cy+hh,cz,
-        cx+hw,cy+hh,cz, cx+hw,cy-hh,cz,
-        cx+hw,cy-hh,cz, cx-hw,cy-hh,cz,
-        cx-hw,cy-hh,cz, cx-hw,cy+hh,cz,
-    ];
+    // 枠線
+    const tl = v.slice(0,3), tr = v.slice(3,6), br = v.slice(6,9), bl = v.slice(15,18);
+    const border = [...tl,...tr, ...tr,...br, ...br,...bl, ...bl,...tl];
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(border), gl.DYNAMIC_DRAW);
-    gl.uniform4f(LW.uCol, 0.3, 0.75, 0.9, 1.0);  // シアン枠
+    gl.uniform4f(LW.uCol, 0.3, 0.75, 0.9, 1.0);
     gl.drawArrays(gl.LINES, 0, 8);
 
     gl.enable(gl.DEPTH_TEST);
