@@ -3260,8 +3260,8 @@ function renderXR(time, frame) {
         // ハンドジョイント描画
         drawVRHands(V, P);
 
-        // デバッグ: 肝臓と同じモデル行列Mでパネル描画（これで見えなければバッファが問題）
-        drawPanel(M, V, P);
+        // デバッグ: ワイヤーフレームキューブ（ハンドと同じ描画方式）
+        drawTestCube(V, P);
     }
 
     // VR パネルのボリューム自動更新
@@ -3382,6 +3382,45 @@ function makePanelMatrix(pose) {
         -fx, -fy, -fz, 0,
         px,  py,  pz,  1
     ]);
+}
+
+// デバッグ: ワイヤーフレームキューブ（ハンドラインと完全に同じ描画方式）
+let bTestCube = null;
+function drawTestCube(V, P) {
+    const I = new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
+
+    // キューブの8頂点（ワールド座標、0.1m角、(0, 1.0, -0.5) 中心）
+    const cx = 0, cy = 1.0, cz = -0.5, s = 0.1;
+    const v = [
+        cx-s,cy-s,cz-s, cx+s,cy-s,cz-s,  // 底面4辺
+        cx+s,cy-s,cz-s, cx+s,cy-s,cz+s,
+        cx+s,cy-s,cz+s, cx-s,cy-s,cz+s,
+        cx-s,cy-s,cz+s, cx-s,cy-s,cz-s,
+        cx-s,cy+s,cz-s, cx+s,cy+s,cz-s,  // 上面4辺
+        cx+s,cy+s,cz-s, cx+s,cy+s,cz+s,
+        cx+s,cy+s,cz+s, cx-s,cy+s,cz+s,
+        cx-s,cy+s,cz+s, cx-s,cy+s,cz-s,
+        cx-s,cy-s,cz-s, cx-s,cy+s,cz-s,  // 縦4辺
+        cx+s,cy-s,cz-s, cx+s,cy+s,cz-s,
+        cx+s,cy-s,cz+s, cx+s,cy+s,cz+s,
+        cx-s,cy-s,cz+s, cx-s,cy+s,cz+s,
+    ];
+    const verts = new Float32Array(v);
+
+    if (!bTestCube) bTestCube = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, bTestCube);
+    gl.bufferData(gl.ARRAY_BUFFER, verts, gl.DYNAMIC_DRAW);
+
+    // ハンドラインと完全に同じ描画パターン
+    gl.useProgram(pWire);
+    gl.uniformMatrix4fv(LW.uM, false, I);
+    gl.uniformMatrix4fv(LW.uV, false, V);
+    gl.uniformMatrix4fv(LW.uP, false, P);
+    gl.uniform4f(LW.uCol, 1.0, 1.0, 0.0, 1.0);  // 黄色
+
+    gl.enableVertexAttribArray(LW.aPos);
+    gl.vertexAttribPointer(LW.aPos, 3, gl.FLOAT, false, 0, 0);
+    gl.drawArrays(gl.LINES, 0, 24);  // 12辺 × 2頂点
 }
 
 function drawVRHands(V, P) {
