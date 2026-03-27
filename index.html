@@ -3359,11 +3359,13 @@ function drawPanelCanvas() {
         const by = cardStartY + row * (cardSize + cardGap);
         const alpha = (typeof meshAlphaValues !== 'undefined') ? meshAlphaValues[i] : 1;
         const on = alpha > 0;
-        // カード背景
-        c.fillStyle = on ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.02)';
+        // カード背景（ホバー中は明るくハイライト）
+        const hovered = (panelHoveredBtn === i);
+        c.fillStyle = hovered ? 'rgba(77,192,230,0.25)' :
+                      on ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.02)';
         c.fillRect(bx, by, cardSize, cardSize);
-        c.strokeStyle = on ? o.color : 'rgba(255,255,255,0.06)';
-        c.lineWidth = on ? 2 : 1;
+        c.strokeStyle = hovered ? '#4dc0e6' : on ? o.color : 'rgba(255,255,255,0.06)';
+        c.lineWidth = hovered ? 3 : on ? 2 : 1;
         c.strokeRect(bx, by, cardSize, cardSize);
         // 色ドット
         c.fillStyle = on ? o.color : '#333';
@@ -3516,6 +3518,25 @@ let panelWorldUp = null;      // [ux,uy,uz]
 let panelFixed = false;       // true: 位置固定済み
 const panelHW = 0.18, panelHH = 0.32;
 let panelTouchCooldown = 0;   // 連打防止
+let panelHoveredBtn = -1;     // ホバー中のボタンインデックス
+let panelBtnWorldPos = [];    // 各ボタンの3Dワールド座標
+
+// パネル上のボタン定義（キャンバス座標での中心点）
+// drawPanelCanvas の描画位置と一致させる
+function getPanelButtons() {
+    const cardCols = 3, cardGap = 12;
+    const cardSize = Math.floor((PANEL_W - 32 - cardGap * (cardCols - 1)) / cardCols);
+    const cardStartY = 50;
+    const btns = [];
+    // VISIBILITY カード（6個）
+    for (let i = 0; i < 6; i++) {
+        const col = i % cardCols, row = Math.floor(i / cardCols);
+        const cx = 16 + col * (cardSize + cardGap) + cardSize / 2;
+        const cy = cardStartY + row * (cardSize + cardGap) + cardSize / 2;
+        btns.push({ cx, cy, action: 'vis', idx: i, label: ['Liver','Portal','H.Vein','Tumor','Gallbldr','Sphere'][i] });
+    }
+    return btns;
+}
 
 function drawTestCube(V, P, pose) {
     if (!pose) return;
@@ -3541,6 +3562,21 @@ function drawTestCube(V, P, pose) {
     // 固定されたright/upを使う
     const prx = panelWorldRight[0], pry = panelWorldRight[1], prz = panelWorldRight[2];
     const pux = panelWorldUp[0], puy = panelWorldUp[1], puz = panelWorldUp[2];
+
+    // 各ボタンの3Dワールド座標を計算
+    const btns = getPanelButtons();
+    panelBtnWorldPos = btns.map(b => {
+        // キャンバス座標 → パネルローカル座標(-hw..hw, -hh..hh)
+        const lx = (b.cx / PANEL_W - 0.5) * 2 * panelHW;
+        const ly = -(b.cy / PANEL_H - 0.5) * 2 * panelHH;  // Y反転
+        // ローカル → ワールド
+        return {
+            x: cx + prx * lx + pux * ly,
+            y: cy + pry * lx + puy * ly,
+            z: cz + prz * lx + puz * ly,
+            action: b.action, idx: b.idx, label: b.label
+        };
+    });
 
     // 板ポリの4角（固定パネルの right/up で展開）
     const hw = panelHW, hh = panelHH;
@@ -3968,19 +4004,44 @@ function processHandTracking(frame, src, hand) {
             { x: wo.x, y: wo.y, z: wo.z, w: wo.w });
     }
 
-    // === 右手でパネルタッチ判定（グラブより優先）===
-    if (hand === 'right') {
-        const hit = panelHitTest(ip.x, ip.y, ip.z);
-        if (hit && isPinching) {
-            // スライダー領域（alphaY付近）はクールダウンなしでドラッグ可能
-            const cardEndY = 50 + 2 * (Math.floor((PANEL_W - 40) / 3 - 8) + 8);
-            const isSlider = hit.y >= cardEndY + 10 && hit.y < cardEndY + 60;
-            if (isSlider || panelTouchCooldown <= 0) {
-                handlePanelTouch(hit.x, hit.y);
-                if (!isSlider) panelTouchCooldown = 20;
-            }
+    // === 右手: 3D距離でパネルボタン判定 ===
+    if (hand === 'right' && panelBtnWorldPos.length > 0) {
+        // 指先と全ボタンの距離を計算、最近接を探す
+        let minDist = Infinity, minIdx = -1;
+        for (let i = 0; i < panelBtnWorldPos.length; i++) {
+            const b = panelBtnWorldPos[i];
+            const dx = ip.x - b.x, dy = ip.y - b.y, dz = ip.z - b.z;
+            const d = Math.sqrt(dx*dx + dy*dy + dz*dz);
+            if (d < minDist) { minDist = d; minIdx = i; }
+        }
+        // 0.15m以内ならホバー
+        panelHoveredBtn = (minDist < 0.15) ? minIdx : -1;
+
+        // ピンチでアクション実行
+        if (isPinching && panelHoveredBtn >= 0 && panelTouchCooldown <= 0) {
+            const btn = panelBtnWorldPos[panelHoveredBtn];
+            if (btn.action === 'vis') vrToggleOrgan(btn.idx);
+            panelTouchCooldown = 20;
             if (vrGrabs.right.active) { sb.endGrabVR(); vrGrabs.right.active = false; }
         }
+
+        // スライダー: ピンチ中に指先のパネル上X位置でAlpha調整
+        if (isPinching && panelWorldCenter) {
+            const hit = panelHitTest(ip.x, ip.y, ip.z);
+            if (hit) {
+                const btns = getPanelButtons();
+                const cardCols = 3, cardGap = 12;
+                const cardSize = Math.floor((PANEL_W - 32 - cardGap*(cardCols-1)) / cardCols);
+                const cardEndY = 50 + 2 * (cardSize + cardGap);
+                if (hit.y >= cardEndY && hit.y < cardEndY + 60) {
+                    const sliderX = Math.max(0.05, Math.min(1, (hit.x - 20) / (PANEL_W - 40)));
+                    meshAlphaValues[0] = sliderX;
+                    if (typeof liverAlphaValue !== 'undefined') liverAlphaValue = sliderX;
+                    if (typeof liverVisible !== 'undefined') liverVisible = true;
+                }
+            }
+        }
+
         if (panelTouchCooldown > 0) panelTouchCooldown--;
     }
 }
