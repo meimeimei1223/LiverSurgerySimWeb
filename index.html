@@ -3416,7 +3416,9 @@ function drawTestCube(V, P, pose) {
     gl.uniformMatrix4fv(LW.uM, false, I);
     gl.uniformMatrix4fv(LW.uV, false, V);
     gl.uniformMatrix4fv(LW.uP, false, P);
-    gl.uniform4f(LW.uCol, 0.04, 0.07, 0.18, 0.92);
+    // デバッグ: 色を毎フレーム変化（赤↔青でパルス）
+    const pulse = (Math.sin(panelTestAngle * 5) + 1) / 2;
+    gl.uniform4f(LW.uCol, pulse, 0.0, 1.0 - pulse, 0.92);
 
     gl.enableVertexAttribArray(LW.aPos);
     gl.vertexAttribPointer(LW.aPos, 3, gl.FLOAT, false, 0, 0);
