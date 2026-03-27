@@ -3373,22 +3373,33 @@ function drawPanelCanvas() {
             c.lineWidth = 2;
             c.strokeRect(bx + 4, by + 4, cardSize - 8, cardSize - 8);
         }
-        // アイコン（ロード済みなら画像、未ロードなら色ドット）
+        // アイコン（大きく、カードの大部分を占める）
         const iconImg = panelIcons[o.icon];
-        const iconSize = Math.min(cardSize - 30, 40);
+        const iconSize = cardSize - 24;
+        const iconX = bx + (cardSize - iconSize) / 2;
+        const iconY = by + 4;
         if (iconImg) {
-            c.globalAlpha = on ? 1.0 : 0.3;
-            c.drawImage(iconImg, bx + (cardSize - iconSize)/2, by + 6, iconSize, iconSize);
+            c.globalAlpha = on ? 1.0 : 0.25;
+            c.drawImage(iconImg, iconX, iconY, iconSize, iconSize);
             c.globalAlpha = 1.0;
         } else {
             c.fillStyle = on ? o.color : '#333';
-            c.beginPath(); c.arc(bx + cardSize/2, by + cardSize/2 - 8, 10, 0, Math.PI*2); c.fill();
+            c.fillRect(iconX, iconY, iconSize, iconSize);
         }
-        // 名前
-        c.fillStyle = on ? '#ddd' : '#444';
-        c.font = 'bold 13px Arial';
+        // 中心ターゲット（押しやすさのため）
+        c.beginPath();
+        c.arc(bx + cardSize/2, by + cardSize/2, hovered ? 8 : 5, 0, Math.PI*2);
+        c.fillStyle = hovered ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.2)';
+        c.fill();
+        // 名前 + 状態
+        const stateText = alpha >= 1 ? 'ON' : alpha > 0 ? Math.round(alpha*100)+'%' : 'OFF';
+        c.fillStyle = on ? '#fff' : '#555';
+        c.font = 'bold 12px Arial';
         c.textAlign = 'center';
-        c.fillText(o.name, bx + cardSize/2, by + cardSize - 8);
+        c.fillText(o.name, bx + cardSize/2, by + cardSize - 16);
+        c.fillStyle = on ? '#4dc0e6' : '#333';
+        c.font = '11px Arial';
+        c.fillText(stateText, bx + cardSize/2, by + cardSize - 4);
         c.textAlign = 'left';
     }
     y = cardStartY + 2 * (cardSize + cardGap) + 8;
@@ -4137,23 +4148,28 @@ function handlePanelTouch(canvasX, canvasY) {
 }
 
 // 臓器の表示切替（直接 meshAlphaValues を操作）
+// Liver: ON(1.0) → 50%(0.5) → OFF(0.0) の3段階
+// 他: ON(1.0) → OFF(0.0) の2段階
 function vrToggleOrgan(idx) {
     if (typeof meshAlphaValues === 'undefined') return;
     const cur = meshAlphaValues[idx];
-    const newVal = cur > 0 ? 0.0 : 1.0;
-    meshAlphaValues[idx] = newVal;
-    // 子メッシュの visible フラグ同期
+    let newVal;
     if (idx === 0) {
-        // Liver
+        // Liver: 3段階
+        if (cur >= 1.0) newVal = 0.5;
+        else if (cur > 0) newVal = 0.0;
+        else newVal = 1.0;
         if (typeof liverVisible !== 'undefined') liverVisible = newVal > 0;
-        if (typeof liverAlphaValue !== 'undefined' && newVal > 0) meshAlphaValues[0] = liverAlphaValue;
-    } else if (idx >= 1 && idx <= 4) {
-        const ci = idx - 1;
-        if (childBuffers[ci]) childBuffers[ci].visible = newVal > 0;
+        if (typeof liverAlphaValue !== 'undefined') liverAlphaValue = newVal;
+    } else {
+        // 他: 2段階
+        newVal = cur > 0 ? 0.0 : 1.0;
+        if (idx >= 1 && idx <= 4) {
+            const ci = idx - 1;
+            if (childBuffers[ci]) childBuffers[ci].visible = newVal > 0;
+        }
     }
-    // デスクトップUI同期
-    const card = document.getElementById('organ-card-' + idx);
-    if (card) card.click();
+    meshAlphaValues[idx] = newVal;
 }
 
 // WebXR チェック（WASM不要、ブラウザ機能のみ）
