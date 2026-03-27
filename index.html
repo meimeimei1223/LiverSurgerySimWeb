@@ -3553,8 +3553,23 @@ function drawTestCube(V, P, pose) {
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-    if (pPanel && panelTex) {
-        // テクスチャ付き描画
+    // テクスチャシェーダーをインラインで作成（initPanelGL に依存しない）
+    if (!pPanel) {
+        try {
+            pPanel = mkProg(SHADER_VS_PANEL, SHADER_FS_PANEL, { aPos: 0, aUV: 1 });
+        } catch(e) { /* shader compile failed */ }
+    }
+    if (!panelTex) {
+        panelTex = gl.createTexture();
+        panelCanvas = document.createElement('canvas');
+        panelCanvas.width = PANEL_W; panelCanvas.height = PANEL_H;
+        panelCtx = panelCanvas.getContext('2d');
+    }
+
+    if (pPanel && panelTex && panelCtx) {
+        // Canvas UI描画 → テクスチャ転送
+        drawPanelCanvas();
+
         gl.useProgram(pPanel);
         gl.uniformMatrix4fv(LPanel.uM, false, I);
         gl.uniformMatrix4fv(LPanel.uV, false, V);
@@ -3564,11 +3579,9 @@ function drawTestCube(V, P, pose) {
         gl.bindTexture(gl.TEXTURE_2D, panelTex);
         gl.uniform1i(LPanel.uTex, 0);
 
-        // aPos = location 0（位置バッファ）
         gl.bindBuffer(gl.ARRAY_BUFFER, bTestCube);
         gl.enableVertexAttribArray(0);
         gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
-        // aUV = location 1（UVバッファ）
         gl.bindBuffer(gl.ARRAY_BUFFER, bPanelUV);
         gl.enableVertexAttribArray(1);
         gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
@@ -3577,12 +3590,12 @@ function drawTestCube(V, P, pose) {
         gl.disableVertexAttribArray(0);
         gl.disableVertexAttribArray(1);
     } else {
-        // フォールバック: pWire 単色
+        // フォールバック: pWire 単色（赤=テクスチャ失敗の合図）
         gl.useProgram(pWire);
         gl.uniformMatrix4fv(LW.uM, false, I);
         gl.uniformMatrix4fv(LW.uV, false, V);
         gl.uniformMatrix4fv(LW.uP, false, P);
-        gl.uniform4f(LW.uCol, 0.04, 0.07, 0.18, 0.92);
+        gl.uniform4f(LW.uCol, 1.0, 0.0, 0.0, 0.92);  // 赤=失敗
         gl.bindBuffer(gl.ARRAY_BUFFER, bTestCube);
         gl.enableVertexAttribArray(LW.aPos);
         gl.vertexAttribPointer(LW.aPos, 3, gl.FLOAT, false, 0, 0);
