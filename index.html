@@ -3254,14 +3254,14 @@ function renderXR(time, frame) {
         const viewerPos = pose.views[0].transform.position;
         const cp = [viewerPos.x, viewerPos.y, viewerPos.z];
 
+        // パネル描画（シーンより先に描画、深度テスト無効）
+        drawTestCube(V, P);
+
         // メインメッシュ + 子メッシュ描画
         drawSceneXR(M, V, P, cp);
 
         // ハンドジョイント描画
         drawVRHands(V, P);
-
-        // デバッグ: ワイヤーフレームキューブ（ハンドと同じ描画方式）
-        drawTestCube(V, P);
     }
 
     // VR パネルのボリューム自動更新
@@ -3384,26 +3384,22 @@ function makePanelMatrix(pose) {
     ]);
 }
 
-// デバッグ: ワイヤーフレームキューブ（ハンドラインと完全に同じ描画方式）
+// パネル板ポリ（ハンドと同じ描画方式: pWire + drawArrays + DYNAMIC_DRAW）
 let bTestCube = null;
 function drawTestCube(V, P) {
+    const head = xrSession ? null : null; // pose は renderXR から渡す
+    // makePanelMatrix で計算済みの位置を使う代わりに、固定位置
     const I = new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
 
-    // キューブの8頂点（ワールド座標、0.1m角、(0, 1.0, -0.5) 中心）
-    const cx = 0, cy = 1.0, cz = -0.5, s = 0.1;
+    // 板ポリ（三角形2枚、ワールド座標）
+    // (0, 1.0, -0.5) 中心、幅0.4m × 高さ0.7m
+    const cx = 0, cy = 1.0, cz = -0.5;
+    const hw = 0.2, hh = 0.35;
     const v = [
-        cx-s,cy-s,cz-s, cx+s,cy-s,cz-s,  // 底面4辺
-        cx+s,cy-s,cz-s, cx+s,cy-s,cz+s,
-        cx+s,cy-s,cz+s, cx-s,cy-s,cz+s,
-        cx-s,cy-s,cz+s, cx-s,cy-s,cz-s,
-        cx-s,cy+s,cz-s, cx+s,cy+s,cz-s,  // 上面4辺
-        cx+s,cy+s,cz-s, cx+s,cy+s,cz+s,
-        cx+s,cy+s,cz+s, cx-s,cy+s,cz+s,
-        cx-s,cy+s,cz+s, cx-s,cy+s,cz-s,
-        cx-s,cy-s,cz-s, cx-s,cy+s,cz-s,  // 縦4辺
-        cx+s,cy-s,cz-s, cx+s,cy+s,cz-s,
-        cx+s,cy-s,cz+s, cx+s,cy+s,cz+s,
-        cx-s,cy-s,cz+s, cx-s,cy+s,cz+s,
+        // 三角形1: 左上→右上→右下
+        cx-hw, cy+hh, cz,  cx+hw, cy+hh, cz,  cx+hw, cy-hh, cz,
+        // 三角形2: 左上→右下→左下
+        cx-hw, cy+hh, cz,  cx+hw, cy-hh, cz,  cx-hw, cy-hh, cz,
     ];
     const verts = new Float32Array(v);
 
@@ -3411,16 +3407,35 @@ function drawTestCube(V, P) {
     gl.bindBuffer(gl.ARRAY_BUFFER, bTestCube);
     gl.bufferData(gl.ARRAY_BUFFER, verts, gl.DYNAMIC_DRAW);
 
-    // ハンドラインと完全に同じ描画パターン
     gl.useProgram(pWire);
+    gl.disable(gl.DEPTH_TEST);
+    gl.disable(gl.CULL_FACE);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.uniformMatrix4fv(LW.uM, false, I);
     gl.uniformMatrix4fv(LW.uV, false, V);
     gl.uniformMatrix4fv(LW.uP, false, P);
-    gl.uniform4f(LW.uCol, 1.0, 1.0, 0.0, 1.0);  // 黄色
+    gl.uniform4f(LW.uCol, 0.05, 0.1, 0.3, 0.9);  // 暗い青（パネル背景色）
 
     gl.enableVertexAttribArray(LW.aPos);
     gl.vertexAttribPointer(LW.aPos, 3, gl.FLOAT, false, 0, 0);
-    gl.drawArrays(gl.LINES, 0, 24);  // 12辺 × 2頂点
+    gl.drawArrays(gl.TRIANGLES, 0, 6);  // 三角形2枚
+
+    // 枠線（同じ位置にライン描画）
+    const border = [
+        cx-hw,cy+hh,cz, cx+hw,cy+hh,cz,
+        cx+hw,cy+hh,cz, cx+hw,cy-hh,cz,
+        cx+hw,cy-hh,cz, cx-hw,cy-hh,cz,
+        cx-hw,cy-hh,cz, cx-hw,cy+hh,cz,
+    ];
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(border), gl.DYNAMIC_DRAW);
+    gl.uniform4f(LW.uCol, 0.3, 0.75, 0.9, 1.0);  // シアン枠
+    gl.drawArrays(gl.LINES, 0, 8);
+
+    gl.enable(gl.DEPTH_TEST);
+    gl.enable(gl.CULL_FACE);
+    gl.disable(gl.BLEND);
+    gl.disableVertexAttribArray(LW.aPos);
 }
 
 function drawVRHands(V, P) {
