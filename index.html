@@ -3342,12 +3342,12 @@ function drawPanelCanvas() {
     c.fillText('VISIBILITY', 16, y + 18);
 
     const organs = [
-        { name:'Liver',   color:'#e04040' },
-        { name:'Portal',  color:'#cc44cc' },
-        { name:'H.Vein',  color:'#4488ff' },
-        { name:'Tumor',   color:'#ddaa22' },
-        { name:'Gallbldr',color:'#44bb88' },
-        { name:'Sphere',  color:'#aaaaaa' },
+        { name:'Liver',   color:'#e04040', icon:'liver' },
+        { name:'Portal',  color:'#cc44cc', icon:'portal' },
+        { name:'H.Vein',  color:'#4488ff', icon:'vein' },
+        { name:'Tumor',   color:'#ddaa22', icon:'tumor' },
+        { name:'Gallbldr',color:'#44bb88', icon:'gb' },
+        { name:'Sphere',  color:'#aaaaaa', icon:'sphere' },
     ];
     const cardStartY = 50;
     const cardCols = 3, cardGap = 12;
@@ -3373,14 +3373,22 @@ function drawPanelCanvas() {
             c.lineWidth = 2;
             c.strokeRect(bx + 4, by + 4, cardSize - 8, cardSize - 8);
         }
-        // 色ドット
-        c.fillStyle = on ? o.color : '#333';
-        c.beginPath(); c.arc(bx + cardSize/2, by + cardSize/2 - 8, 10, 0, Math.PI*2); c.fill();
+        // アイコン（ロード済みなら画像、未ロードなら色ドット）
+        const iconImg = panelIcons[o.icon];
+        const iconSize = Math.min(cardSize - 30, 40);
+        if (iconImg) {
+            c.globalAlpha = on ? 1.0 : 0.3;
+            c.drawImage(iconImg, bx + (cardSize - iconSize)/2, by + 6, iconSize, iconSize);
+            c.globalAlpha = 1.0;
+        } else {
+            c.fillStyle = on ? o.color : '#333';
+            c.beginPath(); c.arc(bx + cardSize/2, by + cardSize/2 - 8, 10, 0, Math.PI*2); c.fill();
+        }
         // 名前
         c.fillStyle = on ? '#ddd' : '#444';
-        c.font = 'bold 14px Arial';
+        c.font = 'bold 13px Arial';
         c.textAlign = 'center';
-        c.fillText(o.name, bx + cardSize/2, by + cardSize - 10);
+        c.fillText(o.name, bx + cardSize/2, by + cardSize - 8);
         c.textAlign = 'left';
     }
     y = cardStartY + 2 * (cardSize + cardGap) + 8;
@@ -3527,6 +3535,24 @@ let panelTouchCooldown = 0;   // 連打防止
 let panelHoveredBtn = -1;     // ホバー中のボタンインデックス
 let panelBtnWorldPos = [];    // 各ボタンの3Dワールド座標
 let panelSliderDragging = false;  // スライダードラッグ中フラグ
+let panelIcons = {};  // アイコン Image オブジェクト
+
+// アイコンプリロード
+(function loadPanelIcons() {
+    const iconDefs = [
+        { key: 'liver',   src: 'data/liver_icon.png' },
+        { key: 'portal',  src: 'data/portal_icon.png' },
+        { key: 'vein',    src: 'data/vein_icon.png' },
+        { key: 'tumor',   src: 'data/tumor_icon.png' },
+        { key: 'gb',      src: 'data/gb_icon.png' },
+        { key: 'sphere',  src: 'data/handleSphere_icon.png' },
+    ];
+    for (const d of iconDefs) {
+        const img = new Image();
+        img.src = d.src;
+        img.onload = () => { panelIcons[d.key] = img; };
+    }
+})();
 
 // パネル上のボタン定義（キャンバス座標での中心点）
 // drawPanelCanvas の描画位置と一致させる
