@@ -604,7 +604,7 @@ let numHiIdx = 0, numWireV = 0;
 let pPanel = null, LPanel = {};
 let bPanelVtx = null, bPanelIdx = null, panelTex = null;
 let panelCanvas = null, panelCtx = null;
-const PANEL_W = 512, PANEL_H = 900;
+const PANEL_W = 512, PANEL_H = 700;
 const PANEL_WORLD_W = 1.0;   // デバッグ: 1m幅の巨大パネル
 const PANEL_WORLD_H = PANEL_WORLD_W * (PANEL_H / PANEL_W);
 let drag=false, grab=false, grabD=0, prevPt=[0,0,0];
@@ -3350,8 +3350,8 @@ function drawPanelCanvas() {
         { name:'Sphere',  color:'#aaaaaa' },
     ];
     const cardStartY = 50;
-    const cardCols = 3, cardSize = Math.floor((W - 40) / cardCols - 8);
-    const cardGap = 8;
+    const cardCols = 3, cardGap = 12;
+    const cardSize = Math.floor((W - 32 - cardGap * (cardCols - 1)) / cardCols);
     for (let i = 0; i < organs.length; i++) {
         const o = organs[i];
         const col = i % cardCols, row = Math.floor(i / cardCols);
@@ -3701,42 +3701,65 @@ function drawVRHands(V, P) {
 }
 
 function drawSceneXR(M, V, P, cp) {
-    // Liver 描画
     gl.useProgram(pMain);
     gl.uniformMatrix4fv(L.uM, false, M);
     gl.uniformMatrix4fv(L.uV, false, V);
     gl.uniformMatrix4fv(L.uP, false, P);
     gl.uniform3fv(L.uLP, cp);
     gl.uniform3fv(L.uVP, cp);
-    gl.uniform4f(L.uCol, 0.75, 0.22, 0.17, 1.0);
-    gl.uniform1f(L.uAlpha, 1.0);
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, bHiPos);
-    gl.enableVertexAttribArray(L.aPos);
-    gl.vertexAttribPointer(L.aPos, 3, gl.FLOAT, false, 0, 0);
-    gl.bindBuffer(gl.ARRAY_BUFFER, bHiNrm);
-    gl.enableVertexAttribArray(L.aNrm);
-    gl.vertexAttribPointer(L.aNrm, 3, gl.FLOAT, false, 0, 0);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bHiIdx);
+    // Liver 描画（meshAlphaValues[0] で透過対応）
+    const liverAlpha = (typeof meshAlphaValues !== 'undefined') ? meshAlphaValues[0] : 1;
+    if (liverAlpha > 0) {
+        if (liverAlpha < 1) {
+            gl.enable(gl.BLEND);
+            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+            gl.depthMask(false);
+        }
+        gl.uniform4f(L.uCol, 0.75, 0.22, 0.17, 1.0);
+        gl.uniform1f(L.uAlpha, liverAlpha);
 
-    const numIdx = sb.getNumHighResSurfaceTriIdsAfterCut
-        ? sb.getNumHighResSurfaceTriIdsAfterCut()
-        : sb.getNumHighResSurfaceTriIds();
-    gl.drawElements(gl.TRIANGLES, numIdx,
-        extUint ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, bHiPos);
+        gl.enableVertexAttribArray(L.aPos);
+        gl.vertexAttribPointer(L.aPos, 3, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, bHiNrm);
+        gl.enableVertexAttribArray(L.aNrm);
+        gl.vertexAttribPointer(L.aNrm, 3, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bHiIdx);
 
-    // 子メッシュ描画
+        const numIdx = sb.getNumHighResSurfaceTriIdsAfterCut
+            ? sb.getNumHighResSurfaceTriIdsAfterCut()
+            : sb.getNumHighResSurfaceTriIds();
+        gl.drawElements(gl.TRIANGLES, numIdx,
+            extUint ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);
+
+        if (liverAlpha < 1) {
+            gl.depthMask(true);
+            gl.disable(gl.BLEND);
+        }
+    }
+
+    // 子メッシュ描画（meshAlphaValues[1..4] で透過・非表示対応）
     const CHILD_COLORS = [
-        [0.85, 0.25, 0.60, 1],  // portal
-        [0.09, 0.63, 0.52, 1],  // vein
-        [0.83, 0.63, 0.09, 1],  // tumor
-        [0.15, 0.68, 0.38, 1],  // gb
+        [0.85, 0.25, 0.60, 1],  // portal  → meshAlphaValues[1]
+        [0.09, 0.63, 0.52, 1],  // vein    → meshAlphaValues[2]
+        [0.83, 0.63, 0.09, 1],  // tumor   → meshAlphaValues[3]
+        [0.15, 0.68, 0.38, 1],  // gb      → meshAlphaValues[4]
     ];
     for (let ci = 0; ci < childBuffers.length; ci++) {
         const cb = childBuffers[ci];
         if (!cb) continue;
+        const alpha = (typeof meshAlphaValues !== 'undefined') ? meshAlphaValues[ci + 1] : 1;
+        if (alpha <= 0) continue;  // 非表示
+
+        if (alpha < 1) {
+            gl.enable(gl.BLEND);
+            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+            gl.depthMask(false);
+        }
         const cc = CHILD_COLORS[ci] || [0.5, 0.5, 0.5, 1];
         gl.uniform4f(L.uCol, cc[0], cc[1], cc[2], cc[3]);
+        gl.uniform1f(L.uAlpha, alpha);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, cb.bPos);
         gl.enableVertexAttribArray(L.aPos);
@@ -3747,6 +3770,11 @@ function drawSceneXR(M, V, P, cp) {
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cb.bIdx);
         gl.drawElements(gl.TRIANGLES, cb.numIdx,
             extUint ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);
+
+        if (alpha < 1) {
+            gl.depthMask(true);
+            gl.disable(gl.BLEND);
+        }
     }
 
     // ハンドル球描画（VR空間）
@@ -3943,10 +3971,14 @@ function processHandTracking(frame, src, hand) {
     // === 右手でパネルタッチ判定（グラブより優先）===
     if (hand === 'right') {
         const hit = panelHitTest(ip.x, ip.y, ip.z);
-        if (hit && isPinching && panelTouchCooldown <= 0) {
-            handlePanelTouch(hit.x, hit.y);
-            panelTouchCooldown = 20;
-            // パネルタッチ時はグラブを終了
+        if (hit && isPinching) {
+            // スライダー領域（alphaY付近）はクールダウンなしでドラッグ可能
+            const cardEndY = 50 + 2 * (Math.floor((PANEL_W - 40) / 3 - 8) + 8);
+            const isSlider = hit.y >= cardEndY + 10 && hit.y < cardEndY + 60;
+            if (isSlider || panelTouchCooldown <= 0) {
+                handlePanelTouch(hit.x, hit.y);
+                if (!isSlider) panelTouchCooldown = 20;
+            }
             if (vrGrabs.right.active) { sb.endGrabVR(); vrGrabs.right.active = false; }
         }
         if (panelTouchCooldown > 0) panelTouchCooldown--;
@@ -3992,14 +4024,15 @@ function handlePanelTouch(canvasX, canvasY) {
             return true;
         }
     }
-    // Alpha スライダー領域
-    const alphaY = cardStartY + cardRows * (cardSize + cardGap) + 10;
-    if (canvasY >= alphaY && canvasY < alphaY + 40) {
-        const sliderX = Math.max(0, Math.min(1, (canvasX - 20) / (PANEL_W - 40)));
-        const alpha = 0.05 + sliderX * 0.95;
-        meshAlphaValues[0] = alpha;
-        if (typeof liverAlphaValue !== 'undefined') liverAlphaValue = alpha;
-        return true;
+    // Alpha スライダー領域（カード下からスライダーバーまで）
+    const cardEndY = cardStartY + cardRows * (cardSize + cardGap);
+    const alphaY = cardEndY + 10;
+    if (canvasY >= alphaY && canvasY < alphaY + 50) {
+        const sliderX = Math.max(0.05, Math.min(1, (canvasX - 20) / (PANEL_W - 40)));
+        meshAlphaValues[0] = sliderX;
+        if (typeof liverAlphaValue !== 'undefined') liverAlphaValue = sliderX;
+        if (typeof liverVisible !== 'undefined') liverVisible = true;
+        return true;  // クールダウンなしで連続操作可能にするため true 返す
     }
     return false;
 }
