@@ -3526,6 +3526,7 @@ const panelHW = 0.18, panelHH = 0.32;
 let panelTouchCooldown = 0;   // 連打防止
 let panelHoveredBtn = -1;     // ホバー中のボタンインデックス
 let panelBtnWorldPos = [];    // 各ボタンの3Dワールド座標
+let panelSliderDragging = false;  // スライダードラッグ中フラグ
 
 // パネル上のボタン定義（キャンバス座標での中心点）
 // drawPanelCanvas の描画位置と一致させる
@@ -4012,39 +4013,44 @@ function processHandTracking(frame, src, hand) {
 
     // === 右手: 3D距離でパネルボタン判定 ===
     if (hand === 'right' && panelBtnWorldPos.length > 0) {
-        // 指先と全ボタンの距離を計算、最近接を探す
-        let minDist = Infinity, minIdx = -1;
-        for (let i = 0; i < panelBtnWorldPos.length; i++) {
-            const b = panelBtnWorldPos[i];
-            const dx = ip.x - b.x, dy = ip.y - b.y, dz = ip.z - b.z;
-            const d = Math.sqrt(dx*dx + dy*dy + dz*dz);
-            if (d < minDist) { minDist = d; minIdx = i; }
-        }
-        // 0.15m以内ならホバー
-        panelHoveredBtn = (minDist < 0.15) ? minIdx : -1;
-
-        // ピンチでアクション実行
-        if (isPinching && panelHoveredBtn >= 0 && panelTouchCooldown <= 0) {
-            const btn = panelBtnWorldPos[panelHoveredBtn];
-            if (btn.action === 'vis') vrToggleOrgan(btn.idx);
-            panelTouchCooldown = 20;
-            if (vrGrabs.right.active) { sb.endGrabVR(); vrGrabs.right.active = false; }
-        }
-
-        // スライダー: ピンチ中に指先のパネル上X位置でAlpha調整
+        // スライダー判定（ピンチ中にパネル上のスライダー領域）
         if (isPinching && panelWorldCenter) {
             const hit = panelHitTest(ip.x, ip.y, ip.z);
             if (hit) {
-                const btns = getPanelButtons();
                 const cardCols = 3, cardGap = 12;
                 const cardSize = Math.floor((PANEL_W - 32 - cardGap*(cardCols-1)) / cardCols);
                 const cardEndY = 50 + 2 * (cardSize + cardGap);
                 if (hit.y >= cardEndY && hit.y < cardEndY + 60) {
+                    panelSliderDragging = true;
                     const sliderX = Math.max(0.05, Math.min(1, (hit.x - 20) / (PANEL_W - 40)));
                     meshAlphaValues[0] = sliderX;
                     if (typeof liverAlphaValue !== 'undefined') liverAlphaValue = sliderX;
                     if (typeof liverVisible !== 'undefined') liverVisible = true;
                 }
+            }
+        }
+        if (!isPinching) panelSliderDragging = false;
+
+        // スライダードラッグ中はボタンホバーを無効化
+        if (panelSliderDragging) {
+            panelHoveredBtn = -1;
+        } else {
+            // 指先と全ボタンの距離を計算、最近接を探す
+            let minDist = Infinity, minIdx = -1;
+            for (let i = 0; i < panelBtnWorldPos.length; i++) {
+                const b = panelBtnWorldPos[i];
+                const ddx = ip.x - b.x, ddy = ip.y - b.y, ddz = ip.z - b.z;
+                const d = Math.sqrt(ddx*ddx + ddy*ddy + ddz*ddz);
+                if (d < minDist) { minDist = d; minIdx = i; }
+            }
+            panelHoveredBtn = (minDist < 0.15) ? minIdx : -1;
+
+            // ピンチでアクション実行
+            if (isPinching && panelHoveredBtn >= 0 && panelTouchCooldown <= 0) {
+                const btn = panelBtnWorldPos[panelHoveredBtn];
+                if (btn.action === 'vis') vrToggleOrgan(btn.idx);
+                panelTouchCooldown = 20;
+                if (vrGrabs.right.active) { sb.endGrabVR(); vrGrabs.right.active = false; }
             }
         }
 
