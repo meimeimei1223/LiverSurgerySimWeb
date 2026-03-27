@@ -3515,11 +3515,11 @@ function drawTestCube(V, P, pose) {
     const ux = 2*(q.x*q.y-q.w*q.z),   uy = 1-2*(q.x*q.x+q.z*q.z), uz = 2*(q.y*q.z+q.w*q.x);
     const fx = 2*(q.x*q.z+q.w*q.y),   fy = 2*(q.y*q.z-q.w*q.x),   fz = 1-2*(q.x*q.x+q.y*q.y);
 
-    // パネル中心: 正面0.7m先、左0.3m
-    const dist = 0.7, left = 0.30;
-    const cx = p.x - fx*dist - rx*left;
-    const cy = p.y - fy*dist - ry*left;
-    const cz = p.z - fz*dist - rz*left;
+    // パネル中心: 正面0.7m先
+    const dist = 0.7;
+    const cx = p.x - fx*dist;
+    const cy = p.y - fy*dist;
+    const cz = p.z - fz*dist;
 
     // 板ポリの4角をビルボード（右/上ベクトルで展開）
     const hw = 0.18, hh = 0.32;
