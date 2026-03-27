@@ -4147,29 +4147,21 @@ function handlePanelTouch(canvasX, canvasY) {
     return false;
 }
 
-// 臓器の表示切替（直接 meshAlphaValues を操作）
-// Liver: ON(1.0) → 50%(0.5) → OFF(0.0) の3段階
-// 他: ON(1.0) → OFF(0.0) の2段階
+// 臓器の表示切替（デスクトップ版と同じ: organAlphaStates + onAlphaChanged に委譲）
+// index 0-4: 3段階 (OFF→50%→ON)、index 5: 2段階 (OFF→ON)
 function vrToggleOrgan(idx) {
-    if (typeof meshAlphaValues === 'undefined') return;
-    const cur = meshAlphaValues[idx];
-    let newVal;
-    if (idx === 0) {
-        // Liver: 3段階
-        if (cur >= 1.0) newVal = 0.5;
-        else if (cur > 0) newVal = 0.0;
-        else newVal = 1.0;
-        if (typeof liverVisible !== 'undefined') liverVisible = newVal > 0;
-        if (typeof liverAlphaValue !== 'undefined') liverAlphaValue = newVal;
-    } else {
-        // 他: 2段階
-        newVal = cur > 0 ? 0.0 : 1.0;
-        if (idx >= 1 && idx <= 4) {
-            const ci = idx - 1;
-            if (childBuffers[ci]) childBuffers[ci].visible = newVal > 0;
-        }
+    if (typeof organAlphaStates === 'undefined' || typeof ORGAN_NUM_STATES === 'undefined') return;
+    const numStates = ORGAN_NUM_STATES[idx];
+    organAlphaStates[idx] = (organAlphaStates[idx] + 1) % numStates;
+    if (typeof onAlphaChanged === 'function') onAlphaChanged(idx, organAlphaStates[idx]);
+    // デスクトップカードのスタイルも同期
+    const card = document.getElementById('organ-card-' + idx);
+    if (card) {
+        const s = organAlphaStates[idx];
+        card.className = `vis-card ${s===0?'state-off':s===1?'state-half':'state-on'}`;
+        const statusEl = card.querySelector('.vis-card-status');
+        if (statusEl) statusEl.textContent = numStates===2 ? (s===0?'OFF':'ON') : ['OFF','50%','ON'][s];
     }
-    meshAlphaValues[idx] = newVal;
 }
 
 // WebXR チェック（WASM不要、ブラウザ機能のみ）
