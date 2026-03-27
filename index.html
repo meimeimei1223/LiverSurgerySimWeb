@@ -3391,15 +3391,15 @@ function drawPanelCanvas() {
         c.arc(bx + cardSize/2, by + cardSize/2, hovered ? 8 : 5, 0, Math.PI*2);
         c.fillStyle = hovered ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.2)';
         c.fill();
-        // 名前 + 状態
+        // 名前 + 状態（大きく表示）
         const stateText = alpha >= 1 ? 'ON' : alpha > 0 ? Math.round(alpha*100)+'%' : 'OFF';
         c.fillStyle = on ? '#fff' : '#555';
-        c.font = 'bold 12px Arial';
+        c.font = 'bold 16px Arial';
         c.textAlign = 'center';
-        c.fillText(o.name, bx + cardSize/2, by + cardSize - 16);
-        c.fillStyle = on ? '#4dc0e6' : '#333';
-        c.font = '11px Arial';
-        c.fillText(stateText, bx + cardSize/2, by + cardSize - 4);
+        c.fillText(o.name, bx + cardSize/2, by + cardSize - 22);
+        c.fillStyle = on ? '#4dc0e6' : '#444';
+        c.font = 'bold 15px Arial';
+        c.fillText(stateText, bx + cardSize/2, by + cardSize - 5);
         c.textAlign = 'left';
     }
     y = cardStartY + 2 * (cardSize + cardGap) + 8;
@@ -4013,7 +4013,7 @@ function processHandTracking(frame, src, hand) {
     // ピンチ距離
     const pdx = ip.x - tp.x, pdy = ip.y - tp.y, pdz = ip.z - tp.z;
     const pinchDist = Math.sqrt(pdx * pdx + pdy * pdy + pdz * pdz);
-    const isPinching = pinchDist < 0.025;
+    const isPinching = pinchDist < 0.015;  // 1.5cm
 
     // ピンチ中心点
     const midX = (ip.x + tp.x) / 2;
