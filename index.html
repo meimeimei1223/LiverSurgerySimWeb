@@ -3193,6 +3193,8 @@ function onXREnd() {
     vrGrabs.left.active = false;
     vrGrabs.right.active = false;
     vrLeftPrev = null;
+    panelFixed = false;
+    panelWorldCenter = null;
     if (sb) sb.endGrabVR();
 
     // UI 復帰（VR→通常）
@@ -3507,6 +3509,7 @@ const PANEL_UV = new Float32Array([
 let panelWorldCenter = null;  // [x,y,z]
 let panelWorldRight = null;   // [rx,ry,rz]
 let panelWorldUp = null;      // [ux,uy,uz]
+let panelFixed = false;       // true: 位置固定済み
 const panelHW = 0.18, panelHH = 0.32;
 let panelTouchCooldown = 0;   // 連打防止
 
@@ -3522,28 +3525,28 @@ function drawTestCube(V, P, pose) {
     const ux = 2*(q.x*q.y-q.w*q.z),   uy = 1-2*(q.x*q.x+q.z*q.z), uz = 2*(q.y*q.z+q.w*q.x);
     const fx = 2*(q.x*q.z+q.w*q.y),   fy = 2*(q.y*q.z-q.w*q.x),   fz = 1-2*(q.x*q.x+q.y*q.y);
 
-    // パネル中心: 正面0.7m先
-    const dist = 0.7;
-    const cx = p.x - fx*dist;
-    const cy = p.y - fy*dist;
-    const cz = p.z - fz*dist;
+    // 初回のみ位置を計算し、以降は固定
+    if (!panelFixed) {
+        const dist = 0.7;
+        panelWorldCenter = [p.x - fx*dist, p.y - fy*dist, p.z - fz*dist];
+        panelWorldRight = [rx, ry, rz];
+        panelWorldUp = [ux, uy, uz];
+        panelFixed = true;
+    }
+    const cx = panelWorldCenter[0], cy = panelWorldCenter[1], cz = panelWorldCenter[2];
+    // 固定されたright/upを使う
+    const prx = panelWorldRight[0], pry = panelWorldRight[1], prz = panelWorldRight[2];
+    const pux = panelWorldUp[0], puy = panelWorldUp[1], puz = panelWorldUp[2];
 
-    // タッチ判定用にパネル空間情報を保存
-    panelWorldCenter = [cx, cy, cz];
-    panelWorldRight = [rx, ry, rz];
-    panelWorldUp = [ux, uy, uz];
-
-    // 板ポリの4角をビルボード（右/上ベクトルで展開）
-    const hw = 0.18, hh = 0.32;
+    // 板ポリの4角（固定パネルの right/up で展開）
+    const hw = panelHW, hh = panelHH;
     const v = [
-        // 三角形1: 左上→右上→右下
-        cx-rx*hw+ux*hh, cy-ry*hw+uy*hh, cz-rz*hw+uz*hh,
-        cx+rx*hw+ux*hh, cy+ry*hw+uy*hh, cz+rz*hw+uz*hh,
-        cx+rx*hw-ux*hh, cy+ry*hw-uy*hh, cz+rz*hw-uz*hh,
-        // 三角形2: 左上→右下→左下
-        cx-rx*hw+ux*hh, cy-ry*hw+uy*hh, cz-rz*hw+uz*hh,
-        cx+rx*hw-ux*hh, cy+ry*hw-uy*hh, cz+rz*hw-uz*hh,
-        cx-rx*hw-ux*hh, cy-ry*hw-uy*hh, cz-rz*hw-uz*hh,
+        cx-prx*hw+pux*hh, cy-pry*hw+puy*hh, cz-prz*hw+puz*hh,
+        cx+prx*hw+pux*hh, cy+pry*hw+puy*hh, cz+prz*hw+puz*hh,
+        cx+prx*hw-pux*hh, cy+pry*hw-puy*hh, cz+prz*hw-puz*hh,
+        cx-prx*hw+pux*hh, cy-pry*hw+puy*hh, cz-prz*hw+puz*hh,
+        cx+prx*hw-pux*hh, cy+pry*hw-puy*hh, cz+prz*hw-puz*hh,
+        cx-prx*hw-pux*hh, cy-pry*hw-puy*hh, cz-prz*hw-puz*hh,
     ];
 
     if (!bTestCube) bTestCube = gl.createBuffer();
@@ -3927,20 +3930,20 @@ function processHandTracking(frame, src, hand) {
             vrGrabs.right.active = false;
         }
     } else {
-        // === 左手: パネルタッチ or モデル移動/回転 ===
-        // 人差し指先端でパネルタッチ判定
+        // === 左手: モデル移動/回転 ===
+        processLeftHandTransform(isPinching,
+            { x: midX, y: midY, z: midZ },
+            { x: wo.x, y: wo.y, z: wo.z, w: wo.w });
+    }
+
+    // === 右手でパネルタッチ判定（グラブより優先）===
+    if (hand === 'right') {
         const hit = panelHitTest(ip.x, ip.y, ip.z);
-        if (hit && isPinching) {
-            if (panelTouchCooldown <= 0) {
-                handlePanelTouch(hit.x, hit.y);
-                panelTouchCooldown = 20;  // 20フレーム（約0.28秒）のクールダウン
-            }
-            // パネルタッチ中はTransformしない
-        } else {
-            // パネル外ならTransform
-            processLeftHandTransform(isPinching,
-                { x: midX, y: midY, z: midZ },
-                { x: wo.x, y: wo.y, z: wo.z, w: wo.w });
+        if (hit && isPinching && panelTouchCooldown <= 0) {
+            handlePanelTouch(hit.x, hit.y);
+            panelTouchCooldown = 20;
+            // パネルタッチ時はグラブを終了
+            if (vrGrabs.right.active) { sb.endGrabVR(); vrGrabs.right.active = false; }
         }
         if (panelTouchCooldown > 0) panelTouchCooldown--;
     }
