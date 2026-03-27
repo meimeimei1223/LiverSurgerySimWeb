@@ -3318,19 +3318,129 @@ function initPanelGL() {
 }
 
 function drawPanelCanvas() {
-    if (!panelCtx) return;
-    // デバッグ: 真っ赤にして確実に見えるようにする
-    panelCtx.fillStyle = '#ff0000';
-    panelCtx.fillRect(0, 0, PANEL_W, PANEL_H);
-    panelCtx.fillStyle = '#ffffff';
-    panelCtx.font = 'bold 48px Arial';
-    panelCtx.textAlign = 'center';
-    panelCtx.fillText('VR PANEL TEST', PANEL_W / 2, PANEL_H / 2);
+    if (!panelCtx || !panelTex) return;
+    const c = panelCtx;
+    const W = PANEL_W, H = PANEL_H;
 
-    // Canvas→テクスチャ転送
+    // 背景
+    c.fillStyle = 'rgba(10, 16, 30, 0.95)';
+    c.fillRect(0, 0, W, H);
+
+    // 枠
+    c.strokeStyle = 'rgba(77, 192, 230, 0.6)';
+    c.lineWidth = 3;
+    c.strokeRect(3, 3, W - 6, H - 6);
+
+    let y = 40;
+
+    // VISIBILITY
+    c.fillStyle = '#4a8ccc';
+    c.font = 'bold 20px Arial';
+    c.textAlign = 'left';
+    c.fillText('VISIBILITY', 20, y); y += 30;
+
+    const organs = [
+        { name:'Liver',   color:'#e04040', idx:0 },
+        { name:'Portal',  color:'#cc44cc', idx:1 },
+        { name:'H.Vein',  color:'#4488ff', idx:2 },
+        { name:'Tumor',   color:'#ddaa22', idx:3 },
+        { name:'Gallbldr',color:'#44bb88', idx:4 },
+        { name:'Sphere',  color:'#aaaaaa', idx:5 },
+    ];
+    for (let i = 0; i < organs.length; i++) {
+        const o = organs[i];
+        const col = i % 2, row = Math.floor(i / 2);
+        const bx = 20 + col * (W/2 - 10), by = y + row * 38;
+        const alpha = (typeof meshAlphaValues !== 'undefined') ? meshAlphaValues[o.idx] : 1;
+        const on = alpha > 0;
+        c.fillStyle = on ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.02)';
+        c.fillRect(bx, by, W/2 - 30, 32);
+        c.fillStyle = o.color;
+        c.beginPath(); c.arc(bx + 14, by + 16, 5, 0, Math.PI*2); c.fill();
+        c.fillStyle = on ? '#ddd' : '#555';
+        c.font = '16px Arial';
+        c.fillText(o.name, bx + 28, by + 22);
+        c.fillStyle = on ? '#4dc0e6' : '#333';
+        c.font = '12px Arial';
+        c.textAlign = 'right';
+        c.fillText(on ? 'ON' : 'OFF', bx + W/2 - 36, by + 22);
+        c.textAlign = 'left';
+    }
+    y += 120;
+
+    // DISPLAY
+    c.fillStyle = '#4a8ccc';
+    c.font = 'bold 20px Arial';
+    c.fillText('DISPLAY', 20, y); y += 30;
+    const modes = ['Normal', 'Auto Seg', 'Preset'];
+    const curMode = typeof segmentColorMode !== 'undefined' ? segmentColorMode : false;
+    for (let i = 0; i < 3; i++) {
+        const bx = 20 + i * (W/3 - 4);
+        const active = (i===0 && !curMode) || (i===1 && curMode==='skeleton') || (i===2 && curMode==='obj');
+        c.fillStyle = active ? 'rgba(29,158,117,0.3)' : 'rgba(255,255,255,0.05)';
+        c.fillRect(bx, y, W/3 - 16, 32);
+        c.strokeStyle = active ? '#1d9e75' : 'rgba(255,255,255,0.1)';
+        c.strokeRect(bx, y, W/3 - 16, 32);
+        c.fillStyle = active ? '#5dcaa5' : '#666';
+        c.font = '14px Arial';
+        c.textAlign = 'center';
+        c.fillText(modes[i], bx + (W/3 - 16)/2, y + 22);
+    }
+    c.textAlign = 'left';
+    y += 50;
+
+    // ACTION
+    c.fillStyle = '#4a8ccc';
+    c.font = 'bold 20px Arial';
+    c.fillText('ACTION', 20, y); y += 30;
+    const actions = [
+        { name:'Deform',    icon:'🎯', mode:'deform' },
+        { name:'Free Cut',  icon:'✂',  mode:'freeCut' },
+        { name:'Seg Cut',   icon:'⬡',  mode:'segCut' },
+        { name:'Transform', icon:'⟳',  mode:'transform' },
+    ];
+    const curAction = typeof actionMode !== 'undefined' ? actionMode : 'none';
+    for (const a of actions) {
+        const active = curAction === a.mode;
+        c.fillStyle = active ? 'rgba(77,192,230,0.12)' : 'rgba(255,255,255,0.03)';
+        c.fillRect(20, y, W - 40, 40);
+        c.strokeStyle = active ? 'rgba(77,192,230,0.5)' : 'rgba(255,255,255,0.08)';
+        c.strokeRect(20, y, W - 40, 40);
+        c.fillStyle = active ? '#4dc0e6' : '#888';
+        c.font = '18px Arial';
+        c.fillText(a.icon + '  ' + a.name, 35, y + 28);
+        y += 48;
+    }
+
+    // VOLUME
+    y += 10;
+    c.fillStyle = '#4a8ccc';
+    c.font = 'bold 20px Arial';
+    c.fillText('VOLUME', 20, y); y += 30;
+    if (sb && typeof sb.areVolumesCaptured === 'function' && sb.areVolumesCaptured()) {
+        const total = sb.getOriginalTotalVolume();
+        const current = sb.calculateTotalVolume();
+        const pct = total > 0 ? (current / total * 100) : 0;
+        c.fillStyle = '#7dff7d';
+        c.font = 'bold 28px Arial';
+        c.fillText(current.toFixed(1) + ' ml', 20, y + 5);
+        c.fillStyle = '#4dc0e6';
+        c.font = '18px Arial';
+        c.fillText(pct.toFixed(1) + '%', W - 80, y + 5);
+        y += 20;
+        c.fillStyle = 'rgba(255,255,255,0.08)';
+        c.fillRect(20, y, W - 40, 8);
+        c.fillStyle = '#1d9e75';
+        c.fillRect(20, y, (W - 40) * pct / 100, 8);
+    } else {
+        c.fillStyle = '#555';
+        c.font = '16px Arial';
+        c.fillText('-- ml  --%', 20, y + 5);
+    }
+
+    // テクスチャ転送
     gl.bindTexture(gl.TEXTURE_2D, panelTex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, panelCanvas);
-    console.log('[Panel] texture uploaded', PANEL_W, 'x', PANEL_H);
 }
 
 function drawPanel(M, V, P) {
@@ -3384,8 +3494,14 @@ function makePanelMatrix(pose) {
     ]);
 }
 
-// パネル板ポリ（頭追従ビルボード）
+// パネル板ポリ（頭追従ビルボード + Canvas→テクスチャ）
 let bTestCube = null;
+let bPanelUV = null;
+const PANEL_UV = new Float32Array([
+    0,0, 1,0, 1,1,   // 三角形1: 左上→右上→右下
+    0,0, 1,1, 0,1,   // 三角形2: 左上→右下→左下
+]);
+
 function drawTestCube(V, P, pose) {
     if (!pose) return;
 
@@ -3418,38 +3534,65 @@ function drawTestCube(V, P, pose) {
     ];
 
     if (!bTestCube) bTestCube = gl.createBuffer();
+    if (!bPanelUV) {
+        bPanelUV = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, bPanelUV);
+        gl.bufferData(gl.ARRAY_BUFFER, PANEL_UV, gl.STATIC_DRAW);
+    }
+
+    // 位置バッファ更新
     gl.bindBuffer(gl.ARRAY_BUFFER, bTestCube);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.DYNAMIC_DRAW);
 
-    gl.useProgram(pWire);
+    // Canvas→テクスチャ描画（毎フレーム）
+    drawPanelCanvas();
+
+    const I = new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
     gl.disable(gl.DEPTH_TEST);
     gl.disable(gl.CULL_FACE);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    const I = new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
-    gl.uniformMatrix4fv(LW.uM, false, I);
-    gl.uniformMatrix4fv(LW.uV, false, V);
-    gl.uniformMatrix4fv(LW.uP, false, P);
-    gl.uniform4f(LW.uCol, 0.04, 0.07, 0.18, 0.92);
 
-    gl.enableVertexAttribArray(LW.aPos);
-    gl.vertexAttribPointer(LW.aPos, 3, gl.FLOAT, false, 0, 0);
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    if (pPanel && panelTex) {
+        // テクスチャ付き描画
+        gl.useProgram(pPanel);
+        gl.uniformMatrix4fv(LPanel.uM, false, I);
+        gl.uniformMatrix4fv(LPanel.uV, false, V);
+        gl.uniformMatrix4fv(LPanel.uP, false, P);
+        gl.uniform1f(LPanel.uAlpha, 1.0);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, panelTex);
+        gl.uniform1i(LPanel.uTex, 0);
 
-    // 枠線（ビルボード座標）
-    const tl=[cx-rx*hw+ux*hh,cy-ry*hw+uy*hh,cz-rz*hw+uz*hh];
-    const tr=[cx+rx*hw+ux*hh,cy+ry*hw+uy*hh,cz+rz*hw+uz*hh];
-    const br=[cx+rx*hw-ux*hh,cy+ry*hw-uy*hh,cz+rz*hw-uz*hh];
-    const bl=[cx-rx*hw-ux*hh,cy-ry*hw-uy*hh,cz-rz*hw-uz*hh];
-    const border = [...tl,...tr, ...tr,...br, ...br,...bl, ...bl,...tl];
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(border), gl.DYNAMIC_DRAW);
-    gl.uniform4f(LW.uCol, 0.3, 0.75, 0.9, 1.0);
-    gl.drawArrays(gl.LINES, 0, 8);
+        // aPos = location 0（位置バッファ）
+        gl.bindBuffer(gl.ARRAY_BUFFER, bTestCube);
+        gl.enableVertexAttribArray(0);
+        gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+        // aUV = location 1（UVバッファ）
+        gl.bindBuffer(gl.ARRAY_BUFFER, bPanelUV);
+        gl.enableVertexAttribArray(1);
+        gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
+
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+        gl.disableVertexAttribArray(0);
+        gl.disableVertexAttribArray(1);
+    } else {
+        // フォールバック: pWire 単色
+        gl.useProgram(pWire);
+        gl.uniformMatrix4fv(LW.uM, false, I);
+        gl.uniformMatrix4fv(LW.uV, false, V);
+        gl.uniformMatrix4fv(LW.uP, false, P);
+        gl.uniform4f(LW.uCol, 0.04, 0.07, 0.18, 0.92);
+        gl.bindBuffer(gl.ARRAY_BUFFER, bTestCube);
+        gl.enableVertexAttribArray(LW.aPos);
+        gl.vertexAttribPointer(LW.aPos, 3, gl.FLOAT, false, 0, 0);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+        gl.disableVertexAttribArray(LW.aPos);
+    }
 
     gl.enable(gl.DEPTH_TEST);
     gl.enable(gl.CULL_FACE);
     gl.disable(gl.BLEND);
-    gl.disableVertexAttribArray(LW.aPos);
 }
 
 function drawVRHands(V, P) {
