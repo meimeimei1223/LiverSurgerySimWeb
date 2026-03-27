@@ -3260,9 +3260,8 @@ function renderXR(time, frame) {
         // ハンドジョイント描画
         drawVRHands(V, P);
 
-        // Canvas→テクスチャ パネル描画
-        const panelM = makePanelMatrix(pose);
-        drawPanel(panelM, V, P);
+        // デバッグ: 肝臓と同じモデル行列Mでパネル描画（これで見えなければバッファが問題）
+        drawPanel(M, V, P);
     }
 
     // VR パネルのボリューム自動更新
