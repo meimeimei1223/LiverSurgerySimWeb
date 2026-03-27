@@ -3503,6 +3503,13 @@ const PANEL_UV = new Float32Array([
     0,0, 1,1, 0,1,   // 三角形2: 左上→右下→左下
 ]);
 
+// パネル空間情報（タッチ判定用）
+let panelWorldCenter = null;  // [x,y,z]
+let panelWorldRight = null;   // [rx,ry,rz]
+let panelWorldUp = null;      // [ux,uy,uz]
+const panelHW = 0.18, panelHH = 0.32;
+let panelTouchCooldown = 0;   // 連打防止
+
 function drawTestCube(V, P, pose) {
     if (!pose) return;
 
@@ -3520,6 +3527,11 @@ function drawTestCube(V, P, pose) {
     const cx = p.x - fx*dist;
     const cy = p.y - fy*dist;
     const cz = p.z - fz*dist;
+
+    // タッチ判定用にパネル空間情報を保存
+    panelWorldCenter = [cx, cy, cz];
+    panelWorldRight = [rx, ry, rz];
+    panelWorldUp = [ux, uy, uz];
 
     // 板ポリの4角をビルボード（右/上ベクトルで展開）
     const hw = 0.18, hh = 0.32;
@@ -3915,11 +3927,67 @@ function processHandTracking(frame, src, hand) {
             vrGrabs.right.active = false;
         }
     } else {
-        // === 左手: モデル移動/回転 ===
-        processLeftHandTransform(isPinching,
-            { x: midX, y: midY, z: midZ },
-            { x: wo.x, y: wo.y, z: wo.z, w: wo.w });
+        // === 左手: パネルタッチ or モデル移動/回転 ===
+        // 人差し指先端でパネルタッチ判定
+        const hit = panelHitTest(ip.x, ip.y, ip.z);
+        if (hit && isPinching) {
+            if (panelTouchCooldown <= 0) {
+                handlePanelTouch(hit.x, hit.y);
+                panelTouchCooldown = 20;  // 20フレーム（約0.28秒）のクールダウン
+            }
+            // パネルタッチ中はTransformしない
+        } else {
+            // パネル外ならTransform
+            processLeftHandTransform(isPinching,
+                { x: midX, y: midY, z: midZ },
+                { x: wo.x, y: wo.y, z: wo.z, w: wo.w });
+        }
+        if (panelTouchCooldown > 0) panelTouchCooldown--;
     }
+}
+
+// パネルタッチ判定: 指先位置 → パネル上のキャンバス座標を返す
+function panelHitTest(fingerX, fingerY, fingerZ) {
+    if (!panelWorldCenter || !panelWorldRight || !panelWorldUp) return null;
+    const dx = fingerX - panelWorldCenter[0];
+    const dy = fingerY - panelWorldCenter[1];
+    const dz = fingerZ - panelWorldCenter[2];
+    // パネルローカル座標に射影
+    const localX = dx * panelWorldRight[0] + dy * panelWorldRight[1] + dz * panelWorldRight[2];
+    const localY = dx * panelWorldUp[0] + dy * panelWorldUp[1] + dz * panelWorldUp[2];
+    // パネル法線方向の距離
+    const fw = panelWorldCenter; // forward vector not stored, compute from cross
+    const nx = panelWorldRight[1]*panelWorldUp[2] - panelWorldRight[2]*panelWorldUp[1];
+    const ny = panelWorldRight[2]*panelWorldUp[0] - panelWorldRight[0]*panelWorldUp[2];
+    const nz = panelWorldRight[0]*panelWorldUp[1] - panelWorldRight[1]*panelWorldUp[0];
+    const depth = Math.abs(dx*nx + dy*ny + dz*nz);
+    // パネル範囲内か？ (深さ3cm以内)
+    if (depth > 0.03) return null;
+    if (Math.abs(localX) > panelHW || Math.abs(localY) > panelHH) return null;
+    // キャンバス座標に変換 (0,0)=左上
+    const canvasX = ((localX / panelHW) + 1) / 2 * PANEL_W;
+    const canvasY = (1 - (localY / panelHH + 1) / 2) * PANEL_H;
+    return { x: canvasX, y: canvasY, depth: depth };
+}
+
+// パネルタッチで何を実行するか判定
+function handlePanelTouch(canvasX, canvasY) {
+    // VISIBILITY カード領域 (drawPanelCanvas の座標に合わせる)
+    // y=70 から 3行×38px、2列
+    const cardStartY = 70;
+    const cardH = 38, cardRows = 3;
+    if (canvasY >= cardStartY && canvasY < cardStartY + cardRows * cardH) {
+        const row = Math.floor((canvasY - cardStartY) / cardH);
+        const col = canvasX < PANEL_W / 2 ? 0 : 1;
+        const organIdx = row * 2 + col;
+        if (organIdx >= 0 && organIdx < 6) {
+            // デスクトップ側のカードクリックと同期
+            const card = document.getElementById('organ-card-' + organIdx);
+            if (card) card.click();
+            return true;
+        }
+    }
+    return false;
 }
 
 // WebXR チェック（WASM不要、ブラウザ機能のみ）
