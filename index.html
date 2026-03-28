@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v34</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v35</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -3472,17 +3472,24 @@ function drawPanelCanvas() {
         c.fillText(expanded ? '▼' : '▶', W - 24, y + 32);
         c.textAlign = 'left';
         y += 58;
-        // サブボタン（展開時のみ描画、タッチは未実装）
+        // サブボタン（展開時のみ描画）
         if (expanded && a.sub.length > 0) {
-            for (const s of a.sub) {
-                c.fillStyle = 'rgba(255,255,255,0.04)';
+            const subKeys = ai===0 ? ['place','deform','undoHandle','clearAll'] : [];
+            for (let si = 0; si < a.sub.length; si++) {
+                const subHovered = panelHoveredBtn >= 0 && panelBtnWorldPos[panelHoveredBtn]
+                    && panelBtnWorldPos[panelHoveredBtn].action === 'sub'
+                    && panelBtnWorldPos[panelHoveredBtn].idx === si;
+                const subActive = (subKeys[si] === 'place' && vrDeformSub === 'place')
+                    || (subKeys[si] === 'deform' && vrDeformSub === 'deform');
+                c.fillStyle = subActive ? 'rgba(143,69,173,0.25)' :
+                              subHovered ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.04)';
                 c.fillRect(30, y, W - 60, 30);
-                c.strokeStyle = 'rgba(255,255,255,0.08)';
-                c.lineWidth = 1;
+                c.strokeStyle = subHovered ? '#fff' : subActive ? '#8f45ad' : 'rgba(255,255,255,0.08)';
+                c.lineWidth = subHovered ? 3 : subActive ? 2 : 1;
                 c.strokeRect(30, y, W - 60, 30);
-                c.fillStyle = '#aaa';
-                c.font = '14px Arial';
-                c.fillText(s, 44, y + 20);
+                c.fillStyle = subActive ? '#c080e0' : subHovered ? '#fff' : '#aaa';
+                c.font = subActive ? 'bold 14px Arial' : '14px Arial';
+                c.fillText(a.sub[si], 44, y + 20);
                 y += 34;
             }
         }
@@ -3647,6 +3654,7 @@ let panelIcons = {};  // アイコン Image オブジェクト
 
 // パネルのレイアウト定数を計算
 let vrActiveAction = null;  // 展開中のACTION ('deform','freecut','segcut','transform' or null)
+let vrDeformSub = 'none';  // 'none'|'place'|'deform' — VR版 Deform サブモード
 
 function getPanelLayout() {
     const cardCols = 3, cardGap = 12;
@@ -3670,14 +3678,27 @@ function getPanelButtons() {
         btns.push({ cx, cy, action: 'vis', idx: i });
     }
     // スライダーは3D競合から除外（別ロジックで処理）
-    // ACTION ボタン（4個、50px高 + 58px間隔）
-    const actions = ['deform', 'freecut', 'segcut', 'transform'];
-    for (let i = 0; i < actions.length; i++) {
-        const cy = L.actionStartY + 28 + i * 58 + 25;
-        btns.push({ cx: PANEL_W / 2, cy, action: 'action', idx: i, mode: actions[i] });
+    // ACTION ボタン + サブボタン（展開状態に応じて動的）
+    const actionDefs = [
+        { mode:'deform',    subs:['place','deform','undoHandle','clearAll'] },
+        { mode:'freecut',   subs:[] },
+        { mode:'segcut',    subs:[] },
+        { mode:'transform', subs:[] },
+    ];
+    let ay = L.actionStartY + 28;
+    for (let i = 0; i < actionDefs.length; i++) {
+        btns.push({ cx: PANEL_W / 2, cy: ay + 25, action: 'action', idx: i, mode: actionDefs[i].mode });
+        ay += 58;
+        // サブボタン（展開時のみ）
+        if (vrActiveAction === actionDefs[i].mode && actionDefs[i].subs.length > 0) {
+            for (let si = 0; si < actionDefs[i].subs.length; si++) {
+                btns.push({ cx: PANEL_W / 2, cy: ay + 15, action: 'sub', mode: actionDefs[i].subs[si], idx: si });
+                ay += 34;
+            }
+        }
     }
-    // Reset / Exit（ACTION下 + VOLUME + 余白）
-    const bottomY = L.actionStartY + 28 + 4 * 58 + 100;
+    // Reset / Exit
+    const bottomY = ay + 80;
     btns.push({ cx: PANEL_W / 4, cy: bottomY, action: 'reset', idx: -1 });
     btns.push({ cx: PANEL_W * 3 / 4, cy: bottomY, action: 'exit', idx: -1 });
     return btns;
@@ -4125,11 +4146,19 @@ function processHandTracking(frame, src, hand) {
     const wo = wristPose.transform.orientation;
 
     if (hand === 'right') {
-        // === 右手: メッシュグラブ ===
+        // === 右手: Handle Place モードなら球体配置、それ以外はグラブ ===
         const rayDx = midX - wp.x, rayDy = midY - wp.y, rayDz = midZ - wp.z;
         const rayLen = Math.sqrt(rayDx*rayDx + rayDy*rayDy + rayDz*rayDz) || 1;
 
-        if (isPinching && !vrGrabs.right.active) {
+        if (isPinching && !vrGrabs.right.active && vrDeformSub === 'place') {
+            // Handle Place: ピンチでハンドル球配置
+            if (panelPinchReleased) {
+                const simO = vrToSim(midX, midY, midZ);
+                const simD = [rayDx/rayLen/VR_SCALE, rayDy/rayLen/VR_SCALE, rayDz/rayLen/VR_SCALE];
+                sb.addHandleSphereVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2], 0.5);
+                panelPinchReleased = false;
+            }
+        } else if (isPinching && !vrGrabs.right.active) {
             const simO = vrToSim(midX, midY, midZ);
             const simD = [rayDx/rayLen/VR_SCALE, rayDy/rayLen/VR_SCALE, rayDz/rayLen/VR_SCALE];
             sb.startGrabVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2]);
@@ -4204,6 +4233,22 @@ function processHandTracking(frame, src, hand) {
                     const modeMap = { deform:'deform', freecut:'freeCut', segcut:'segCut', transform:'transform' };
                     if (typeof setActionMode === 'function')
                         setActionMode(vrActiveAction ? modeMap[vrActiveAction] : 'none');
+                } else if (nearest.action === 'sub') {
+                    // Deform サブボタン
+                    if (nearest.mode === 'place') {
+                        vrDeformSub = (vrDeformSub === 'place') ? 'none' : 'place';
+                        handleMode = (vrDeformSub === 'place');
+                        deformSub = vrDeformSub;
+                    } else if (nearest.mode === 'deform') {
+                        vrDeformSub = (vrDeformSub === 'deform') ? 'none' : 'deform';
+                        handleMode = false;
+                        deformSub = vrDeformSub;
+                    } else if (nearest.mode === 'undoHandle') {
+                        if (sb && sb.getNumHandleSpheres() > 0) sb.removeLastHandleSphere();
+                    } else if (nearest.mode === 'clearAll') {
+                        if (sb) sb.clearHandleSpheres();
+                        vrDeformSub = 'none'; handleMode = false; deformSub = 'none';
+                    }
                 } else if (nearest.action === 'reset') {
                     document.getElementById('reset-popup').style.display = 'block';
                 } else if (nearest.action === 'exit') {
