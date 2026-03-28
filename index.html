@@ -3919,52 +3919,64 @@ function drawVRHands(V, P) {
     gl.disable(gl.BLEND);
 }
 
-// VR用ハンドル球描画（pWire + drawArrays、GL状態を汚染しない）
-let bVRHandlePts = null;
-function drawHandleSpheresVR(M, V, P) {
+// VR用ハンドル球描画（3D球体メッシュ、ライティング付き、GL状態クリーンアップ）
+function drawHandleSpheresVR(M, V, P, cp) {
     const data = sb.getHandleSphereData();
     if (!data || data.length === 0) return;
-    const I = new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
+    initSphereBuffers();
+    if (!bSphereVBO || numSphereIdx === 0) return;
 
-    // 各ハンドルの位置をVR空間に変換してポイント描画
-    const numSpheres = data.length / 4;
-    const pts = new Float32Array(numSpheres * 3);
-    for (let i = 0; i < numSpheres; i++) {
-        // シミュレーション座標 → VR空間（Mで変換）
-        const sx = data[i*4], sy = data[i*4+1], sz = data[i*4+2];
-        pts[i*3]   = M[0]*sx + M[4]*sy + M[8]*sz  + M[12];
-        pts[i*3+1] = M[1]*sx + M[5]*sy + M[9]*sz  + M[13];
-        pts[i*3+2] = M[2]*sx + M[6]*sy + M[10]*sz + M[14];
-    }
+    const alpha = (typeof meshAlphaValues !== 'undefined') ? meshAlphaValues[5] : 1;
+    if (alpha <= 0) return;
 
-    if (!bVRHandlePts) bVRHandlePts = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, bVRHandlePts);
-    gl.bufferData(gl.ARRAY_BUFFER, pts, gl.DYNAMIC_DRAW);
-
-    // ポイントシェーダーで大きな色付き丸を描画
-    gl.useProgram(pPoint);
-    gl.uniformMatrix4fv(LPt.uV, false, V);
-    gl.uniformMatrix4fv(LPt.uP, false, P);
-    gl.uniform1f(LPt.uSize, 120.0);  // ブラウザ版の球体に近い大きさ
+    // 前シェーダーの attribute をクリア
+    for (let i = 0; i < 4; i++) gl.disableVertexAttribArray(i);
 
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-    gl.enableVertexAttribArray(LPt.aPos);
-    gl.vertexAttribPointer(LPt.aPos, 3, gl.FLOAT, false, 0, 0);
+    gl.useProgram(pMain);
+    gl.uniformMatrix4fv(L.uV, false, V);
+    gl.uniformMatrix4fv(L.uP, false, P);
+    gl.uniform3fv(L.uLP, cp);
+    gl.uniform3fv(L.uVP, cp);
+    gl.uniform1f(L.uAlpha, alpha * 0.7);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, bSphereVBO);
+    gl.enableVertexAttribArray(L.aPos);
+    gl.vertexAttribPointer(L.aPos, 3, gl.FLOAT, false, 24, 0);
+    gl.enableVertexAttribArray(L.aNrm);
+    gl.vertexAttribPointer(L.aNrm, 3, gl.FLOAT, false, 24, 12);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bSphereIBO);
 
     const COLORS = [
-        [0.56,0.27,0.68,1], [0.91,0.30,0.24,1], [0.20,0.60,0.86,1],
-        [0.95,0.61,0.07,1], [0.13,0.77,0.37,1], [0.85,0.25,0.60,1],
+        [0.56,0.27,0.68], [0.91,0.30,0.24], [0.20,0.60,0.86],
+        [0.95,0.61,0.07], [0.13,0.77,0.37], [0.85,0.25,0.60],
     ];
-    for (let i = 0; i < numSpheres; i++) {
-        const c = COLORS[i % COLORS.length];
-        gl.uniform4f(LPt.uCol, c[0], c[1], c[2], c[3]);
-        gl.drawArrays(gl.POINTS, i, 1);
+    const S = VR_SCALE;
+    for (let i = 0; i < data.length; i += 4) {
+        const cx = data[i], cy = data[i+1], cz = data[i+2], r = data[i+3];
+        const rs = r * S;
+        // VR空間でのモデル行列: scale(r*VR_SCALE) + translate(sim→VR)
+        const sm = new Float32Array([
+            rs, 0, 0, 0,
+            0, rs, 0, 0,
+            0, 0, rs, 0,
+            cx*S + VR_OFFSET.x, cy*S + VR_OFFSET.y, cz*S + VR_OFFSET.z, 1
+        ]);
+        gl.uniformMatrix4fv(L.uM, false, sm);
+        const c = COLORS[(i/4) % COLORS.length];
+        gl.uniform4f(L.uCol, c[0], c[1], c[2], 1.0);
+        gl.drawElements(gl.TRIANGLES, numSphereIdx,
+            extUint ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);
     }
 
     gl.disable(gl.BLEND);
-    gl.disableVertexAttribArray(LPt.aPos);
+    // GL状態クリーンアップ（次の描画を壊さない）
+    gl.disableVertexAttribArray(L.aPos);
+    gl.disableVertexAttribArray(L.aNrm);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
 }
 
 function drawSceneXR(M, V, P, cp) {
@@ -4060,9 +4072,9 @@ function drawSceneXR(M, V, P, cp) {
         gl.disableVertexAttribArray(LW.aPos);
     }
 
-    // ハンドル球描画（VR空間 — pPoint で安全に描画）
+    // ハンドル球描画（VR空間 — 3D球体メッシュ）
     if (sb.getNumHandleSpheres() > 0) {
-        drawHandleSpheresVR(M, V, P);
+        drawHandleSpheresVR(M, V, P, cp);
     }
 }
 
