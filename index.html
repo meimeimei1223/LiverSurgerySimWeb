@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v38</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v39</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -3524,6 +3524,20 @@ function drawPanelCanvas() {
     }
     y += 30;
 
+    // ===== Wireframe ボタン =====
+    const wireHovered = panelHoveredBtn >= 0 && panelBtnWorldPos[panelHoveredBtn] && panelBtnWorldPos[panelHoveredBtn].action === 'wire';
+    c.fillStyle = wireOn ? 'rgba(0,200,100,0.25)' : wireHovered ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.03)';
+    c.fillRect(16, y, W - 32, 36);
+    c.strokeStyle = wireHovered ? '#fff' : wireOn ? '#00cc66' : 'rgba(255,255,255,0.08)';
+    c.lineWidth = wireHovered ? 3 : wireOn ? 2 : 1;
+    c.strokeRect(16, y, W - 32, 36);
+    c.fillStyle = wireOn ? '#00ff88' : '#777';
+    c.font = 'bold 15px Arial';
+    c.textAlign = 'center';
+    c.fillText('Wireframe ' + (wireOn ? 'ON' : 'OFF'), W/2, y + 24);
+    c.textAlign = 'left';
+    y += 44;
+
     // ===== Reset / Exit =====
     const resetHovered = panelHoveredBtn >= 0 && panelBtnWorldPos[panelHoveredBtn] && panelBtnWorldPos[panelHoveredBtn].action === 'reset';
     const exitHovered = panelHoveredBtn >= 0 && panelBtnWorldPos[panelHoveredBtn] && panelBtnWorldPos[panelHoveredBtn].action === 'exit';
@@ -3697,8 +3711,11 @@ function getPanelButtons() {
             }
         }
     }
+    // Wireframe ボタン（VOLUMEの後、Reset/Exitの前）
+    const wireY = ay + 70;
+    btns.push({ cx: PANEL_W / 2, cy: wireY + 18, action: 'wire', idx: -1 });
     // Reset / Exit
-    const bottomY = ay + 80;
+    const bottomY = wireY + 50;
     btns.push({ cx: PANEL_W / 4, cy: bottomY, action: 'reset', idx: -1 });
     btns.push({ cx: PANEL_W * 3 / 4, cy: bottomY, action: 'exit', idx: -1 });
     return btns;
@@ -4027,7 +4044,23 @@ function drawSceneXR(M, V, P, cp) {
         }
     }
 
-    // ハンドル球描画（VR空間 — pWire で安全に描画）
+    // ワイヤーフレーム描画（VR空間）
+    if (wireOn && numWireV > 0) {
+        updateWire();
+        for (let i = 0; i < 4; i++) gl.disableVertexAttribArray(i);
+        gl.useProgram(pWire);
+        gl.uniformMatrix4fv(LW.uM, false, M);
+        gl.uniformMatrix4fv(LW.uV, false, V);
+        gl.uniformMatrix4fv(LW.uP, false, P);
+        gl.uniform4f(LW.uCol, 0.0, 0.85, 0.35, 0.8);
+        gl.bindBuffer(gl.ARRAY_BUFFER, bWire);
+        gl.enableVertexAttribArray(LW.aPos);
+        gl.vertexAttribPointer(LW.aPos, 3, gl.FLOAT, false, 0, 0);
+        gl.drawArrays(gl.LINES, 0, numWireV);
+        gl.disableVertexAttribArray(LW.aPos);
+    }
+
+    // ハンドル球描画（VR空間 — pPoint で安全に描画）
     if (sb.getNumHandleSpheres() > 0) {
         drawHandleSpheresVR(M, V, P);
     }
@@ -4300,6 +4333,9 @@ function processHandTracking(frame, src, hand) {
                         if (sb) sb.clearHandleSpheres();
                         vrDeformSub = 'none'; handleMode = false; deformSub = 'none';
                     }
+                } else if (nearest.action === 'wire') {
+                    wireOn = !wireOn;
+                    if (wireOn && sb) updateWire();
                 } else if (nearest.action === 'reset') {
                     document.getElementById('reset-popup').style.display = 'block';
                 } else if (nearest.action === 'exit') {
