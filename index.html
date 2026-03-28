@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v29</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v30</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -3451,22 +3451,27 @@ function drawPanelCanvas() {
         const modeKey = ['deform','freecut','segcut','transform'][ai];
         const expanded = vrActiveAction === modeKey;
         const hovered = (hoveredActionIdx === ai);
-        // メインボタン
-        c.fillStyle = active ? 'rgba(77,192,230,0.15)' : hovered ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.03)';
-        c.fillRect(16, y, W - 32, 36);
+        // メインボタン（太く: 50px高）
+        c.fillStyle = active ? 'rgba(77,192,230,0.15)' : hovered ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.03)';
+        c.fillRect(16, y, W - 32, 50);
         c.strokeStyle = hovered ? '#fff' : active ? 'rgba(77,192,230,0.5)' : 'rgba(255,255,255,0.06)';
-        c.lineWidth = hovered ? 3 : 1;
-        c.strokeRect(16, y, W - 32, 36);
+        c.lineWidth = hovered ? 4 : 1;
+        c.strokeRect(16, y, W - 32, 50);
+        // 中心ターゲット
+        c.beginPath();
+        c.arc(W / 2, y + 25, hovered ? 6 : 3, 0, Math.PI * 2);
+        c.fillStyle = hovered ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.15)';
+        c.fill();
         c.fillStyle = active ? '#4dc0e6' : '#888';
-        c.font = 'bold 16px Arial';
-        c.fillText(a.name, 30, y + 24);
+        c.font = 'bold 18px Arial';
+        c.fillText(a.name, 30, y + 32);
         // 展開矢印
         c.fillStyle = '#555';
-        c.font = '14px Arial';
+        c.font = '16px Arial';
         c.textAlign = 'right';
-        c.fillText(expanded ? '▼' : '▶', W - 24, y + 24);
+        c.fillText(expanded ? '▼' : '▶', W - 24, y + 32);
         c.textAlign = 'left';
-        y += 42;
+        y += 58;
         // サブボタン（展開時のみ描画、タッチは未実装）
         if (expanded && a.sub.length > 0) {
             for (const s of a.sub) {
@@ -3613,7 +3618,7 @@ let panelWorldCenter = null;  // [x,y,z]
 let panelWorldRight = null;   // [rx,ry,rz]
 let panelWorldUp = null;      // [ux,uy,uz]
 let panelFixed = false;       // true: 位置固定済み
-const panelHW = 0.18, panelHH = 0.32;
+const panelHW = 0.25, panelHH = 0.50;  // パネル: 0.5m幅 × 1.0m高
 let panelTouchCooldown = 0;   // 連打防止
 let panelHoveredBtn = -1;     // ホバー中のボタンインデックス
 let panelBtnWorldPos = [];    // 各ボタンの3Dワールド座標
@@ -3664,14 +3669,14 @@ function getPanelButtons() {
     }
     // Alpha スライダー中心（競合用）
     btns.push({ cx: PANEL_W / 2, cy: L.sliderY + 28, action: 'slider', idx: -1 });
-    // ACTION ボタン（4個）
+    // ACTION ボタン（4個、50px高 + 58px間隔）
     const actions = ['deform', 'freecut', 'segcut', 'transform'];
     for (let i = 0; i < actions.length; i++) {
-        const cy = L.actionStartY + 28 + i * 42 + 18;
+        const cy = L.actionStartY + 28 + i * 58 + 25;
         btns.push({ cx: PANEL_W / 2, cy, action: 'action', idx: i, mode: actions[i] });
     }
-    // Reset / Exit（VOLUMEの下、推定位置）
-    const bottomY = L.actionStartY + 28 + 4 * 42 + 80;
+    // Reset / Exit（ACTION下 + VOLUME + 余白）
+    const bottomY = L.actionStartY + 28 + 4 * 58 + 100;
     btns.push({ cx: PANEL_W / 4, cy: bottomY, action: 'reset', idx: -1 });
     btns.push({ cx: PANEL_W * 3 / 4, cy: bottomY, action: 'exit', idx: -1 });
     return btns;
@@ -4181,15 +4186,15 @@ function processHandTracking(frame, src, hand) {
                 if (d < minDist) { minDist = d; minIdx = i; }
             }
             // 0.15m以内で、かつスライダー以外ならホバー表示
-            if (minDist < 0.15 && panelBtnWorldPos[minIdx]) {
+            if (minDist < 0.08 && panelBtnWorldPos[minIdx]) {
                 const nearest = panelBtnWorldPos[minIdx];
-                panelHoveredBtn = (nearest.action === 'slider') ? -1 : minIdx;
+                panelHoveredBtn = minIdx;  // スライダーもホバー表示対象
             } else {
                 panelHoveredBtn = -1;
             }
 
             // ピンチでアクション実行（リリース後の新しいピンチのみ）
-            if (isPinching && panelPinchReleased && minDist < 0.15 && panelBtnWorldPos[minIdx]) {
+            if (isPinching && panelPinchReleased && minDist < 0.08 && panelBtnWorldPos[minIdx]) {
                 const nearest = panelBtnWorldPos[minIdx];
                 if (nearest.action === 'vis') {
                     vrToggleOrgan(nearest.idx);
