@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v30</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v31</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -3409,7 +3409,7 @@ function drawPanelCanvas() {
     y = L.sliderY;
 
     // ===== Liver Alpha スライダー（ボックス型、ホバー対応） =====
-    const sliderHovered = panelHoveredBtn >= 0 && panelBtnWorldPos[panelHoveredBtn] && panelBtnWorldPos[panelHoveredBtn].action === 'slider';
+    const sliderHovered = (panelHoveredBtn === -2) || panelSliderDragging;
     c.fillStyle = sliderHovered ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.04)';
     c.fillRect(12, y, W - 24, 50);
     c.strokeStyle = sliderHovered ? '#fff' : 'rgba(255,255,255,0.1)';
@@ -3667,8 +3667,7 @@ function getPanelButtons() {
         const cy = L.cardStartY + row * (L.cardSize + L.cardGap) + L.cardSize / 2;
         btns.push({ cx, cy, action: 'vis', idx: i });
     }
-    // Alpha スライダー中心（競合用）
-    btns.push({ cx: PANEL_W / 2, cy: L.sliderY + 28, action: 'slider', idx: -1 });
+    // スライダーは3D競合から除外（別ロジックで処理）
     // ACTION ボタン（4個、50px高 + 58px間隔）
     const actions = ['deform', 'freecut', 'segcut', 'transform'];
     for (let i = 0; i < actions.length; i++) {
@@ -4148,79 +4147,89 @@ function processHandTracking(frame, src, hand) {
             { x: wo.x, y: wo.y, z: wo.z, w: wo.w });
     }
 
-    // === 右手: 3D距離でパネルボタン判定 ===
+    // === 右手: パネル操作 ===
     if (hand === 'right' && panelBtnWorldPos.length > 0) {
-        // ピンチリリース検出
-        if (!isPinching) {
-            panelPinchReleased = true;
-            panelSliderDragging = false;
-        }
+        if (!isPinching) { panelPinchReleased = true; panelSliderDragging = false; }
+        const LL = getPanelLayout();
 
-        // スライダー判定（ピンチ中にパネル上のスライダー領域）
+        // --- スライダー（独立処理）---
         if (isPinching && panelWorldCenter) {
-            const hit = panelHitTest(ip.x, ip.y, ip.z);
-            if (hit) {
-                const cardCols = 3, cardGap = 12;
-                const cardSize = Math.floor((PANEL_W - 32 - cardGap*(cardCols-1)) / cardCols);
-                const cardEndY = 50 + 2 * (cardSize + cardGap);
-                if (hit.y >= cardEndY && hit.y < cardEndY + 60) {
-                    panelSliderDragging = true;
-                    panelPinchReleased = false;
-                    const sliderX = Math.max(0.05, Math.min(1, (hit.x - 20) / (PANEL_W - 40)));
-                    meshAlphaValues[0] = sliderX;
-                    if (typeof liverAlphaValue !== 'undefined') liverAlphaValue = sliderX;
-                    if (typeof liverVisible !== 'undefined') liverVisible = true;
-                }
+            // ドラッグ中は深度10cmまで許容（パネルから離れてもOK）
+            const sHit = panelSliderDragging
+                ? panelHitTestLoose(ip.x, ip.y, ip.z, 0.10)
+                : panelHitTest(ip.x, ip.y, ip.z);
+            if (sHit && sHit.y >= LL.sliderY && sHit.y < LL.sliderY + 55) {
+                panelSliderDragging = true;
+                const sliderX = Math.max(0.05, Math.min(1, (sHit.x - 22) / (PANEL_W - 44)));
+                meshAlphaValues[0] = sliderX;
+                if (typeof liverAlphaValue !== 'undefined') liverAlphaValue = sliderX;
+                if (typeof liverVisible !== 'undefined') liverVisible = true;
             }
         }
 
-        // 指先と全ボタン（VIS+スライダー+ACTION）の距離を計算、最近接を探す
+        // --- ボタンホバー + ピンチ ---
         if (panelSliderDragging) {
-            panelHoveredBtn = -1;
+            panelHoveredBtn = -2;  // スライダーハイライト維持
         } else {
-            let minDist = Infinity, minIdx = -1;
-            for (let i = 0; i < panelBtnWorldPos.length; i++) {
-                const b = panelBtnWorldPos[i];
-                const ddx = ip.x - b.x, ddy = ip.y - b.y, ddz = ip.z - b.z;
-                const d = Math.sqrt(ddx*ddx + ddy*ddy + ddz*ddz);
-                if (d < minDist) { minDist = d; minIdx = i; }
-            }
-            // 0.15m以内で、かつスライダー以外ならホバー表示
-            if (minDist < 0.08 && panelBtnWorldPos[minIdx]) {
-                const nearest = panelBtnWorldPos[minIdx];
-                panelHoveredBtn = minIdx;  // スライダーもホバー表示対象
+            // スライダー近接チェック
+            const slHit = panelHitTest(ip.x, ip.y, ip.z);
+            const nearSlider = slHit && slHit.y >= LL.sliderY && slHit.y < LL.sliderY + 55;
+            if (nearSlider) {
+                panelHoveredBtn = -2;  // スライダーホバー
             } else {
-                panelHoveredBtn = -1;
+                // 3D距離で最近接ボタン検索
+                let minDist = Infinity, minIdx = -1;
+                for (let i = 0; i < panelBtnWorldPos.length; i++) {
+                    const b = panelBtnWorldPos[i];
+                    const ddx = ip.x - b.x, ddy = ip.y - b.y, ddz = ip.z - b.z;
+                    const d = Math.sqrt(ddx*ddx + ddy*ddy + ddz*ddz);
+                    if (d < minDist) { minDist = d; minIdx = i; }
+                }
+                panelHoveredBtn = (minDist < 0.08) ? minIdx : -1;
             }
 
-            // ピンチでアクション実行（リリース後の新しいピンチのみ）
-            if (isPinching && panelPinchReleased && minDist < 0.08 && panelBtnWorldPos[minIdx]) {
-                const nearest = panelBtnWorldPos[minIdx];
+            // ピンチでボタン実行
+            if (isPinching && panelPinchReleased && panelHoveredBtn >= 0) {
+                const nearest = panelBtnWorldPos[panelHoveredBtn];
                 if (nearest.action === 'vis') {
                     vrToggleOrgan(nearest.idx);
                 } else if (nearest.action === 'action') {
                     vrActiveAction = (vrActiveAction === nearest.mode) ? null : nearest.mode;
                     const modeMap = { deform:'deform', freecut:'freeCut', segcut:'segCut', transform:'transform' };
-                    if (typeof setActionMode === 'function') {
+                    if (typeof setActionMode === 'function')
                         setActionMode(vrActiveAction ? modeMap[vrActiveAction] : 'none');
-                    }
-                }
-                if (nearest.action === 'reset') {
+                } else if (nearest.action === 'reset') {
                     document.getElementById('reset-popup').style.display = 'block';
                 } else if (nearest.action === 'exit') {
                     if (xrSession) xrSession.end();
                 }
-                // slider は距離競合で勝っても tap しない（ドラッグのみ）
-                if (nearest.action !== 'slider') {
-                    panelPinchReleased = false;
-                    if (vrGrabs.right.active) { sb.endGrabVR(); vrGrabs.right.active = false; }
-                }
+                panelPinchReleased = false;
+                if (vrGrabs.right.active) { sb.endGrabVR(); vrGrabs.right.active = false; }
             }
         }
     }
 }
 
-// パネルタッチ判定: 指先位置 → パネル上のキャンバス座標を返す
+// パネルタッチ判定（深度指定版）
+function panelHitTestLoose(fingerX, fingerY, fingerZ, maxDepth) {
+    if (!panelWorldCenter || !panelWorldRight || !panelWorldUp) return null;
+    const dx = fingerX - panelWorldCenter[0];
+    const dy = fingerY - panelWorldCenter[1];
+    const dz = fingerZ - panelWorldCenter[2];
+    const localX = dx * panelWorldRight[0] + dy * panelWorldRight[1] + dz * panelWorldRight[2];
+    const localY = dx * panelWorldUp[0] + dy * panelWorldUp[1] + dz * panelWorldUp[2];
+    const nx = panelWorldRight[1]*panelWorldUp[2] - panelWorldRight[2]*panelWorldUp[1];
+    const ny = panelWorldRight[2]*panelWorldUp[0] - panelWorldRight[0]*panelWorldUp[2];
+    const nz = panelWorldRight[0]*panelWorldUp[1] - panelWorldRight[1]*panelWorldUp[0];
+    const depth = Math.abs(dx*nx + dy*ny + dz*nz);
+    if (depth > maxDepth) return null;
+    if (Math.abs(localX) > panelHW * 1.2 || Math.abs(localY) > panelHH * 1.2) return null;
+    const canvasX = ((localX / panelHW) + 1) / 2 * PANEL_W;
+    const canvasY = (1 - (localY / panelHH + 1) / 2) * PANEL_H;
+    return { x: canvasX, y: canvasY, depth: depth };
+}
+
+// パネルタッチ判定: 指先位置 → パネル上のキャンバス座標を返す（3cm以内）
 function panelHitTest(fingerX, fingerY, fingerZ) {
     if (!panelWorldCenter || !panelWorldRight || !panelWorldUp) return null;
     const dx = fingerX - panelWorldCenter[0];
