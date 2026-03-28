@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v32</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v33</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -3541,13 +3541,14 @@ function drawPanelCanvas() {
     c.fillText('Exit VR', exX + (W-40)/4, y + 24);
     c.textAlign = 'left';
 
-    // デバッグ: ホバー中のボタン名を表示
-    if (panelHoveredBtn >= 0 && panelBtnWorldPos[panelHoveredBtn]) {
-        const hb = panelBtnWorldPos[panelHoveredBtn];
-        c.fillStyle = 'rgba(255,255,0,0.8)';
-        c.font = '12px Arial';
-        c.fillText('hover: ' + hb.action + (hb.mode || hb.idx), 16, H - 10);
-    }
+    // デバッグ表示
+    c.fillStyle = 'rgba(255,255,0,0.9)';
+    c.font = 'bold 14px Arial';
+    const hb = (panelHoveredBtn >= 0 && panelBtnWorldPos[panelHoveredBtn]) ? panelBtnWorldPos[panelHoveredBtn] : null;
+    c.fillText('hover=' + panelHoveredBtn + ' pre=' + panelPrePinchBtn
+        + (hb ? ' [' + hb.action + ':' + (hb.mode||hb.idx) + ']' : ''), 10, H - 30);
+    c.fillText('active=' + vrActiveAction + ' released=' + panelPinchReleased
+        + ' btns=' + panelBtnWorldPos.length, 10, H - 12);
 
     // テクスチャ転送
     gl.bindTexture(gl.TEXTURE_2D, panelTex);
