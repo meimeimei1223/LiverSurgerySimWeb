@@ -3902,6 +3902,54 @@ function drawVRHands(V, P) {
     gl.disable(gl.BLEND);
 }
 
+// VR用ハンドル球描画（pWire + drawArrays、GL状態を汚染しない）
+let bVRHandlePts = null;
+function drawHandleSpheresVR(M, V, P) {
+    const data = sb.getHandleSphereData();
+    if (!data || data.length === 0) return;
+    const I = new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
+
+    // 各ハンドルの位置をVR空間に変換してポイント描画
+    const numSpheres = data.length / 4;
+    const pts = new Float32Array(numSpheres * 3);
+    for (let i = 0; i < numSpheres; i++) {
+        // シミュレーション座標 → VR空間（Mで変換）
+        const sx = data[i*4], sy = data[i*4+1], sz = data[i*4+2];
+        pts[i*3]   = M[0]*sx + M[4]*sy + M[8]*sz  + M[12];
+        pts[i*3+1] = M[1]*sx + M[5]*sy + M[9]*sz  + M[13];
+        pts[i*3+2] = M[2]*sx + M[6]*sy + M[10]*sz + M[14];
+    }
+
+    if (!bVRHandlePts) bVRHandlePts = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, bVRHandlePts);
+    gl.bufferData(gl.ARRAY_BUFFER, pts, gl.DYNAMIC_DRAW);
+
+    // ポイントシェーダーで大きな色付き丸を描画
+    gl.useProgram(pPoint);
+    gl.uniformMatrix4fv(LPt.uV, false, V);
+    gl.uniformMatrix4fv(LPt.uP, false, P);
+    gl.uniform1f(LPt.uSize, 20.0);  // 大きな点
+
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+    gl.enableVertexAttribArray(LPt.aPos);
+    gl.vertexAttribPointer(LPt.aPos, 3, gl.FLOAT, false, 0, 0);
+
+    const COLORS = [
+        [0.56,0.27,0.68,1], [0.91,0.30,0.24,1], [0.20,0.60,0.86,1],
+        [0.95,0.61,0.07,1], [0.13,0.77,0.37,1], [0.85,0.25,0.60,1],
+    ];
+    for (let i = 0; i < numSpheres; i++) {
+        const c = COLORS[i % COLORS.length];
+        gl.uniform4f(LPt.uCol, c[0], c[1], c[2], c[3]);
+        gl.drawArrays(gl.POINTS, i, 1);
+    }
+
+    gl.disable(gl.BLEND);
+    gl.disableVertexAttribArray(LPt.aPos);
+}
+
 function drawSceneXR(M, V, P, cp) {
     gl.useProgram(pMain);
     gl.uniformMatrix4fv(L.uM, false, M);
@@ -3979,9 +4027,9 @@ function drawSceneXR(M, V, P, cp) {
         }
     }
 
-    // ハンドル球描画（VR空間）
-    if (sb.getNumHandleSpheres() > 0 && bSpherePos) {
-        drawHandleSpheres3D(M, V, P, cp);
+    // ハンドル球描画（VR空間 — pWire で安全に描画）
+    if (sb.getNumHandleSpheres() > 0) {
+        drawHandleSpheresVR(M, V, P);
     }
 }
 
