@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v36</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v37</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -3928,7 +3928,7 @@ function drawHandleSpheresVR(M, V, P) {
     gl.useProgram(pPoint);
     gl.uniformMatrix4fv(LPt.uV, false, V);
     gl.uniformMatrix4fv(LPt.uP, false, P);
-    gl.uniform1f(LPt.uSize, 20.0);  // 大きな点
+    gl.uniform1f(LPt.uSize, 40.0);  // 大きな点
 
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -4194,19 +4194,22 @@ function processHandTracking(frame, src, hand) {
     const wo = wristPose.transform.orientation;
 
     if (hand === 'right') {
-        // === 右手: Handle Place モードなら球体配置、それ以外はグラブ ===
+        // === 右手: パネル近くならパネル優先、それ以外はモード別操作 ===
         const rayDx = midX - wp.x, rayDy = midY - wp.y, rayDz = midZ - wp.z;
         const rayLen = Math.sqrt(rayDx*rayDx + rayDy*rayDy + rayDz*rayDz) || 1;
 
-        if (isPinching && !vrGrabs.right.active && vrDeformSub === 'place') {
-            // Handle Place: ピンチでハンドル球配置
+        // パネル近くにいる場合はHandle Place/Grabをスキップ（パネル操作優先）
+        const nearPanel = panelPrePinchBtn >= 0 || panelHoveredBtn >= 0 || panelHoveredBtn === -2;
+
+        if (isPinching && !vrGrabs.right.active && vrDeformSub === 'place' && !nearPanel) {
+            // Handle Place: ピンチでハンドル球配置（パネル外のみ）
             if (panelPinchReleased) {
                 const simO = vrToSim(midX, midY, midZ);
                 const simD = [rayDx/rayLen/VR_SCALE, rayDy/rayLen/VR_SCALE, rayDz/rayLen/VR_SCALE];
                 sb.addHandleSphereVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2], 0.5);
                 panelPinchReleased = false;
             }
-        } else if (isPinching && !vrGrabs.right.active) {
+        } else if (isPinching && !vrGrabs.right.active && !nearPanel) {
             const simO = vrToSim(midX, midY, midZ);
             const simD = [rayDx/rayLen/VR_SCALE, rayDy/rayLen/VR_SCALE, rayDz/rayLen/VR_SCALE];
             sb.startGrabVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2]);
