@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v39</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v40</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -4255,14 +4255,14 @@ function processHandTracking(frame, src, hand) {
                 panelPinchReleased = false;
             }
         } else if (isPinching && !vrGrabs.right.active && !nearPanel) {
-            const simO = vrToSim(midX, midY, midZ);
-            const simD = [rayDx/rayLen/VR_SCALE, rayDy/rayLen/VR_SCALE, rayDz/rayLen/VR_SCALE];
-            sb.startGrabVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2]);
+            // 近接グラブ: ピンチ位置から最近頂点を探す（レイキャストではなく距離ベース）
+            const simPos = vrToSim(midX, midY, midZ);
+            sb.startGrabVRNearest(simPos[0], simPos[1], simPos[2], 2.0);
             vrGrabs.right.active = sb.isGrabbingVR();
         } else if (isPinching && vrGrabs.right.active) {
-            const simO = vrToSim(midX, midY, midZ);
-            const simD = [rayDx/rayLen/VR_SCALE, rayDy/rayLen/VR_SCALE, rayDz/rayLen/VR_SCALE];
-            sb.moveGrabVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2], 1/72);
+            // 位置ベースの移動（ピンチ位置を直接渡す）
+            const simPos = vrToSim(midX, midY, midZ);
+            sb.moveGrabVRDirect(simPos[0], simPos[1], simPos[2], 1/72);
         } else if (!isPinching && vrGrabs.right.active) {
             sb.endGrabVR();
             vrGrabs.right.active = false;
