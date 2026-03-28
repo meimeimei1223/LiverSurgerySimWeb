@@ -3402,26 +3402,30 @@ function drawPanelCanvas() {
         c.fillText(stateText, bx + cardSize/2, by + cardSize - 5);
         c.textAlign = 'left';
     }
-    y = cardStartY + 2 * (cardSize + cardGap) + 30;  // カードとスライダーの間に余白
+    const L = getPanelLayout();
+    y = L.sliderY;
 
-    // ===== Liver Alpha スライダー =====
-    c.fillStyle = '#4a8ccc';
-    c.font = '14px Arial';
+    // ===== Liver Alpha スライダー（ボックス型、ホバー対応） =====
+    const sliderHovered = panelHoveredBtn >= 0 && panelBtnWorldPos[panelHoveredBtn] && panelBtnWorldPos[panelHoveredBtn].action === 'slider';
+    c.fillStyle = sliderHovered ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.04)';
+    c.fillRect(12, y, W - 24, 50);
+    c.strokeStyle = sliderHovered ? '#fff' : 'rgba(255,255,255,0.1)';
+    c.lineWidth = sliderHovered ? 3 : 1;
+    c.strokeRect(12, y, W - 24, 50);
     const curAlpha = (typeof meshAlphaValues !== 'undefined') ? meshAlphaValues[0] : 1;
-    c.fillText('Liver Alpha: ' + Math.round(curAlpha * 100) + '%', 16, y + 14);
-    // スライダーバー
-    const slX = 20, slW = W - 40, slY = y + 22, slH = 12;
-    c.fillStyle = 'rgba(255,255,255,0.08)';
-    c.fillRect(slX, slY, slW, slH);
+    c.fillStyle = '#aaa';
+    c.font = 'bold 14px Arial';
+    c.fillText('Liver Alpha: ' + Math.round(curAlpha * 100) + '%', 22, y + 18);
+    // バー
+    const slX = 22, slW = W - 44, slY2 = y + 28, slH = 14;
+    c.fillStyle = 'rgba(255,255,255,0.1)';
+    c.fillRect(slX, slY2, slW, slH);
     c.fillStyle = '#cc3333';
-    c.fillRect(slX, slY, slW * curAlpha, slH);
-    // ノブ
+    c.fillRect(slX, slY2, slW * curAlpha, slH);
     c.fillStyle = '#fff';
-    c.beginPath(); c.arc(slX + slW * curAlpha, slY + slH/2, 8, 0, Math.PI*2); c.fill();
-    y += 50;
+    c.beginPath(); c.arc(slX + slW * curAlpha, slY2 + slH/2, 8, 0, Math.PI*2); c.fill();
 
     // ===== ACTION =====
-    const L = getPanelLayout();
     y = L.actionStartY;
     c.fillStyle = '#4a8ccc';
     c.font = 'bold 18px Arial';
@@ -3502,6 +3506,39 @@ function drawPanelCanvas() {
         c.fillStyle = '#555';
         c.font = '14px Arial';
         c.fillText('-- ml  --%', 16, y + 8);
+    }
+    y += 30;
+
+    // ===== Reset / Exit =====
+    const resetHovered = panelHoveredBtn >= 0 && panelBtnWorldPos[panelHoveredBtn] && panelBtnWorldPos[panelHoveredBtn].action === 'reset';
+    const exitHovered = panelHoveredBtn >= 0 && panelBtnWorldPos[panelHoveredBtn] && panelBtnWorldPos[panelHoveredBtn].action === 'exit';
+    // Reset
+    c.fillStyle = resetHovered ? 'rgba(200,60,60,0.3)' : 'rgba(200,60,60,0.1)';
+    c.fillRect(16, y, (W-40)/2, 36);
+    c.strokeStyle = resetHovered ? '#ff6666' : 'rgba(200,60,60,0.4)';
+    c.lineWidth = resetHovered ? 3 : 1;
+    c.strokeRect(16, y, (W-40)/2, 36);
+    c.fillStyle = '#e07070';
+    c.font = 'bold 15px Arial';
+    c.textAlign = 'center';
+    c.fillText('Reset', 16 + (W-40)/4, y + 24);
+    // Exit
+    const exX = 16 + (W-40)/2 + 8;
+    c.fillStyle = exitHovered ? 'rgba(180,140,60,0.3)' : 'rgba(180,140,60,0.1)';
+    c.fillRect(exX, y, (W-40)/2, 36);
+    c.strokeStyle = exitHovered ? '#ffcc55' : 'rgba(180,140,60,0.4)';
+    c.lineWidth = exitHovered ? 3 : 1;
+    c.strokeRect(exX, y, (W-40)/2, 36);
+    c.fillStyle = '#cc9955';
+    c.fillText('Exit VR', exX + (W-40)/4, y + 24);
+    c.textAlign = 'left';
+
+    // デバッグ: ホバー中のボタン名を表示
+    if (panelHoveredBtn >= 0 && panelBtnWorldPos[panelHoveredBtn]) {
+        const hb = panelBtnWorldPos[panelHoveredBtn];
+        c.fillStyle = 'rgba(255,255,0,0.8)';
+        c.font = '12px Arial';
+        c.fillText('hover: ' + hb.action + (hb.mode || hb.idx), 16, H - 10);
     }
 
     // テクスチャ転送
@@ -3627,9 +3664,13 @@ function getPanelButtons() {
     // ACTION ボタン（4個）
     const actions = ['deform', 'freecut', 'segcut', 'transform'];
     for (let i = 0; i < actions.length; i++) {
-        const cy = L.actionStartY + 28 + i * 42 + 20;
+        const cy = L.actionStartY + 28 + i * 42 + 18;
         btns.push({ cx: PANEL_W / 2, cy, action: 'action', idx: i, mode: actions[i] });
     }
+    // Reset / Exit（VOLUMEの下、推定位置）
+    const bottomY = L.actionStartY + 28 + 4 * 42 + 80;
+    btns.push({ cx: PANEL_W / 4, cy: bottomY, action: 'reset', idx: -1 });
+    btns.push({ cx: PANEL_W * 3 / 4, cy: bottomY, action: 'exit', idx: -1 });
     return btns;
 }
 
@@ -4155,6 +4196,11 @@ function processHandTracking(frame, src, hand) {
                     if (typeof setActionMode === 'function') {
                         setActionMode(vrActiveAction ? modeMap[vrActiveAction] : 'none');
                     }
+                }
+                if (nearest.action === 'reset') {
+                    document.getElementById('reset-popup').style.display = 'block';
+                } else if (nearest.action === 'exit') {
+                    if (xrSession) xrSession.end();
                 }
                 // slider は距離競合で勝っても tap しない（ドラッグのみ）
                 if (nearest.action !== 'slider') {
