@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v31</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v32</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -3624,6 +3624,7 @@ let panelHoveredBtn = -1;     // ホバー中のボタンインデックス
 let panelBtnWorldPos = [];    // 各ボタンの3Dワールド座標
 let panelSliderDragging = false;  // スライダードラッグ中フラグ
 let panelPinchReleased = true;    // ピンチリリース検出（連続ピンチ対応）
+let panelPrePinchBtn = -1;        // ピンチ直前のホバーボタン（指移動対策）
 let panelIcons = {};  // アイコン Image オブジェクト
 
 // アイコンプリロード
@@ -4169,15 +4170,14 @@ function processHandTracking(frame, src, hand) {
 
         // --- ボタンホバー + ピンチ ---
         if (panelSliderDragging) {
-            panelHoveredBtn = -2;  // スライダーハイライト維持
-        } else {
-            // スライダー近接チェック
+            panelHoveredBtn = -2;
+        } else if (!isPinching) {
+            // ピンチしていない時だけホバー更新（ピンチ中は凍結）
             const slHit = panelHitTest(ip.x, ip.y, ip.z);
             const nearSlider = slHit && slHit.y >= LL.sliderY && slHit.y < LL.sliderY + 55;
             if (nearSlider) {
-                panelHoveredBtn = -2;  // スライダーホバー
+                panelHoveredBtn = -2;
             } else {
-                // 3D距離で最近接ボタン検索
                 let minDist = Infinity, minIdx = -1;
                 for (let i = 0; i < panelBtnWorldPos.length; i++) {
                     const b = panelBtnWorldPos[i];
@@ -4187,10 +4187,15 @@ function processHandTracking(frame, src, hand) {
                 }
                 panelHoveredBtn = (minDist < 0.08) ? minIdx : -1;
             }
+            // ピンチ直前のホバー状態を記憶
+            panelPrePinchBtn = panelHoveredBtn;
+        }
+        // else: isPinching → panelHoveredBtn は前フレームの値を維持
 
-            // ピンチでボタン実行
-            if (isPinching && panelPinchReleased && panelHoveredBtn >= 0) {
-                const nearest = panelBtnWorldPos[panelHoveredBtn];
+        // ピンチでボタン実行（ピンチ直前のホバーを使用）
+        if (isPinching && panelPinchReleased && panelPrePinchBtn >= 0) {
+            const nearest = panelBtnWorldPos[panelPrePinchBtn];
+            if (nearest) {
                 if (nearest.action === 'vis') {
                     vrToggleOrgan(nearest.idx);
                 } else if (nearest.action === 'action') {
