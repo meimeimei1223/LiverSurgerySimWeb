@@ -604,7 +604,7 @@ let numHiIdx = 0, numWireV = 0;
 let pPanel = null, LPanel = {};
 let bPanelVtx = null, bPanelIdx = null, panelTex = null;
 let panelCanvas = null, panelCtx = null;
-const PANEL_W = 512, PANEL_H = 700;
+const PANEL_W = 512, PANEL_H = 1024;
 const PANEL_WORLD_W = 1.0;   // デバッグ: 1m幅の巨大パネル
 const PANEL_WORLD_H = PANEL_WORLD_W * (PANEL_H / PANEL_W);
 let drag=false, grab=false, grabD=0, prevPt=[0,0,0];
@@ -3421,27 +3421,59 @@ function drawPanelCanvas() {
     y += 50;
 
     // ===== ACTION =====
+    const L = getPanelLayout();
+    y = L.actionStartY;
     c.fillStyle = '#4a8ccc';
     c.font = 'bold 18px Arial';
     c.fillText('ACTION', 16, y + 14); y += 28;
     const actions = [
-        { name:'Deform',    mode:'deform' },
-        { name:'Free Cut',  mode:'freeCut' },
-        { name:'Seg Cut',   mode:'segCut' },
-        { name:'Transform', mode:'transform' },
+        { name:'Deform',    mode:'deform',    sub:['Handle Place','Deform','Undo Handle','Clear All'] },
+        { name:'Free Cut',  mode:'freeCut',   sub:['Seg Overlay','Undo Cut'] },
+        { name:'Seg Cut',   mode:'segCut',    sub:['Liver Select','Portal Select','Seg Cut','Seg Undo','Clear'] },
+        { name:'Transform', mode:'transform', sub:[] },
     ];
     const curAction = typeof actionMode !== 'undefined' ? actionMode : 'none';
-    for (const a of actions) {
+    // ホバー中のACTIONボタンを特定
+    let hoveredActionIdx = -1;
+    if (panelHoveredBtn >= 0 && panelBtnWorldPos[panelHoveredBtn] && panelBtnWorldPos[panelHoveredBtn].action === 'action') {
+        hoveredActionIdx = panelBtnWorldPos[panelHoveredBtn].idx;
+    }
+    for (let ai = 0; ai < actions.length; ai++) {
+        const a = actions[ai];
         const active = curAction === a.mode;
-        c.fillStyle = active ? 'rgba(77,192,230,0.15)' : 'rgba(255,255,255,0.03)';
+        const modeKey = ['deform','freecut','segcut','transform'][ai];
+        const expanded = vrActiveAction === modeKey;
+        const hovered = (hoveredActionIdx === ai);
+        // メインボタン
+        c.fillStyle = active ? 'rgba(77,192,230,0.15)' : hovered ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.03)';
         c.fillRect(16, y, W - 32, 36);
-        c.strokeStyle = active ? 'rgba(77,192,230,0.5)' : 'rgba(255,255,255,0.06)';
-        c.lineWidth = 1;
+        c.strokeStyle = hovered ? '#fff' : active ? 'rgba(77,192,230,0.5)' : 'rgba(255,255,255,0.06)';
+        c.lineWidth = hovered ? 3 : 1;
         c.strokeRect(16, y, W - 32, 36);
-        c.fillStyle = active ? '#4dc0e6' : '#777';
-        c.font = '16px Arial';
+        c.fillStyle = active ? '#4dc0e6' : '#888';
+        c.font = 'bold 16px Arial';
         c.fillText(a.name, 30, y + 24);
+        // 展開矢印
+        c.fillStyle = '#555';
+        c.font = '14px Arial';
+        c.textAlign = 'right';
+        c.fillText(expanded ? '▼' : '▶', W - 24, y + 24);
+        c.textAlign = 'left';
         y += 42;
+        // サブボタン（展開時のみ描画、タッチは未実装）
+        if (expanded && a.sub.length > 0) {
+            for (const s of a.sub) {
+                c.fillStyle = 'rgba(255,255,255,0.04)';
+                c.fillRect(30, y, W - 60, 30);
+                c.strokeStyle = 'rgba(255,255,255,0.08)';
+                c.lineWidth = 1;
+                c.strokeRect(30, y, W - 60, 30);
+                c.fillStyle = '#aaa';
+                c.font = '14px Arial';
+                c.fillText(s, 44, y + 20);
+                y += 34;
+            }
+        }
     }
 
     // ===== VOLUME =====
@@ -3566,19 +3598,37 @@ let panelIcons = {};  // アイコン Image オブジェクト
     }
 })();
 
-// パネル上のボタン定義（キャンバス座標での中心点）
-// drawPanelCanvas の描画位置と一致させる
-function getPanelButtons() {
+// パネルのレイアウト定数を計算
+let vrActiveAction = null;  // 展開中のACTION ('deform','freecut','segcut','transform' or null)
+
+function getPanelLayout() {
     const cardCols = 3, cardGap = 12;
     const cardSize = Math.floor((PANEL_W - 32 - cardGap * (cardCols - 1)) / cardCols);
     const cardStartY = 50;
+    const cardEndY = cardStartY + 2 * (cardSize + cardGap);
+    const sliderY = cardEndY + 30;
+    const actionStartY = sliderY + 60;
+    return { cardCols, cardGap, cardSize, cardStartY, cardEndY, sliderY, actionStartY };
+}
+
+// パネル上のボタン定義（キャンバス座標での中心点）
+function getPanelButtons() {
+    const L = getPanelLayout();
     const btns = [];
     // VISIBILITY カード（6個）
     for (let i = 0; i < 6; i++) {
-        const col = i % cardCols, row = Math.floor(i / cardCols);
-        const cx = 16 + col * (cardSize + cardGap) + cardSize / 2;
-        const cy = cardStartY + row * (cardSize + cardGap) + cardSize / 2;
-        btns.push({ cx, cy, action: 'vis', idx: i, label: ['Liver','Portal','H.Vein','Tumor','Gallbldr','Sphere'][i] });
+        const col = i % L.cardCols, row = Math.floor(i / L.cardCols);
+        const cx = 16 + col * (L.cardSize + L.cardGap) + L.cardSize / 2;
+        const cy = L.cardStartY + row * (L.cardSize + L.cardGap) + L.cardSize / 2;
+        btns.push({ cx, cy, action: 'vis', idx: i });
+    }
+    // Alpha スライダー中心（競合用）
+    btns.push({ cx: PANEL_W / 2, cy: L.sliderY + 28, action: 'slider', idx: -1 });
+    // ACTION ボタン（4個）
+    const actions = ['deform', 'freecut', 'segcut', 'transform'];
+    for (let i = 0; i < actions.length; i++) {
+        const cy = L.actionStartY + 28 + i * 42 + 20;
+        btns.push({ cx: PANEL_W / 2, cy, action: 'action', idx: i, mode: actions[i] });
     }
     return btns;
 }
@@ -4075,11 +4125,10 @@ function processHandTracking(frame, src, hand) {
             }
         }
 
-        // スライダードラッグ中はボタンホバーを無効化
+        // 指先と全ボタン（VIS+スライダー+ACTION）の距離を計算、最近接を探す
         if (panelSliderDragging) {
             panelHoveredBtn = -1;
         } else {
-            // 指先と全ボタンの距離を計算、最近接を探す
             let minDist = Infinity, minIdx = -1;
             for (let i = 0; i < panelBtnWorldPos.length; i++) {
                 const b = panelBtnWorldPos[i];
@@ -4087,14 +4136,31 @@ function processHandTracking(frame, src, hand) {
                 const d = Math.sqrt(ddx*ddx + ddy*ddy + ddz*ddz);
                 if (d < minDist) { minDist = d; minIdx = i; }
             }
-            panelHoveredBtn = (minDist < 0.15) ? minIdx : -1;
+            // 0.15m以内で、かつスライダー以外ならホバー表示
+            if (minDist < 0.15 && panelBtnWorldPos[minIdx]) {
+                const nearest = panelBtnWorldPos[minIdx];
+                panelHoveredBtn = (nearest.action === 'slider') ? -1 : minIdx;
+            } else {
+                panelHoveredBtn = -1;
+            }
 
             // ピンチでアクション実行（リリース後の新しいピンチのみ）
-            if (isPinching && panelPinchReleased && panelHoveredBtn >= 0) {
-                const btn = panelBtnWorldPos[panelHoveredBtn];
-                if (btn.action === 'vis') vrToggleOrgan(btn.idx);
-                panelPinchReleased = false;  // 次のリリースまで無効
-                if (vrGrabs.right.active) { sb.endGrabVR(); vrGrabs.right.active = false; }
+            if (isPinching && panelPinchReleased && minDist < 0.15 && panelBtnWorldPos[minIdx]) {
+                const nearest = panelBtnWorldPos[minIdx];
+                if (nearest.action === 'vis') {
+                    vrToggleOrgan(nearest.idx);
+                } else if (nearest.action === 'action') {
+                    vrActiveAction = (vrActiveAction === nearest.mode) ? null : nearest.mode;
+                    const modeMap = { deform:'deform', freecut:'freeCut', segcut:'segCut', transform:'transform' };
+                    if (typeof setActionMode === 'function') {
+                        setActionMode(vrActiveAction ? modeMap[vrActiveAction] : 'none');
+                    }
+                }
+                // slider は距離競合で勝っても tap しない（ドラッグのみ）
+                if (nearest.action !== 'slider') {
+                    panelPinchReleased = false;
+                    if (vrGrabs.right.active) { sb.endGrabVR(); vrGrabs.right.active = false; }
+                }
             }
         }
     }
