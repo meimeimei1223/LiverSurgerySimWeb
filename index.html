@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v42</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v43</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -4247,16 +4247,21 @@ function processHandTracking(frame, src, hand) {
         const nearPanel = panelPrePinchBtn >= 0 || panelHoveredBtn >= 0 || panelHoveredBtn === -2;
 
         if (isPinching && !vrGrabs.right.active && vrDeformSub === 'place' && !nearPanel) {
-            // Handle Place: ピンチでハンドル球配置、失敗なら既存球をグラブ
+            // Handle Place: ピンチでハンドル球配置、失敗なら既存球のみグラブ
             if (panelPinchReleased) {
                 const simO = vrToSim(midX, midY, midZ);
                 const simD = [rayDx/rayLen/VR_SCALE, rayDy/rayLen/VR_SCALE, rayDz/rayLen/VR_SCALE];
                 const placed = sb.addHandleSphereVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2], 0.5);
                 if (!placed && sb.getNumHandleSpheres() > 0) {
-                    // 配置失敗（近くに既存球あり）→ その球をグラブ
+                    // 配置失敗 → 既存ハンドル球のグラブを試行
                     const simPos = vrToSim(midX, midY, midZ);
                     sb.startGrabVRNearest(simPos[0], simPos[1], simPos[2], 2.0);
-                    vrGrabs.right.active = sb.isGrabbingVR();
+                    if (sb.isGrabbingVR() && !sb.isHandleGrabbing()) {
+                        // 通常メッシュグラブ → Handle Place モードでは無効、キャンセル
+                        sb.endGrabVR();
+                    } else {
+                        vrGrabs.right.active = sb.isGrabbingVR();
+                    }
                 }
                 panelPinchReleased = false;
             }
