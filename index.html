@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v46</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v47</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -4063,55 +4063,64 @@ function drawSceneXR(M, V, P, cp) {
         }
     }
 
-    // カッター描画（VR空間 — pMain + モデル行列Mで描画）
+    // カッター描画（ブラウザ版と同じ: pMain + 法線 + ライティング）
     if (cutMode && cutterPlaced && (vrCutterDragging || vrCutterPlaced)) {
         for (let i = 0; i < 4; i++) gl.disableVertexAttribArray(i);
-        gl.enable(gl.BLEND);
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-        gl.disable(gl.CULL_FACE);
-        gl.depthMask(false);
-        gl.useProgram(pMain);
-        gl.uniformMatrix4fv(L.uM, false, M);  // VRモデル行列で変換
-        gl.uniformMatrix4fv(L.uV, false, V);
-        gl.uniformMatrix4fv(L.uP, false, P);
-        gl.uniform3fv(L.uLP, cp); gl.uniform3fv(L.uVP, cp);
-        // 色: ブラウザ版と同じ（臓器別、配置時は色付き、未配置はgreen）
-        const cc = cutterPlaced ? (CUTTER_COLORS[''+cutTargetMeshIdx] || CUTTER_COLORS['none'])
-                                : CUTTER_COLORS['none'];
-        gl.uniform4f(L.uCol, cc[0], cc[1], cc[2], 1.0);
-        gl.uniform1f(L.uAlpha, cc[3]);
-        // カッター頂点
-        if (!bCutterPos) bCutterPos = gl.createBuffer();
+        // カッター頂点取得
         const cv = new Float32Array(sb.getCutterVertices());
-        gl.bindBuffer(gl.ARRAY_BUFFER, bCutterPos);
-        gl.bufferData(gl.ARRAY_BUFFER, cv, gl.DYNAMIC_DRAW);
-        gl.enableVertexAttribArray(L.aPos);
-        gl.vertexAttribPointer(L.aPos, 3, gl.FLOAT, false, 0, 0);
-        // 法線（簡易: posと同じバッファ使用）
-        if (!bCutterNrm) bCutterNrm = gl.createBuffer();
-        const nv = cv.length / 3;
-        const nrmArr = new Float32Array(cv.length);
-        const ci2 = new Int32Array(sb.getCutterIndices());
-        for (let t=0; t<ci2.length; t+=3) {
-            const i0=ci2[t],i1=ci2[t+1],i2=ci2[t+2];
-            const ax=cv[i1*3]-cv[i0*3],ay=cv[i1*3+1]-cv[i0*3+1],az=cv[i1*3+2]-cv[i0*3+2];
-            const bxx=cv[i2*3]-cv[i0*3],byy=cv[i2*3+1]-cv[i0*3+1],bzz=cv[i2*3+2]-cv[i0*3+2];
-            const nx=ay*bzz-az*byy,ny=az*bxx-ax*bzz,nz=ax*byy-ay*bxx;
-            for(const vi of [i0,i1,i2]){nrmArr[vi*3]+=nx;nrmArr[vi*3+1]+=ny;nrmArr[vi*3+2]+=nz;}
+        if (cv.length > 0) {
+            if (!bCutterPos) bCutterPos = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, bCutterPos);
+            gl.bufferData(gl.ARRAY_BUFFER, cv, gl.DYNAMIC_DRAW);
+            // 面法線計算（ブラウザ版と完全に同じ）
+            if (!bCutterNrm) bCutterNrm = gl.createBuffer();
+            const nv2 = cv.length / 3;
+            const nrmArr = new Float32Array(cv.length);
+            const cutIdxArr = new Int32Array(sb.getCutterIndices());
+            for (let t=0; t<cutIdxArr.length; t+=3) {
+                const i0=cutIdxArr[t],i1=cutIdxArr[t+1],i2=cutIdxArr[t+2];
+                const ax=cv[i1*3]-cv[i0*3],ay=cv[i1*3+1]-cv[i0*3+1],az=cv[i1*3+2]-cv[i0*3+2];
+                const bxx=cv[i2*3]-cv[i0*3],byy=cv[i2*3+1]-cv[i0*3+1],bzz=cv[i2*3+2]-cv[i0*3+2];
+                const nx=ay*bzz-az*byy,ny=az*bxx-ax*bzz,nz=ax*byy-ay*bxx;
+                for(const vi of [i0,i1,i2]){nrmArr[vi*3]+=nx;nrmArr[vi*3+1]+=ny;nrmArr[vi*3+2]+=nz;}
+            }
+            // 正規化（ブラウザ版と同じ）
+            for (let i=0;i<nv2;i++){
+                const nx2=nrmArr[i*3],ny2=nrmArr[i*3+1],nz2=nrmArr[i*3+2];
+                const len=Math.sqrt(nx2*nx2+ny2*ny2+nz2*nz2)||1;
+                nrmArr[i*3]/=len; nrmArr[i*3+1]/=len; nrmArr[i*3+2]/=len;
+            }
+            gl.bindBuffer(gl.ARRAY_BUFFER, bCutterNrm);
+            gl.bufferData(gl.ARRAY_BUFFER, nrmArr, gl.DYNAMIC_DRAW);
+
+            gl.enable(gl.BLEND);
+            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+            gl.depthMask(false);
+            gl.disable(gl.CULL_FACE);
+            gl.useProgram(pMain);
+            gl.uniformMatrix4fv(L.uM, false, M);
+            gl.uniformMatrix4fv(L.uV, false, V);
+            gl.uniformMatrix4fv(L.uP, false, P);
+            gl.uniform3fv(L.uLP, cp); gl.uniform3fv(L.uVP, cp);
+            const cc = CUTTER_COLORS[''+cutTargetMeshIdx] || CUTTER_COLORS['none'];
+            gl.uniform4f(L.uCol, cc[0], cc[1], cc[2], 1.0);
+            gl.uniform1f(L.uAlpha, cc[3]);
+            gl.bindBuffer(gl.ARRAY_BUFFER, bCutterPos);
+            gl.enableVertexAttribArray(L.aPos);
+            gl.vertexAttribPointer(L.aPos, 3, gl.FLOAT, false, 0, 0);
+            gl.bindBuffer(gl.ARRAY_BUFFER, bCutterNrm);
+            gl.enableVertexAttribArray(L.aNrm);
+            gl.vertexAttribPointer(L.aNrm, 3, gl.FLOAT, false, 0, 0);
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bCutterIdx);
+            gl.drawElements(gl.TRIANGLES, numCutterIdx,
+                extUint ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);
+            gl.depthMask(true);
+            gl.enable(gl.CULL_FACE);
+            gl.disable(gl.BLEND);
+            gl.disableVertexAttribArray(L.aPos);
+            gl.disableVertexAttribArray(L.aNrm);
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
         }
-        gl.bindBuffer(gl.ARRAY_BUFFER, bCutterNrm);
-        gl.bufferData(gl.ARRAY_BUFFER, nrmArr, gl.DYNAMIC_DRAW);
-        gl.enableVertexAttribArray(L.aNrm);
-        gl.vertexAttribPointer(L.aNrm, 3, gl.FLOAT, false, 0, 0);
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bCutterIdx);
-        gl.drawElements(gl.TRIANGLES, numCutterIdx,
-            extUint ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);
-        gl.depthMask(true);
-        gl.enable(gl.CULL_FACE);
-        gl.disable(gl.BLEND);
-        gl.disableVertexAttribArray(L.aPos);
-        gl.disableVertexAttribArray(L.aNrm);
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
     }
 
     // ワイヤーフレーム描画（VR空間）
@@ -4310,13 +4319,14 @@ function processHandTracking(frame, src, hand) {
                 // ピンチ開始 → カッター配置
                 const simPos = vrToSim(midX, midY, midZ);
                 sb.setCutterPosition(simPos[0], simPos[1], simPos[2]);
-                // 臓器判定（ブラウザ版 raycastMesh 相当: 最近傍で判定）
-                cutTargetMeshIdx = -1;  // default: Liver
-                const isVessel = false; // TODO: 近傍の子メッシュ判定
-                sb.setCutterScale(isVessel ? cutterTargetScales.vessel : cutterTargetScales.liver);
-                // 手首の向きからyaw/pitchを初期化
-                vrCutterYaw = Math.atan2(2*(wo.w*wo.y + wo.x*wo.z), 1-2*(wo.y*wo.y + wo.z*wo.z));
-                vrCutterPitch = Math.asin(Math.max(-1, Math.min(1, 2*(wo.w*wo.x - wo.z*wo.y))));
+                cutTargetMeshIdx = -1;
+                sb.setCutterScale(cutterTargetScales.liver);
+                // ピンチ方向（手首→指先）からカッターの初期回転を計算
+                // カッター法線 = ピンチ方向に直交する面
+                const fwdX = midX - wp.x, fwdY = midY - wp.y, fwdZ = midZ - wp.z;
+                const fwdLen = Math.sqrt(fwdX*fwdX + fwdY*fwdY + fwdZ*fwdZ) || 1;
+                vrCutterYaw = Math.atan2(fwdX/fwdLen, fwdZ/fwdLen);
+                vrCutterPitch = -Math.asin(Math.max(-1, Math.min(1, fwdY/fwdLen)));
                 sb.setCutterRotation(vrCutterYaw, vrCutterPitch);
                 cutterPlaced = true;
                 vrCutterDragging = true;
@@ -4325,24 +4335,15 @@ function processHandTracking(frame, src, hand) {
                 numHighlightIdx = 0;
                 panelPinchReleased = false;
             } else if (isPinching && vrCutterDragging) {
-                // ピンチ中 → カッター位置追従 + 回転追従
+                // ピンチ中 → カッター位置追従 + ピンチ方向で回転追従
                 const simPos = vrToSim(midX, midY, midZ);
                 sb.setCutterPosition(simPos[0], simPos[1], simPos[2]);
-                // 手首回転のデルタからyaw/pitch更新
-                if (vrCutterPrevOri) {
-                    const q1 = vrCutterPrevOri, q2 = { x:wo.x, y:wo.y, z:wo.z, w:wo.w };
-                    const q1i = { x:-q1.x, y:-q1.y, z:-q1.z, w:q1.w };
-                    const dq = {
-                        x:q2.w*q1i.x+q2.x*q1i.w+q2.y*q1i.z-q2.z*q1i.y,
-                        y:q2.w*q1i.y-q2.x*q1i.z+q2.y*q1i.w+q2.z*q1i.x,
-                        z:q2.w*q1i.z+q2.x*q1i.y-q2.y*q1i.x+q2.z*q1i.w,
-                        w:q2.w*q1i.w-q2.x*q1i.x-q2.y*q1i.y-q2.z*q1i.z
-                    };
-                    vrCutterYaw += Math.atan2(2*(dq.w*dq.y+dq.x*dq.z),1-2*(dq.y*dq.y+dq.z*dq.z)) * 0.5;
-                    vrCutterPitch += Math.asin(Math.max(-1,Math.min(1,2*(dq.w*dq.x-dq.z*dq.y)))) * 0.5;
-                    sb.setCutterRotation(vrCutterYaw, vrCutterPitch);
-                    vrCutterPrevOri = q2;
-                }
+                // ピンチ方向（手首→指先）で回転を毎フレーム更新
+                const fwdX = midX - wp.x, fwdY = midY - wp.y, fwdZ = midZ - wp.z;
+                const fwdLen = Math.sqrt(fwdX*fwdX + fwdY*fwdY + fwdZ*fwdZ) || 1;
+                vrCutterYaw = Math.atan2(fwdX/fwdLen, fwdZ/fwdLen);
+                vrCutterPitch = -Math.asin(Math.max(-1, Math.min(1, fwdY/fwdLen)));
+                sb.setCutterRotation(vrCutterYaw, vrCutterPitch);
             } else if (!isPinching && vrCutterDragging) {
                 // ピンチ離す → カッター固定、交差テスト
                 vrCutterDragging = false;
