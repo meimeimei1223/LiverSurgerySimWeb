@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v45</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v46</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -4075,8 +4075,11 @@ function drawSceneXR(M, V, P, cp) {
         gl.uniformMatrix4fv(L.uV, false, V);
         gl.uniformMatrix4fv(L.uP, false, P);
         gl.uniform3fv(L.uLP, cp); gl.uniform3fv(L.uVP, cp);
-        gl.uniform4f(L.uCol, 0.91, 0.30, 0.24, 1.0);
-        gl.uniform1f(L.uAlpha, 0.5);
+        // 色: ブラウザ版と同じ（臓器別、配置時は色付き、未配置はgreen）
+        const cc = cutterPlaced ? (CUTTER_COLORS[''+cutTargetMeshIdx] || CUTTER_COLORS['none'])
+                                : CUTTER_COLORS['none'];
+        gl.uniform4f(L.uCol, cc[0], cc[1], cc[2], 1.0);
+        gl.uniform1f(L.uAlpha, cc[3]);
         // カッター頂点
         if (!bCutterPos) bCutterPos = gl.createBuffer();
         const cv = new Float32Array(sb.getCutterVertices());
@@ -4301,25 +4304,47 @@ function processHandTracking(frame, src, hand) {
         // パネル近くにいる場合はHandle Place/Grabをスキップ（パネル操作優先）
         const nearPanel = panelPrePinchBtn >= 0 || panelHoveredBtn >= 0 || panelHoveredBtn === -2;
 
-        // Free Cut モード: 右手ピンチで配置、離すと固定
+        // Free Cut モード: 右手ピンチで配置+移動+回転、離すと固定
         if (actionMode === 'freeCut' && !nearPanel) {
             if (isPinching && !vrCutterDragging && panelPinchReleased) {
-                // ピンチ開始 → カッター配置（ピンチ位置をシミュレーション座標に変換）
+                // ピンチ開始 → カッター配置
                 const simPos = vrToSim(midX, midY, midZ);
                 sb.setCutterPosition(simPos[0], simPos[1], simPos[2]);
-                sb.setCutterScale(1.0);
-                sb.setCutterRotation(0, 0);
+                // 臓器判定（ブラウザ版 raycastMesh 相当: 最近傍で判定）
+                cutTargetMeshIdx = -1;  // default: Liver
+                const isVessel = false; // TODO: 近傍の子メッシュ判定
+                sb.setCutterScale(isVessel ? cutterTargetScales.vessel : cutterTargetScales.liver);
+                // 手首の向きからyaw/pitchを初期化
+                vrCutterYaw = Math.atan2(2*(wo.w*wo.y + wo.x*wo.z), 1-2*(wo.y*wo.y + wo.z*wo.z));
+                vrCutterPitch = Math.asin(Math.max(-1, Math.min(1, 2*(wo.w*wo.x - wo.z*wo.y))));
+                sb.setCutterRotation(vrCutterYaw, vrCutterPitch);
                 cutterPlaced = true;
                 vrCutterDragging = true;
                 vrCutterPlaced = false;
-                cutTargetMeshIdx = -1;
+                vrCutterPrevOri = { x: wo.x, y: wo.y, z: wo.z, w: wo.w };
+                numHighlightIdx = 0;
                 panelPinchReleased = false;
             } else if (isPinching && vrCutterDragging) {
-                // ピンチ中 → カッター位置を手に追従
+                // ピンチ中 → カッター位置追従 + 回転追従
                 const simPos = vrToSim(midX, midY, midZ);
                 sb.setCutterPosition(simPos[0], simPos[1], simPos[2]);
+                // 手首回転のデルタからyaw/pitch更新
+                if (vrCutterPrevOri) {
+                    const q1 = vrCutterPrevOri, q2 = { x:wo.x, y:wo.y, z:wo.z, w:wo.w };
+                    const q1i = { x:-q1.x, y:-q1.y, z:-q1.z, w:q1.w };
+                    const dq = {
+                        x:q2.w*q1i.x+q2.x*q1i.w+q2.y*q1i.z-q2.z*q1i.y,
+                        y:q2.w*q1i.y-q2.x*q1i.z+q2.y*q1i.w+q2.z*q1i.x,
+                        z:q2.w*q1i.z+q2.x*q1i.y-q2.y*q1i.x+q2.z*q1i.w,
+                        w:q2.w*q1i.w-q2.x*q1i.x-q2.y*q1i.y-q2.z*q1i.z
+                    };
+                    vrCutterYaw += Math.atan2(2*(dq.w*dq.y+dq.x*dq.z),1-2*(dq.y*dq.y+dq.z*dq.z)) * 0.5;
+                    vrCutterPitch += Math.asin(Math.max(-1,Math.min(1,2*(dq.w*dq.x-dq.z*dq.y)))) * 0.5;
+                    sb.setCutterRotation(vrCutterYaw, vrCutterPitch);
+                    vrCutterPrevOri = q2;
+                }
             } else if (!isPinching && vrCutterDragging) {
-                // ピンチ離す → カッター固定
+                // ピンチ離す → カッター固定、交差テスト
                 vrCutterDragging = false;
                 vrCutterPlaced = true;
             }
@@ -4565,8 +4590,7 @@ function vrExecuteCut() {
         if (typeof updateVolumePanel === 'function') updateVolumePanel();
         if (typeof syncHandlesAfterCut === 'function') syncHandlesAfterCut();
     }
-    cutterPlaced = false;
-    vrCutterPlaced = false;
+    // カッターは維持（ブラウザ版と同じ）
     numHighlightIdx = 0;
     console.log('[VR Cut] Executed:', count, 'tets');
 }
