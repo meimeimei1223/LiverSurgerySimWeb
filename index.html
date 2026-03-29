@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v48</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v49</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -4321,11 +4321,8 @@ function processHandTracking(frame, src, hand) {
                 sb.setCutterPosition(simPos[0], simPos[1], simPos[2]);
                 cutTargetMeshIdx = -1;
                 sb.setCutterScale(cutterTargetScales.liver);
-                // 手首クォータニオンから yaw/pitch/roll を抽出（3DOF完全回転）
-                vrCutterYaw = Math.atan2(2*(wo.w*wo.y + wo.x*wo.z), 1-2*(wo.y*wo.y + wo.z*wo.z));
-                vrCutterPitch = Math.asin(Math.max(-1, Math.min(1, 2*(wo.w*wo.x - wo.z*wo.y))));
-                const vrCutterRoll = Math.atan2(2*(wo.w*wo.z + wo.x*wo.y), 1-2*(wo.x*wo.x + wo.z*wo.z));
-                sb.setCutterRotation3(vrCutterYaw, vrCutterPitch, vrCutterRoll);
+                // 手首クォータニオンを直接渡す（ジンバルロックなし）
+                sb.setCutterQuaternion(wo.x, wo.y, wo.z, wo.w);
                 cutterPlaced = true;
                 vrCutterDragging = true;
                 vrCutterPlaced = false;
@@ -4336,11 +4333,8 @@ function processHandTracking(frame, src, hand) {
                 // ピンチ中 → カッター位置追従 + ピンチ方向で回転追従
                 const simPos = vrToSim(midX, midY, midZ);
                 sb.setCutterPosition(simPos[0], simPos[1], simPos[2]);
-                // 手首クォータニオンから毎フレーム回転更新（3DOF）
-                vrCutterYaw = Math.atan2(2*(wo.w*wo.y + wo.x*wo.z), 1-2*(wo.y*wo.y + wo.z*wo.z));
-                vrCutterPitch = Math.asin(Math.max(-1, Math.min(1, 2*(wo.w*wo.x - wo.z*wo.y))));
-                const vrCutRoll = Math.atan2(2*(wo.w*wo.z + wo.x*wo.y), 1-2*(wo.x*wo.x + wo.z*wo.z));
-                sb.setCutterRotation3(vrCutterYaw, vrCutterPitch, vrCutRoll);
+                // 手首クォータニオンを直接渡す（毎フレーム追従）
+                sb.setCutterQuaternion(wo.x, wo.y, wo.z, wo.w);
             } else if (!isPinching && vrCutterDragging) {
                 // ピンチ離す → カッター固定、交差テスト
                 vrCutterDragging = false;
