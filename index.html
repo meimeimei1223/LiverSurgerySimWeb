@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v49</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v50</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -3674,8 +3674,9 @@ let vrDeformSub = 'none';  // 'none'|'place'|'deform' — VR版 Deform サブモ
 // VR Free Cut 状態
 let vrCutterDragging = false;  // ピンチ中（カッター移動中）
 let vrCutterPlaced = false;    // ピンチ離した後（Execute待ち）
-let vrCutterYaw = 0, vrCutterPitch = 0;
-let vrCutterPrevOri = null;    // 回転追跡用
+let vrCutterEverPlaced = false; // 一度でも配置されたか（初回のみ手の向きで初期化）
+let vrCutterPrevOri = null;    // ドラッグ中のデルタ回転追跡用
+let vrCutterLastQuat = null;   // 前回の回転を保存
 
 function getPanelLayout() {
     const cardCols = 3, cardGap = 12;
@@ -4316,25 +4317,52 @@ function processHandTracking(frame, src, hand) {
         // Free Cut モード: 右手ピンチで配置+移動+回転、離すと固定
         if (actionMode === 'freeCut' && !nearPanel) {
             if (isPinching && !vrCutterDragging && panelPinchReleased) {
-                // ピンチ開始 → カッター配置
+                // ピンチ開始 → カッター配置（位置のみ、回転は前回を維持）
                 const simPos = vrToSim(midX, midY, midZ);
                 sb.setCutterPosition(simPos[0], simPos[1], simPos[2]);
                 cutTargetMeshIdx = -1;
                 sb.setCutterScale(cutterTargetScales.liver);
-                // 手首クォータニオンを直接渡す（ジンバルロックなし）
-                sb.setCutterQuaternion(wo.x, wo.y, wo.z, wo.w);
+                // 初回のみ手の向きで回転初期化、2回目以降は前回の回転を維持
+                if (!vrCutterEverPlaced) {
+                    sb.setCutterQuaternion(wo.x, wo.y, wo.z, wo.w);
+                    vrCutterLastQuat = { x:wo.x, y:wo.y, z:wo.z, w:wo.w };
+                    vrCutterEverPlaced = true;
+                } else if (vrCutterLastQuat) {
+                    // 前回の回転を復元
+                    sb.setCutterQuaternion(vrCutterLastQuat.x, vrCutterLastQuat.y, vrCutterLastQuat.z, vrCutterLastQuat.w);
+                }
                 cutterPlaced = true;
                 vrCutterDragging = true;
                 vrCutterPlaced = false;
-                vrCutterPrevOri = { x: wo.x, y: wo.y, z: wo.z, w: wo.w };
+                vrCutterPrevOri = { x:wo.x, y:wo.y, z:wo.z, w:wo.w };
                 numHighlightIdx = 0;
                 panelPinchReleased = false;
             } else if (isPinching && vrCutterDragging) {
-                // ピンチ中 → カッター位置追従 + ピンチ方向で回転追従
+                // ピンチ中 → カッター位置追従 + 手首デルタで回転更新
                 const simPos = vrToSim(midX, midY, midZ);
                 sb.setCutterPosition(simPos[0], simPos[1], simPos[2]);
-                // 手首クォータニオンを直接渡す（毎フレーム追従）
-                sb.setCutterQuaternion(wo.x, wo.y, wo.z, wo.w);
+                // デルタ回転: 前フレームの手首 → 現フレームの手首の差分を現在の回転に適用
+                if (vrCutterPrevOri && vrCutterLastQuat) {
+                    const p = vrCutterPrevOri, c = { x:wo.x, y:wo.y, z:wo.z, w:wo.w };
+                    // deltaQ = current * inverse(prev)
+                    const pi = { x:-p.x, y:-p.y, z:-p.z, w:p.w };
+                    const dq = {
+                        x:c.w*pi.x+c.x*pi.w+c.y*pi.z-c.z*pi.y,
+                        y:c.w*pi.y-c.x*pi.z+c.y*pi.w+c.z*pi.x,
+                        z:c.w*pi.z+c.x*pi.y-c.y*pi.x+c.z*pi.w,
+                        w:c.w*pi.w-c.x*pi.x-c.y*pi.y-c.z*pi.z
+                    };
+                    // newQuat = deltaQ * lastQuat
+                    const lq = vrCutterLastQuat;
+                    vrCutterLastQuat = {
+                        x:dq.w*lq.x+dq.x*lq.w+dq.y*lq.z-dq.z*lq.y,
+                        y:dq.w*lq.y-dq.x*lq.z+dq.y*lq.w+dq.z*lq.x,
+                        z:dq.w*lq.z+dq.x*lq.y-dq.y*lq.x+dq.z*lq.w,
+                        w:dq.w*lq.w-dq.x*lq.x-dq.y*lq.y-dq.z*lq.z
+                    };
+                    sb.setCutterQuaternion(vrCutterLastQuat.x, vrCutterLastQuat.y, vrCutterLastQuat.z, vrCutterLastQuat.w);
+                }
+                vrCutterPrevOri = { x:wo.x, y:wo.y, z:wo.z, w:wo.w };
             } else if (!isPinching && vrCutterDragging) {
                 // ピンチ離す → カッター固定、交差テスト
                 vrCutterDragging = false;
