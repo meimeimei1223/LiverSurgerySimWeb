@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v53</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v54</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -4326,84 +4326,55 @@ function processHandTracking(frame, src, hand) {
         // パネル近くにいる場合はHandle Place/Grabをスキップ（パネル操作優先）
         const nearPanel = panelPrePinchBtn >= 0 || panelHoveredBtn >= 0 || panelHoveredBtn === -2;
 
-        // Free Cut: 指別カッター（人差指=Liver, 中指=Portal, 薬指=Vein）
-        // ピンチ→移動回転→離す=カット実行、回転は臓器別に保持
+        // Free Cut: 人差指ピンチ→カッター配置+移動+回転、離す→カット実行
         if (actionMode === 'freeCut' && !nearPanel) {
-            // 3本の指-親指距離
-            const fJoints = ['index-finger-tip','middle-finger-tip','ring-finger-tip'];
-            const fKeys = ['index','middle','ring'];
-            const fDists = fJoints.map(jn => {
-                const jt = src.hand.get(jn);
-                if (!jt) return { dist:Infinity, pos:null };
-                const jp = frame.getJointPose(jt, xrRefSpace);
-                if (!jp) return { dist:Infinity, pos:null };
-                const p2 = jp.transform.position;
-                const dx=p2.x-tp.x, dy=p2.y-tp.y, dz=p2.z-tp.z;
-                return { dist:Math.sqrt(dx*dx+dy*dy+dz*dz), pos:p2 };
-            });
-            // 最も近い指（1.5cm以内）
-            let activeKey = null, activePos = null;
-            let minD = 0.015;
-            for (let fi=0; fi<3; fi++) {
-                if (fDists[fi].dist < minD) { minD=fDists[fi].dist; activeKey=fKeys[fi]; activePos=fDists[fi].pos; }
-            }
-
-            if (activeKey && !vrCutterDragging) {
-                // ピンチ開始 → カッター配置（臓器色）
-                const fm = VR_FINGER_MAP[activeKey];
-                cutTargetMeshIdx = fm.meshIdx;
-                const fmx=(activePos.x+tp.x)/2, fmy=(activePos.y+tp.y)/2, fmz=(activePos.z+tp.z)/2;
-                const simPos = vrToSim(fmx, fmy, fmz);
+            if (isPinching && !vrCutterDragging) {
+                // ピンチ開始 → カッター配置
+                cutTargetMeshIdx = -1;  // Liver（将来: 指別で切替）
+                const simPos = vrToSim(midX, midY, midZ);
                 sb.setCutterPosition(simPos[0], simPos[1], simPos[2]);
-                sb.setCutterScale(cutterTargetScales[fm.scale]);
-                const savedQ = vrCutterQuats[activeKey];
+                sb.setCutterScale(cutterTargetScales.liver);
+                const savedQ = vrCutterQuats.index;
                 if (savedQ) {
                     sb.setCutterQuaternion(savedQ.x, savedQ.y, savedQ.z, savedQ.w);
                 } else {
                     sb.setCutterQuaternion(wo.x, wo.y, wo.z, wo.w);
-                    vrCutterQuats[activeKey] = {x:wo.x,y:wo.y,z:wo.z,w:wo.w};
+                    vrCutterQuats.index = {x:wo.x,y:wo.y,z:wo.z,w:wo.w};
                 }
                 cutterPlaced = true;
                 vrCutterDragging = true;
-                vrCutterActiveFinger = activeKey;
+                vrCutterActiveFinger = 'index';
                 vrCutterPrevOri = {x:wo.x,y:wo.y,z:wo.z,w:wo.w};
                 numHighlightIdx = 0;
-            } else if (vrCutterDragging && vrCutterActiveFinger) {
-                // ピンチ中か確認
-                const fi = fKeys.indexOf(vrCutterActiveFinger);
-                const stillPinch = fi>=0 && fDists[fi].dist < 0.02;
-                if (stillPinch) {
-                    // 位置追従 + デルタ回転
-                    const ap = fDists[fi].pos;
-                    const fmx=(ap.x+tp.x)/2, fmy=(ap.y+tp.y)/2, fmz=(ap.z+tp.z)/2;
-                    const simPos = vrToSim(fmx, fmy, fmz);
-                    sb.setCutterPosition(simPos[0], simPos[1], simPos[2]);
-                    const curQ = vrCutterQuats[vrCutterActiveFinger];
-                    if (vrCutterPrevOri && curQ) {
-                        const p=vrCutterPrevOri, c={x:wo.x,y:wo.y,z:wo.z,w:wo.w};
-                        const pi={x:-p.x,y:-p.y,z:-p.z,w:p.w};
-                        const dq={
-                            x:c.w*pi.x+c.x*pi.w+c.y*pi.z-c.z*pi.y,
-                            y:c.w*pi.y-c.x*pi.z+c.y*pi.w+c.z*pi.x,
-                            z:c.w*pi.z+c.x*pi.y-c.y*pi.x+c.z*pi.w,
-                            w:c.w*pi.w-c.x*pi.x-c.y*pi.y-c.z*pi.z};
-                        const lq=curQ;
-                        vrCutterQuats[vrCutterActiveFinger]={
-                            x:dq.w*lq.x+dq.x*lq.w+dq.y*lq.z-dq.z*lq.y,
-                            y:dq.w*lq.y-dq.x*lq.z+dq.y*lq.w+dq.z*lq.x,
-                            z:dq.w*lq.z+dq.x*lq.y-dq.y*lq.x+dq.z*lq.w,
-                            w:dq.w*lq.w-dq.x*lq.x-dq.y*lq.y-dq.z*lq.z};
-                        const nq=vrCutterQuats[vrCutterActiveFinger];
-                        sb.setCutterQuaternion(nq.x,nq.y,nq.z,nq.w);
-                    }
-                    vrCutterPrevOri={x:wo.x,y:wo.y,z:wo.z,w:wo.w};
-                } else {
-                    // ピンチ離す → カット実行 + カッター非表示
-                    vrExecuteCut();
-                    cutterPlaced = false;
-                    vrCutterDragging = false;
-                    vrCutterActiveFinger = null;
+            } else if (isPinching && vrCutterDragging) {
+                // ピンチ中 → 位置追従 + デルタ回転
+                const simPos = vrToSim(midX, midY, midZ);
+                sb.setCutterPosition(simPos[0], simPos[1], simPos[2]);
+                const curQ = vrCutterQuats.index;
+                if (vrCutterPrevOri && curQ) {
+                    const p=vrCutterPrevOri, c={x:wo.x,y:wo.y,z:wo.z,w:wo.w};
+                    const pi={x:-p.x,y:-p.y,z:-p.z,w:p.w};
+                    const dq={
+                        x:c.w*pi.x+c.x*pi.w+c.y*pi.z-c.z*pi.y,
+                        y:c.w*pi.y-c.x*pi.z+c.y*pi.w+c.z*pi.x,
+                        z:c.w*pi.z+c.x*pi.y-c.y*pi.x+c.z*pi.w,
+                        w:c.w*pi.w-c.x*pi.x-c.y*pi.y-c.z*pi.z};
+                    const lq=curQ;
+                    vrCutterQuats.index={
+                        x:dq.w*lq.x+dq.x*lq.w+dq.y*lq.z-dq.z*lq.y,
+                        y:dq.w*lq.y-dq.x*lq.z+dq.y*lq.w+dq.z*lq.x,
+                        z:dq.w*lq.z+dq.x*lq.y-dq.y*lq.x+dq.z*lq.w,
+                        w:dq.w*lq.w-dq.x*lq.x-dq.y*lq.y-dq.z*lq.z};
+                    const nq=vrCutterQuats.index;
+                    sb.setCutterQuaternion(nq.x,nq.y,nq.z,nq.w);
                 }
+                vrCutterPrevOri={x:wo.x,y:wo.y,z:wo.z,w:wo.w};
+            } else if (!isPinching && vrCutterDragging) {
+                // ピンチ離す → カット実行 + カッター非表示
+                vrExecuteCut();
+                cutterPlaced = false;
+                vrCutterDragging = false;
+                vrCutterActiveFinger = null;
             }
         } else
 
