@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v55</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v56</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -4329,12 +4329,11 @@ function processHandTracking(frame, src, hand) {
         // Free Cut: 人差指ピンチ→カッター配置+移動+回転、離す→カット実行
         if (actionMode === 'freeCut' && !nearPanel) {
             if (isPinching && !vrCutterDragging) {
-                // ピンチ開始 → カッター配置 + 臓器自動判定
+                // ピンチ開始 → カッター配置
+                cutTargetMeshIdx = -1;  // Liver
                 const simPos = vrToSim(midX, midY, midZ);
                 sb.setCutterPosition(simPos[0], simPos[1], simPos[2]);
-                cutTargetMeshIdx = vrDetectNearestOrgan(simPos[0], simPos[1], simPos[2]);
-                const isVessel = (cutTargetMeshIdx >= 0 && cutTargetMeshIdx <= 1);
-                sb.setCutterScale(isVessel ? cutterTargetScales.vessel : cutterTargetScales.liver);
+                sb.setCutterScale(cutterTargetScales.liver);
                 const savedQ = vrCutterQuats.index;
                 if (savedQ) {
                     sb.setCutterQuaternion(savedQ.x, savedQ.y, savedQ.z, savedQ.w);
