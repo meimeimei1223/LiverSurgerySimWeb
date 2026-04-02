@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v61</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v62</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -3409,7 +3409,7 @@ function drawPanelCanvas() {
     y = L.sliderY;
 
     // ===== Liver Alpha スライダー（ボックス型、ホバー対応） =====
-    const sliderHovered = (panelHoveredBtn === -2) || panelSliderDragging;
+    const sliderHovered = (panelHoveredBtn === -2) || panelActiveSlider === 'alpha';
     c.fillStyle = sliderHovered ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.04)';
     c.fillRect(12, y, W - 24, 50);
     c.strokeStyle = sliderHovered ? '#fff' : 'rgba(255,255,255,0.1)';
@@ -3430,7 +3430,7 @@ function drawPanelCanvas() {
 
     // ===== VR Scale スライダー =====
     y = L.vrScaleSliderY;
-    const vrScaleHovered = panelHoveredBtn === -3 || panelSliderDragging;
+    const vrScaleHovered = panelHoveredBtn === -3 || panelActiveSlider === 'vrScale';
     c.fillStyle = vrScaleHovered ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.04)';
     c.fillRect(12, y, W - 24, 50);
     c.strokeStyle = vrScaleHovered ? '#fff' : 'rgba(255,255,255,0.1)';
@@ -3508,10 +3508,11 @@ function drawPanelCanvas() {
                     const csVal = typeof cutterTargetScales !== 'undefined' ?
                         (cutTargetMeshIdx >= 0 ? cutterTargetScales.vessel : cutterTargetScales.liver) : 1.0;
                     const csNorm = Math.max(0, Math.min(1, (csVal - 0.1) / 4.9));
-                    c.fillStyle = 'rgba(255,255,255,0.04)';
+                    const csActive = panelActiveSlider === 'cutterSize';
+                    c.fillStyle = csActive ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.04)';
                     c.fillRect(30, y, W - 60, 40);
-                    c.strokeStyle = 'rgba(255,255,255,0.08)';
-                    c.lineWidth = 1;
+                    c.strokeStyle = csActive ? '#fff' : 'rgba(255,255,255,0.08)';
+                    c.lineWidth = csActive ? 3 : 1;
                     c.strokeRect(30, y, W - 60, 40);
                     c.fillStyle = '#aaa';
                     c.font = '12px Arial';
@@ -3691,6 +3692,8 @@ let panelTouchCooldown = 0;   // 連打防止
 let panelHoveredBtn = -1;     // ホバー中のボタンインデックス
 let panelBtnWorldPos = [];    // 各ボタンの3Dワールド座標
 let panelSliderDragging = false;  // スライダードラッグ中フラグ
+let panelActiveSlider = null;    // 'alpha'|'vrScale'|'cutterSize'|null
+let vrGrabFirstFrame = false;    // グラブ初回フレームスキップ用
 let panelPinchReleased = true;    // ピンチリリース検出（連続ピンチ対応）
 let panelPrePinchBtn = -1;        // ピンチ直前のホバーボタン（指移動対策）
 let panelIcons = {};  // アイコン Image オブジェクト
@@ -4501,6 +4504,7 @@ function processHandTracking(frame, src, hand) {
                     // 配置失敗 → 既存ハンドル球のグラブを試行
                     const simPos = vrToSim(midX, midY, midZ);
                     sb.startGrabVRNearest(simPos[0], simPos[1], simPos[2], 2.0);
+                    vrGrabFirstFrame = true;
                     if (sb.isGrabbingVR() && !sb.isHandleGrabbing()) {
                         // 通常メッシュグラブ → Handle Place モードでは無効、キャンセル
                         sb.endGrabVR();
@@ -4515,10 +4519,17 @@ function processHandTracking(frame, src, hand) {
             const simPos = vrToSim(midX, midY, midZ);
             sb.startGrabVRNearest(simPos[0], simPos[1], simPos[2], 2.0);
             vrGrabs.right.active = sb.isGrabbingVR();
+            if (vrGrabs.right.active) vrGrabFirstFrame = true;
         } else if (isPinching && vrGrabs.right.active) {
             // 位置ベースの移動（ピンチ位置を直接渡す）
             const simPos = vrToSim(midX, midY, midZ);
-            sb.moveGrabVRDirect(simPos[0], simPos[1], simPos[2], 1/72);
+            if (vrGrabFirstFrame) {
+                // 初回フレーム: 位置だけ同期、速度ゼロ（ジャンプ防止）
+                sb.moveGrabVRDirect(simPos[0], simPos[1], simPos[2], 0);
+                vrGrabFirstFrame = false;
+            } else {
+                sb.moveGrabVRDirect(simPos[0], simPos[1], simPos[2], 1/72);
+            }
         } else if (!isPinching && vrGrabs.right.active) {
             sb.endGrabVR();
             vrGrabs.right.active = false;
@@ -4532,7 +4543,7 @@ function processHandTracking(frame, src, hand) {
 
     // === 右手: パネル操作 ===
     if (hand === 'right' && panelBtnWorldPos.length > 0) {
-        if (!isPinching) { panelPinchReleased = true; panelSliderDragging = false; }
+        if (!isPinching) { panelPinchReleased = true; panelSliderDragging = false; panelActiveSlider = null; }
         const LL = getPanelLayout();
 
         // --- スライダー（独立処理）---
@@ -4541,9 +4552,8 @@ function processHandTracking(frame, src, hand) {
             const sHit = panelSliderDragging
                 ? panelHitTestLoose(ip.x, ip.y, ip.z, 0.10)
                 : panelHitTest(ip.x, ip.y, ip.z);
-            if (sHit && sHit.y >= LL.sliderY && sHit.y < LL.sliderY + 55) {
-                // Liver Alpha → ブラウザ版 onLiverAlphaSlider と同じ処理
-                panelSliderDragging = true;
+            if (sHit && sHit.y >= LL.sliderY && sHit.y < LL.sliderY + 55 && (!panelActiveSlider || panelActiveSlider==='alpha')) {
+                panelSliderDragging = true; panelActiveSlider = 'alpha';
                 const sliderX = Math.max(0, Math.min(1, (sHit.x - 22) / (PANEL_W - 44)));
                 const alphaVal = Math.round(sliderX * 100);
                 if (typeof onLiverAlphaSlider === 'function') {
@@ -4554,8 +4564,8 @@ function processHandTracking(frame, src, hand) {
                 }
             }
             // VR Scale スライダー
-            if (sHit && sHit.y >= LL.vrScaleSliderY && sHit.y < LL.vrScaleSliderY + 55) {
-                panelSliderDragging = true;
+            if (sHit && sHit.y >= LL.vrScaleSliderY && sHit.y < LL.vrScaleSliderY + 55 && (!panelActiveSlider || panelActiveSlider==='vrScale')) {
+                panelSliderDragging = true; panelActiveSlider = 'vrScale';
                 const slX2 = Math.max(0, Math.min(1, (sHit.x - 22) / (PANEL_W - 44)));
                 VR_SCALE = 0.01 + slX2 * 0.19;
             }
@@ -4566,8 +4576,8 @@ function processHandTracking(frame, src, hand) {
                 // + sub-buttons: Execute(34) + Cancel(34) + Undo(34) = 102
                 // + CutterSize starts here
                 const csBaseY = LL.actionStartY + 28 + 58 + 58 + 34*3;
-                if (sHit.y >= csBaseY && sHit.y < csBaseY + 46) {
-                    panelSliderDragging = true;
+                if (sHit.y >= csBaseY && sHit.y < csBaseY + 46 && (!panelActiveSlider || panelActiveSlider==='cutterSize')) {
+                    panelSliderDragging = true; panelActiveSlider = 'cutterSize';
                     const csX = Math.max(0, Math.min(1, (sHit.x - 40) / (PANEL_W - 80)));
                     const csVal = 0.1 + csX * 4.9;
                     sb.setCutterScale(csVal);
