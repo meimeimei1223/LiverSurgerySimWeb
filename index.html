@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v63</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v64</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -3693,7 +3693,8 @@ let panelHoveredBtn = -1;     // ホバー中のボタンインデックス
 let panelBtnWorldPos = [];    // 各ボタンの3Dワールド座標
 let panelSliderDragging = false;  // スライダードラッグ中フラグ
 let panelActiveSlider = null;    // 'alpha'|'vrScale'|'cutterSize'|null
-let vrGrabFirstFrame = false;    // グラブ初回フレームスキップ用
+let vrGrabFirstFrame = false;    // グラブ初回フレーム用
+let vrGrabStartPos = null;       // グラブ開始時のピンチ位置（初回同期用）
 let panelPinchReleased = true;    // ピンチリリース検出（連続ピンチ対応）
 let panelPrePinchBtn = -1;        // ピンチ直前のホバーボタン（指移動対策）
 let panelIcons = {};  // アイコン Image オブジェクト
@@ -4504,7 +4505,7 @@ function processHandTracking(frame, src, hand) {
                     // 配置失敗 → 既存ハンドル球のグラブを試行
                     const simPos = vrToSim(midX, midY, midZ);
                     sb.startGrabVRNearest(simPos[0], simPos[1], simPos[2], 2.0);
-                    vrGrabFirstFrame = true;
+                    vrGrabFirstFrame = true; vrGrabStartPos = simPos;
                     if (sb.isGrabbingVR() && !sb.isHandleGrabbing()) {
                         // 通常メッシュグラブ → Handle Place モードでは無効、キャンセル
                         sb.endGrabVR();
@@ -4519,11 +4520,12 @@ function processHandTracking(frame, src, hand) {
             const simPos = vrToSim(midX, midY, midZ);
             sb.startGrabVRNearest(simPos[0], simPos[1], simPos[2], 2.0);
             vrGrabs.right.active = sb.isGrabbingVR();
-            if (vrGrabs.right.active) vrGrabFirstFrame = true;
+            if (vrGrabs.right.active) { vrGrabFirstFrame = true; vrGrabStartPos = simPos; }
         } else if (isPinching && vrGrabs.right.active) {
             // 位置ベースの移動（ピンチ位置を直接渡す）
-            if (vrGrabFirstFrame) {
-                // 初回フレーム: move を完全スキップ（smartMove の位置ジャンプ防止）
+            if (vrGrabFirstFrame && vrGrabStartPos) {
+                // 初回フレーム: グラブ開始位置を渡してvrPrevPositionを同期（ジャンプ防止）
+                sb.moveGrabVRDirect(vrGrabStartPos[0], vrGrabStartPos[1], vrGrabStartPos[2], 1/72);
                 vrGrabFirstFrame = false;
             } else {
                 const simPos = vrToSim(midX, midY, midZ);
