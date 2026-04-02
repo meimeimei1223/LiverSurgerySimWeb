@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v64</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v65</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -4411,7 +4411,7 @@ function processHandTracking(frame, src, hand) {
         const rayLen = Math.sqrt(rayDx*rayDx + rayDy*rayDy + rayDz*rayDz) || 1;
 
         // パネル近くにいる場合はHandle Place/Grabをスキップ（パネル操作優先）
-        const nearPanel = panelPrePinchBtn >= 0 || panelHoveredBtn >= 0 || panelHoveredBtn === -2;
+        const nearPanel = panelPrePinchBtn >= 0 || panelHoveredBtn >= 0 || panelHoveredBtn <= -2;
 
         // 中指-親指距離を検出（カット実行トリガー用）
         const middleTip = src.hand.get('middle-finger-tip');
@@ -4523,14 +4523,8 @@ function processHandTracking(frame, src, hand) {
             if (vrGrabs.right.active) { vrGrabFirstFrame = true; vrGrabStartPos = simPos; }
         } else if (isPinching && vrGrabs.right.active) {
             // 位置ベースの移動（ピンチ位置を直接渡す）
-            if (vrGrabFirstFrame && vrGrabStartPos) {
-                // 初回フレーム: グラブ開始位置を渡してvrPrevPositionを同期（ジャンプ防止）
-                sb.moveGrabVRDirect(vrGrabStartPos[0], vrGrabStartPos[1], vrGrabStartPos[2], 1/72);
-                vrGrabFirstFrame = false;
-            } else {
-                const simPos = vrToSim(midX, midY, midZ);
-                sb.moveGrabVRDirect(simPos[0], simPos[1], simPos[2], 1/72);
-            }
+            const simPos = vrToSim(midX, midY, midZ);
+            sb.moveGrabVRDirect(simPos[0], simPos[1], simPos[2], 1/72);
         } else if (!isPinching && vrGrabs.right.active) {
             sb.endGrabVR();
             vrGrabs.right.active = false;
