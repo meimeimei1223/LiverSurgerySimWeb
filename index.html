@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v57</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v58</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -3570,7 +3570,8 @@ function drawPanelCanvas() {
     const hb = (panelHoveredBtn >= 0 && panelBtnWorldPos[panelHoveredBtn]) ? panelBtnWorldPos[panelHoveredBtn] : null;
     c.fillText('hover=' + panelHoveredBtn + ' pre=' + panelPrePinchBtn
         + (hb ? ' [' + hb.action + ':' + (hb.mode||hb.idx) + ']' : ''), 10, H - 30);
-    c.fillText('active=' + vrActiveAction + ' released=' + panelPinchReleased
+    const cutTgt = VR_CUT_TARGETS[vrCutTargetIdx];
+    c.fillText('active=' + vrActiveAction + ' cut=' + (cutTgt?cutTgt.label:'?') + ' released=' + panelPinchReleased
         + ' btns=' + panelBtnWorldPos.length, 10, H - 12);
 
     // テクスチャ転送
@@ -3677,7 +3678,14 @@ let vrCutterPlaced = false;
 let vrCutterEverPlaced = false;
 let vrCutterPrevOri = null;
 let vrCutterLastQuat = null;
-let vrMiddlePinchDone = false;   // 中指カット実行済み（開き直すまでロック）
+let vrMiddlePinchDone = false;   // 中指サイクル済み（開き直すまでロック）
+// カットターゲットサイクル: -1=Liver, 0=Portal, 1=Vein
+const VR_CUT_TARGETS = [
+    { meshIdx:-1, label:'Liver',  scale:'liver',  color:'-1' },
+    { meshIdx:0,  label:'Portal', scale:'vessel', color:'0'  },
+    { meshIdx:1,  label:'Vein',   scale:'vessel', color:'1'  },
+];
+let vrCutTargetIdx = 0;  // VR_CUT_TARGETS のインデックス
 
 function getPanelLayout() {
     const cardCols = 3, cardGap = 12;
@@ -4332,15 +4340,23 @@ function processHandTracking(frame, src, hand) {
         if (middleDist > 0.08) vrMiddlePinchDone = false;
 
         if (actionMode === 'freeCut' && !nearPanel) {
+            // 中指ピンチ = 臓器サイクル（Liver→Portal→Vein→Liver）
+            if (middleDist < 0.025 && !vrMiddlePinchDone && !vrCutterDragging) {
+                vrMiddlePinchDone = true;
+                vrCutTargetIdx = (vrCutTargetIdx + 1) % VR_CUT_TARGETS.length;
+                const tgt = VR_CUT_TARGETS[vrCutTargetIdx];
+                cutTargetMeshIdx = tgt.meshIdx;
+                sb.setCutterScale(cutterTargetScales[tgt.scale]);
+            }
+
+            // 人差指ピンチ = カッター配置+移動+回転
             if (isPinching && !vrCutterDragging && panelPinchReleased) {
-                // ピンチ開始 → カッター配置
+                // ピンチ開始 → カッター配置（現在のターゲット臓器）
+                const tgt = VR_CUT_TARGETS[vrCutTargetIdx];
+                cutTargetMeshIdx = tgt.meshIdx;
                 const simPos = vrToSim(midX, midY, midZ);
                 sb.setCutterPosition(simPos[0], simPos[1], simPos[2]);
-                // 臓器自動判定（全メッシュの最近傍距離比較）
-                cutTargetMeshIdx = vrDetectNearestOrgan(simPos[0], simPos[1], simPos[2]);
-                const isVessel = (cutTargetMeshIdx >= 0 && cutTargetMeshIdx <= 1);
-                sb.setCutterScale(isVessel ? cutterTargetScales.vessel : cutterTargetScales.liver);
-                // 回転: 初回は手の向き、2回目以降は前回維持
+                sb.setCutterScale(cutterTargetScales[tgt.scale]);
                 if (!vrCutterEverPlaced) {
                     sb.setCutterQuaternion(wo.x, wo.y, wo.z, wo.w);
                     vrCutterLastQuat = { x:wo.x, y:wo.y, z:wo.z, w:wo.w };
@@ -4351,7 +4367,6 @@ function processHandTracking(frame, src, hand) {
                 cutterPlaced = true;
                 vrCutterDragging = true;
                 vrCutterPlaced = false;
-                vrMiddlePinchDone = false;
                 vrCutterPrevOri = { x:wo.x, y:wo.y, z:wo.z, w:wo.w };
                 numHighlightIdx = 0;
                 panelPinchReleased = false;
@@ -4378,20 +4393,14 @@ function processHandTracking(frame, src, hand) {
                     sb.setCutterQuaternion(vrCutterLastQuat.x, vrCutterLastQuat.y, vrCutterLastQuat.z, vrCutterLastQuat.w);
                 }
                 vrCutterPrevOri = { x:wo.x, y:wo.y, z:wo.z, w:wo.w };
-                // 中指が5cm以内 → カット実行！
-                if (middleDist < 0.05 && !vrMiddlePinchDone) {
-                    vrMiddlePinchDone = true;  // 中指を開くまでロック
-                    vrExecuteCut();
-                }
             } else if (!isPinching && vrCutterDragging) {
                 // ピンチ離す → カット実行 + カッター非表示
                 vrExecuteCut();
                 cutterPlaced = false;
                 vrCutterDragging = false;
                 vrCutterPlaced = false;
-                vrMiddlePinchDone = false;
             }
-            if (!isPinching) { panelPinchReleased = true; vrMiddlePinchDone = false; }
+            if (!isPinching) panelPinchReleased = true;
         } else
 
         if (isPinching && !vrGrabs.right.active && vrDeformSub === 'place' && !nearPanel) {
