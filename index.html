@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v59</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v60</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -4048,17 +4048,22 @@ function drawSceneXR(M, V, P, cp) {
     gl.uniform3fv(L.uLP, cp);
     gl.uniform3fv(L.uVP, cp);
 
-    // Liver 描画（meshAlphaValues[0] で透過対応）
-    const liverAlpha = (typeof meshAlphaValues !== 'undefined') ? meshAlphaValues[0] : 1;
-    if (liverAlpha > 0) {
-        if (liverAlpha < 1) {
-            gl.enable(gl.BLEND);
-            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-            gl.depthMask(false);
-        }
-        gl.uniform4f(L.uCol, 0.75, 0.22, 0.17, 1.0);
-        gl.uniform1f(L.uAlpha, liverAlpha);
+    // ===== 2パス描画（ブラウザ版 drawAllDepthSorted と同じ）=====
+    const CHILD_COLORS = [
+        [0.85, 0.25, 0.60, 1], [0.09, 0.63, 0.52, 1],
+        [0.83, 0.63, 0.09, 1], [0.15, 0.68, 0.38, 1],
+    ];
+    let hasTransparent = false;
 
+    // Pass 1: 不透明メッシュ（alpha >= 1.0）
+    gl.depthMask(true); gl.disable(gl.BLEND);
+    gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK);
+
+    // Liver（不透明時のみ）
+    const liverAlpha = meshAlphaValues[0];
+    if (liverAlpha >= 1.0) {
+        gl.uniform4f(L.uCol, 0.75, 0.22, 0.17, 1.0);
+        gl.uniform1f(L.uAlpha, 1.0);
         gl.bindBuffer(gl.ARRAY_BUFFER, bHiPos);
         gl.enableVertexAttribArray(L.aPos);
         gl.vertexAttribPointer(L.aPos, 3, gl.FLOAT, false, 0, 0);
@@ -4066,41 +4071,20 @@ function drawSceneXR(M, V, P, cp) {
         gl.enableVertexAttribArray(L.aNrm);
         gl.vertexAttribPointer(L.aNrm, 3, gl.FLOAT, false, 0, 0);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bHiIdx);
-
         const numIdx = sb.getNumHighResSurfaceTriIdsAfterCut
-            ? sb.getNumHighResSurfaceTriIdsAfterCut()
-            : sb.getNumHighResSurfaceTriIds();
-        gl.drawElements(gl.TRIANGLES, numIdx,
-            extUint ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);
+            ? sb.getNumHighResSurfaceTriIdsAfterCut() : sb.getNumHighResSurfaceTriIds();
+        gl.drawElements(gl.TRIANGLES, numIdx, extUint ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);
+    } else if (liverAlpha > 0) hasTransparent = true;
 
-        if (liverAlpha < 1) {
-            gl.depthMask(true);
-            gl.disable(gl.BLEND);
-        }
-    }
-
-    // 子メッシュ描画（meshAlphaValues[1..4] で透過・非表示対応）
-    const CHILD_COLORS = [
-        [0.85, 0.25, 0.60, 1],  // portal  → meshAlphaValues[1]
-        [0.09, 0.63, 0.52, 1],  // vein    → meshAlphaValues[2]
-        [0.83, 0.63, 0.09, 1],  // tumor   → meshAlphaValues[3]
-        [0.15, 0.68, 0.38, 1],  // gb      → meshAlphaValues[4]
-    ];
+    // Children（不透明時のみ）
     for (let ci = 0; ci < childBuffers.length; ci++) {
-        const cb = childBuffers[ci];
-        if (!cb) continue;
-        const alpha = (typeof meshAlphaValues !== 'undefined') ? meshAlphaValues[ci + 1] : 1;
-        if (alpha <= 0) continue;  // 非表示
-
-        if (alpha < 1) {
-            gl.enable(gl.BLEND);
-            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-            gl.depthMask(false);
-        }
-        const cc = CHILD_COLORS[ci] || [0.5, 0.5, 0.5, 1];
+        const cb = childBuffers[ci]; if (!cb) continue;
+        const alpha = meshAlphaValues[ci + 1];
+        if (alpha <= 0) continue;
+        if (alpha < 1.0) { hasTransparent = true; continue; }
+        const cc = CHILD_COLORS[ci] || [0.5,0.5,0.5,1];
         gl.uniform4f(L.uCol, cc[0], cc[1], cc[2], cc[3]);
-        gl.uniform1f(L.uAlpha, alpha);
-
+        gl.uniform1f(L.uAlpha, 1.0);
         gl.bindBuffer(gl.ARRAY_BUFFER, cb.bPos);
         gl.enableVertexAttribArray(L.aPos);
         gl.vertexAttribPointer(L.aPos, 3, gl.FLOAT, false, 0, 0);
@@ -4108,17 +4092,74 @@ function drawSceneXR(M, V, P, cp) {
         gl.enableVertexAttribArray(L.aNrm);
         gl.vertexAttribPointer(L.aNrm, 3, gl.FLOAT, false, 0, 0);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cb.bIdx);
-        gl.drawElements(gl.TRIANGLES, cb.numIdx,
-            extUint ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);
+        gl.drawElements(gl.TRIANGLES, cb.numIdx, extUint ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);
+    }
 
-        if (alpha < 1) {
+    // Pass 2: 半透明メッシュ（C++ グローバルソート back-to-front）
+    if (hasTransparent) {
+        // カメラ位置をシミュレーション座標に変換
+        const simCam = vrToSim(cp[0], cp[1], cp[2]);
+        const globalData = new Int32Array(sb.getGlobalSortedTriIndices(
+            simCam[0], simCam[1], simCam[2],
+            meshAlphaValues[0], meshAlphaValues[1], meshAlphaValues[2],
+            meshAlphaValues[3], meshAlphaValues[4]));
+
+        if (globalData.length > 0) {
+            gl.enable(gl.BLEND);
+            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+            gl.depthMask(false);
+            gl.disable(gl.CULL_FACE);
+
+            const tempBuf = gl.createBuffer();
+            let batchMeshId = globalData[0];
+            let batchIdx = [];
+
+            const flushBatch = () => {
+                if (batchIdx.length === 0) return;
+                // メッシュに応じたバッファ・色をセット
+                if (batchMeshId === -1) {
+                    gl.uniform4f(L.uCol, 0.75, 0.22, 0.17, 1.0);
+                    gl.uniform1f(L.uAlpha, meshAlphaValues[0]);
+                    gl.bindBuffer(gl.ARRAY_BUFFER, bHiPos);
+                    gl.enableVertexAttribArray(L.aPos);
+                    gl.vertexAttribPointer(L.aPos, 3, gl.FLOAT, false, 0, 0);
+                    gl.bindBuffer(gl.ARRAY_BUFFER, bHiNrm);
+                    gl.enableVertexAttribArray(L.aNrm);
+                    gl.vertexAttribPointer(L.aNrm, 3, gl.FLOAT, false, 0, 0);
+                } else if (childBuffers[batchMeshId]) {
+                    const cb = childBuffers[batchMeshId];
+                    const cc = CHILD_COLORS[batchMeshId] || [0.5,0.5,0.5,1];
+                    gl.uniform4f(L.uCol, cc[0], cc[1], cc[2], cc[3]);
+                    gl.uniform1f(L.uAlpha, meshAlphaValues[batchMeshId + 1]);
+                    gl.bindBuffer(gl.ARRAY_BUFFER, cb.bPos);
+                    gl.enableVertexAttribArray(L.aPos);
+                    gl.vertexAttribPointer(L.aPos, 3, gl.FLOAT, false, 0, 0);
+                    gl.bindBuffer(gl.ARRAY_BUFFER, cb.bNrm);
+                    gl.enableVertexAttribArray(L.aNrm);
+                    gl.vertexAttribPointer(L.aNrm, 3, gl.FLOAT, false, 0, 0);
+                } else { batchIdx = []; return; }
+                const buf = extUint ? new Uint32Array(batchIdx) : new Uint16Array(batchIdx);
+                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, tempBuf);
+                gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, buf, gl.DYNAMIC_DRAW);
+                gl.drawElements(gl.TRIANGLES, buf.length, extUint ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);
+                batchIdx = [];
+            };
+
+            for (let i = 0; i < globalData.length; i += 4) {
+                const meshId = globalData[i];
+                if (meshId !== batchMeshId) { flushBatch(); batchMeshId = meshId; }
+                batchIdx.push(globalData[i+1], globalData[i+2], globalData[i+3]);
+            }
+            flushBatch();
+            gl.deleteBuffer(tempBuf);
             gl.depthMask(true);
             gl.disable(gl.BLEND);
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
         }
     }
 
-    // カッター描画（ブラウザ版と同じ: pMain + 法線 + ライティング）
-    if (cutMode && cutterPlaced && (vrCutterDragging || vrCutterPlaced)) {
+    // カッター描画（Free Cut モード中は常時表示）
+    if (cutMode) {
         for (let i = 0; i < 4; i++) gl.disableVertexAttribArray(i);
         // カッター頂点取得
         const cv = new Float32Array(sb.getCutterVertices());
@@ -4156,11 +4197,8 @@ function drawSceneXR(M, V, P, cp) {
             gl.uniformMatrix4fv(L.uV, false, V);
             gl.uniformMatrix4fv(L.uP, false, P);
             gl.uniform3fv(L.uLP, cp); gl.uniform3fv(L.uVP, cp);
-            // 色: ピンチ中&カット未実行→臓器色、カット済み→緑
-            const cutReady = vrCutterDragging && !vrMiddlePinchDone;
-            const cc = cutReady
-                ? (CUTTER_COLORS[''+cutTargetMeshIdx] || CUTTER_COLORS['-1'])
-                : CUTTER_COLORS['none'];
+            // 色: 常に臓器色
+            const cc = CUTTER_COLORS[''+cutTargetMeshIdx] || CUTTER_COLORS['-1'];
             gl.uniform4f(L.uCol, cc[0], cc[1], cc[2], 1.0);
             gl.uniform1f(L.uAlpha, cc[3]);
             gl.bindBuffer(gl.ARRAY_BUFFER, bCutterPos);
@@ -4384,6 +4422,12 @@ function processHandTracking(frame, src, hand) {
         if (middleDist > 0.08) vrMiddlePinchDone = false;
 
         if (actionMode === 'freeCut' && !nearPanel) {
+            // ピンチなし → カッターを人差指先端に追従（プレビュー）
+            if (!isPinching && !vrCutterDragging) {
+                const simPos = vrToSim(ip.x, ip.y, ip.z);
+                sb.setCutterPosition(simPos[0], simPos[1], simPos[2]);
+                cutterPlaced = true;
+            }
             // 中指ピンチ = 臓器サイクル（Liver→Portal→Vein→Liver）
             if (middleDist < 0.025 && !vrMiddlePinchDone && !vrCutterDragging) {
                 vrMiddlePinchDone = true;
