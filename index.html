@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v62</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v63</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -3430,7 +3430,7 @@ function drawPanelCanvas() {
 
     // ===== VR Scale スライダー =====
     y = L.vrScaleSliderY;
-    const vrScaleHovered = panelHoveredBtn === -3 || panelActiveSlider === 'vrScale';
+    const vrScaleHovered = (panelHoveredBtn === -3) || (panelActiveSlider === 'vrScale');
     c.fillStyle = vrScaleHovered ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.04)';
     c.fillRect(12, y, W - 24, 50);
     c.strokeStyle = vrScaleHovered ? '#fff' : 'rgba(255,255,255,0.1)';
@@ -4522,12 +4522,11 @@ function processHandTracking(frame, src, hand) {
             if (vrGrabs.right.active) vrGrabFirstFrame = true;
         } else if (isPinching && vrGrabs.right.active) {
             // 位置ベースの移動（ピンチ位置を直接渡す）
-            const simPos = vrToSim(midX, midY, midZ);
             if (vrGrabFirstFrame) {
-                // 初回フレーム: 位置だけ同期、速度ゼロ（ジャンプ防止）
-                sb.moveGrabVRDirect(simPos[0], simPos[1], simPos[2], 0);
+                // 初回フレーム: move を完全スキップ（smartMove の位置ジャンプ防止）
                 vrGrabFirstFrame = false;
             } else {
+                const simPos = vrToSim(midX, midY, midZ);
                 sb.moveGrabVRDirect(simPos[0], simPos[1], simPos[2], 1/72);
             }
         } else if (!isPinching && vrGrabs.right.active) {
@@ -4592,13 +4591,20 @@ function processHandTracking(frame, src, hand) {
 
         // --- ボタンホバー + ピンチ ---
         if (panelSliderDragging) {
-            panelHoveredBtn = -2;
+            // ドラッグ中は panelActiveSlider に応じたホバー値
+            if (panelActiveSlider === 'alpha') panelHoveredBtn = -2;
+            else if (panelActiveSlider === 'vrScale') panelHoveredBtn = -3;
+            else if (panelActiveSlider === 'cutterSize') panelHoveredBtn = -4;
+            else panelHoveredBtn = -1;
         } else if (!isPinching) {
-            // ピンチしていない時だけホバー更新（ピンチ中は凍結）
+            // ピンチしていない時だけホバー更新
             const slHit = panelHitTest(ip.x, ip.y, ip.z);
-            const nearSlider = slHit && slHit.y >= LL.sliderY && slHit.y < LL.sliderY + 55;
-            if (nearSlider) {
+            const nearAlpha = slHit && slHit.y >= LL.sliderY && slHit.y < LL.sliderY + 55;
+            const nearVrScale = slHit && slHit.y >= LL.vrScaleSliderY && slHit.y < LL.vrScaleSliderY + 55;
+            if (nearAlpha) {
                 panelHoveredBtn = -2;
+            } else if (nearVrScale) {
+                panelHoveredBtn = -3;
             } else {
                 let minDist = Infinity, minIdx = -1;
                 for (let i = 0; i < panelBtnWorldPos.length; i++) {
