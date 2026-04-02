@@ -4542,17 +4542,41 @@ function processHandTracking(frame, src, hand) {
                 ? panelHitTestLoose(ip.x, ip.y, ip.z, 0.10)
                 : panelHitTest(ip.x, ip.y, ip.z);
             if (sHit && sHit.y >= LL.sliderY && sHit.y < LL.sliderY + 55) {
+                // Liver Alpha → ブラウザ版 onLiverAlphaSlider と同じ処理
                 panelSliderDragging = true;
-                const sliderX = Math.max(0.05, Math.min(1, (sHit.x - 22) / (PANEL_W - 44)));
-                meshAlphaValues[0] = sliderX;
-                if (typeof liverAlphaValue !== 'undefined') liverAlphaValue = sliderX;
-                if (typeof liverVisible !== 'undefined') liverVisible = true;
+                const sliderX = Math.max(0, Math.min(1, (sHit.x - 22) / (PANEL_W - 44)));
+                const alphaVal = Math.round(sliderX * 100);
+                if (typeof onLiverAlphaSlider === 'function') {
+                    onLiverAlphaSlider(alphaVal);
+                } else {
+                    meshAlphaValues[0] = sliderX;
+                    if (typeof liverAlphaValue !== 'undefined') liverAlphaValue = sliderX;
+                }
             }
             // VR Scale スライダー
             if (sHit && sHit.y >= LL.vrScaleSliderY && sHit.y < LL.vrScaleSliderY + 55) {
                 panelSliderDragging = true;
                 const slX2 = Math.max(0, Math.min(1, (sHit.x - 22) / (PANEL_W - 44)));
-                VR_SCALE = 0.01 + slX2 * 0.19;  // 0.01 〜 0.20
+                VR_SCALE = 0.01 + slX2 * 0.19;
+            }
+            // Cutter Size スライダー（Free Cut 展開時）
+            if (sHit && vrActiveAction === 'freecut') {
+                // カッターサイズスライダーのY位置を動的計算
+                // ACTION label(28) + buttons before freecut(58) + freecut main(58)
+                // + sub-buttons: Execute(34) + Cancel(34) + Undo(34) = 102
+                // + CutterSize starts here
+                const csBaseY = LL.actionStartY + 28 + 58 + 58 + 34*3;
+                if (sHit.y >= csBaseY && sHit.y < csBaseY + 46) {
+                    panelSliderDragging = true;
+                    const csX = Math.max(0, Math.min(1, (sHit.x - 40) / (PANEL_W - 80)));
+                    const csVal = 0.1 + csX * 4.9;
+                    sb.setCutterScale(csVal);
+                    if (cutTargetMeshIdx >= 0 && cutTargetMeshIdx <= 1) {
+                        cutterTargetScales.vessel = csVal;
+                    } else {
+                        cutterTargetScales.liver = csVal;
+                    }
+                }
             }
         }
 
