@@ -3693,8 +3693,6 @@ let panelHoveredBtn = -1;     // ホバー中のボタンインデックス
 let panelBtnWorldPos = [];    // 各ボタンの3Dワールド座標
 let panelSliderDragging = false;  // スライダードラッグ中フラグ
 let panelActiveSlider = null;    // 'alpha'|'vrScale'|'cutterSize'|null
-let vrGrabFirstFrame = false;    // グラブ初回フレーム用
-let vrGrabStartPos = null;       // グラブ開始時のピンチ位置（初回同期用）
 let panelPinchReleased = true;    // ピンチリリース検出（連続ピンチ対応）
 let panelPrePinchBtn = -1;        // ピンチ直前のホバーボタン（指移動対策）
 let panelIcons = {};  // アイコン Image オブジェクト
@@ -4505,7 +4503,6 @@ function processHandTracking(frame, src, hand) {
                     // 配置失敗 → 既存ハンドル球のグラブを試行
                     const simPos = vrToSim(midX, midY, midZ);
                     sb.startGrabVRNearest(simPos[0], simPos[1], simPos[2], 1.0);
-                    vrGrabFirstFrame = true; vrGrabStartPos = simPos;
                     if (sb.isGrabbingVR() && !sb.isHandleGrabbing()) {
                         // 通常メッシュグラブ → Handle Place モードでは無効、キャンセル
                         sb.endGrabVR();
@@ -4520,7 +4517,6 @@ function processHandTracking(frame, src, hand) {
             const simPos = vrToSim(midX, midY, midZ);
             sb.startGrabVRNearest(simPos[0], simPos[1], simPos[2], 1.0);
             vrGrabs.right.active = sb.isGrabbingVR();
-            if (vrGrabs.right.active) { vrGrabFirstFrame = true; vrGrabStartPos = simPos; }
         } else if (isPinching && vrGrabs.right.active) {
             // 位置ベースの移動（ピンチ位置を直接渡す）
             const simPos = vrToSim(midX, midY, midZ);
