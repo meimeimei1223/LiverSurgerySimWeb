@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v79</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v80</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -4517,7 +4517,7 @@ function processHandTracking(frame, src, hand) {
                 vrCutterPlaced = false;
             }
             if (!isPinching) panelPinchReleased = true;
-        } else
+        } else {
 
         // 人差指レーザー方向（proximal → tip）
         const idxProx = src.hand ? src.hand.get('index-finger-phalanx-proximal') : null;
@@ -4531,7 +4531,7 @@ function processHandTracking(frame, src, hand) {
         }
         // Handle Place モード時はレーザー表示
         if (vrDeformSub === 'place' && actionMode === 'deform' && !isPinching) {
-            const laserLen = 0.5;  // VR空間 0.5m
+            const laserLen = 0.5;
             vrLaserLine = [
                 { x: ip.x, y: ip.y, z: ip.z },
                 { x: ip.x + (fingerDirX/fingerDirLen)*laserLen,
@@ -4580,6 +4580,7 @@ function processHandTracking(frame, src, hand) {
             sb.endGrabVR();
             vrGrabs.right.active = false;
         }
+        }  // end of else block (after Free Cut)
     } else {
         // === 左手: モデル移動/回転 ===
         processLeftHandTransform(isPinching,
