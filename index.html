@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v78</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v79</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -3268,6 +3268,9 @@ function renderXR(time, frame) {
 
         // ハンドジョイント描画
         drawVRHands(V, P);
+
+        // レーザー描画（Handle Place モード時）
+        drawVRLaser(V, P);
     }
 
     // VR パネルのボリューム自動更新
@@ -3693,6 +3696,7 @@ let panelHoveredBtn = -1;     // ホバー中のボタンインデックス
 let panelBtnWorldPos = [];    // 各ボタンの3Dワールド座標
 let panelSliderDragging = false;  // スライダードラッグ中フラグ
 let panelActiveSlider = null;    // 'alpha'|'vrScale'|'cutterSize'|null
+let vrLaserLine = null;          // レーザー描画用 [{x,y,z},{x,y,z}] or null
 let panelPinchReleased = true;    // ピンチリリース検出（連続ピンチ対応）
 let panelPrePinchBtn = -1;        // ピンチ直前のホバーボタン（指移動対策）
 let panelIcons = {};  // アイコン Image オブジェクト
@@ -3908,6 +3912,28 @@ function drawTestCube(V, P, pose) {
     gl.enable(gl.DEPTH_TEST);
     gl.enable(gl.CULL_FACE);
     gl.disable(gl.BLEND);
+}
+
+// 人差指レーザー描画（Handle Place モード時）
+function drawVRLaser(V, P) {
+    if (!vrLaserLine || vrLaserLine.length < 2) return;
+    const I = new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
+    const pts = new Float32Array([
+        vrLaserLine[0].x, vrLaserLine[0].y, vrLaserLine[0].z,
+        vrLaserLine[1].x, vrLaserLine[1].y, vrLaserLine[1].z
+    ]);
+    if (!bVRHandLines) bVRHandLines = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, bVRHandLines);
+    gl.bufferData(gl.ARRAY_BUFFER, pts, gl.DYNAMIC_DRAW);
+    gl.useProgram(pWire);
+    gl.uniformMatrix4fv(LW.uM, false, I);
+    gl.uniformMatrix4fv(LW.uV, false, V);
+    gl.uniformMatrix4fv(LW.uP, false, P);
+    gl.uniform4f(LW.uCol, 0.2, 1.0, 0.3, 1.0);  // 緑のレーザー
+    gl.enableVertexAttribArray(LW.aPos);
+    gl.vertexAttribPointer(LW.aPos, 3, gl.FLOAT, false, 0, 0);
+    gl.drawArrays(gl.LINES, 0, 2);
+    gl.disableVertexAttribArray(LW.aPos);
 }
 
 function drawVRHands(V, P) {
@@ -4493,11 +4519,35 @@ function processHandTracking(frame, src, hand) {
             if (!isPinching) panelPinchReleased = true;
         } else
 
+        // 人差指レーザー方向（proximal → tip）
+        const idxProx = src.hand ? src.hand.get('index-finger-phalanx-proximal') : null;
+        const idxProxPose = idxProx ? frame.getJointPose(idxProx, xrRefSpace) : null;
+        let fingerDirX = rayDx, fingerDirY = rayDy, fingerDirZ = rayDz;
+        let fingerDirLen = rayLen;
+        if (idxProxPose && ip) {
+            const pp = idxProxPose.transform.position;
+            fingerDirX = ip.x - pp.x; fingerDirY = ip.y - pp.y; fingerDirZ = ip.z - pp.z;
+            fingerDirLen = Math.sqrt(fingerDirX*fingerDirX + fingerDirY*fingerDirY + fingerDirZ*fingerDirZ) || 1;
+        }
+        // Handle Place モード時はレーザー表示
+        if (vrDeformSub === 'place' && actionMode === 'deform' && !isPinching) {
+            const laserLen = 0.5;  // VR空間 0.5m
+            vrLaserLine = [
+                { x: ip.x, y: ip.y, z: ip.z },
+                { x: ip.x + (fingerDirX/fingerDirLen)*laserLen,
+                  y: ip.y + (fingerDirY/fingerDirLen)*laserLen,
+                  z: ip.z + (fingerDirZ/fingerDirLen)*laserLen }
+            ];
+        } else {
+            vrLaserLine = null;
+        }
+
         if (isPinching && !vrGrabs.right.active && vrDeformSub === 'place' && !nearPanel) {
-            // Handle Place: ピンチでハンドル球配置、失敗なら既存球のみグラブ
+            // Handle Place: 人差指レイキャストでハンドル球配置
             if (panelPinchReleased) {
-                const simO = vrToSim(midX, midY, midZ);
-                const simD = [rayDx/rayLen/VR_SCALE, rayDy/rayLen/VR_SCALE, rayDz/rayLen/VR_SCALE];
+                const simO = vrToSim(ip.x, ip.y, ip.z);
+                const fdx = fingerDirX/fingerDirLen, fdy = fingerDirY/fingerDirLen, fdz = fingerDirZ/fingerDirLen;
+                const simD = [fdx, fdy, fdz];
                 const placed = sb.addHandleSphereVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2], 0.5);
                 if (!placed && sb.getNumHandleSpheres() > 0) {
                     // 配置失敗 → 既存ハンドル球のグラブを試行
