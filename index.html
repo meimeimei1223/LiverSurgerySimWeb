@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v76</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v77</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -4503,6 +4503,7 @@ function processHandTracking(frame, src, hand) {
                     // 配置失敗 → 既存ハンドル球のグラブを試行
                     const simPos = vrToSim(midX, midY, midZ);
                     sb.startGrabVRNearest(simPos[0], simPos[1], simPos[2], 1.0);
+                    { const sw=vrToSim(wp.x,wp.y,wp.z); sb.setGrabVRWristState(sw[0],sw[1],sw[2],wo.x,wo.y,wo.z,wo.w); }
                     if (sb.isGrabbingVR() && !sb.isHandleGrabbing()) {
                         // 通常メッシュグラブ → Handle Place モードでは無効、キャンセル
                         sb.endGrabVR();
@@ -4517,10 +4518,14 @@ function processHandTracking(frame, src, hand) {
             const simPos = vrToSim(midX, midY, midZ);
             sb.startGrabVRNearest(simPos[0], simPos[1], simPos[2], 1.0);
             vrGrabs.right.active = sb.isGrabbingVR();
+            if (vrGrabs.right.active) { const sw=vrToSim(wp.x,wp.y,wp.z); sb.setGrabVRWristState(sw[0],sw[1],sw[2],wo.x,wo.y,wo.z,wo.w); }
         } else if (isPinching && vrGrabs.right.active) {
-            // 位置ベースの移動（ピンチ位置を直接渡す）
+            // 回転 + 移動（手首クォータニオンで弧を描く移動）
             const simPos = vrToSim(midX, midY, midZ);
-            sb.moveGrabVRDirect(simPos[0], simPos[1], simPos[2], 1/72);
+            const simWrist = vrToSim(wp.x, wp.y, wp.z);
+            sb.moveGrabVRWithRot(simPos[0], simPos[1], simPos[2],
+                simWrist[0], simWrist[1], simWrist[2],
+                wo.x, wo.y, wo.z, wo.w, 1/72);
         } else if (!isPinching && vrGrabs.right.active) {
             sb.endGrabVR();
             vrGrabs.right.active = false;
