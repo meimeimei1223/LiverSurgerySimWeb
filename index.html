@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v89</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v90</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -3514,10 +3514,11 @@ function drawPanelCanvas() {
                         (cutTargetMeshIdx >= 0 ? cutterTargetScales.vessel : cutterTargetScales.liver) : 1.0;
                     const csNorm = Math.max(0, Math.min(1, (csVal - 0.1) / 4.9));
                     const csActive = panelActiveSlider === 'cutterSize';
-                    c.fillStyle = csActive ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.04)';
+                    const csHovered = panelHoveredBtn === -4;
+                    c.fillStyle = csActive ? 'rgba(255,255,255,0.18)' : csHovered ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.04)';
                     c.fillRect(30, y, W - 60, 40);
-                    c.strokeStyle = csActive ? '#fff' : 'rgba(255,255,255,0.08)';
-                    c.lineWidth = csActive ? 3 : 1;
+                    c.strokeStyle = csActive ? '#fff' : csHovered ? '#ffcc55' : 'rgba(255,255,255,0.08)';
+                    c.lineWidth = (csActive || csHovered) ? 3 : 1;
                     c.strokeRect(30, y, W - 60, 40);
                     c.fillStyle = '#aaa';
                     c.font = '12px Arial';
