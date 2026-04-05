@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v87</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v88</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -3452,6 +3452,7 @@ function drawPanelCanvas() {
     c.beginPath(); c.arc(vsX + vsW * vrScaleNorm, vsY2 + vsH/2, 8, 0, Math.PI*2); c.fill();
 
     // ===== ACTION =====
+    vrCutterSliderY = -1;  // リセット（Free Cut 展開時のみ再設定）
     y = L.actionStartY;
     c.fillStyle = '#4a8ccc';
     c.font = 'bold 18px Arial';
@@ -3507,7 +3508,8 @@ function drawPanelCanvas() {
                     || (subKeys[si] === 'deform' && vrDeformSub === 'deform')
                     || (subKeys[si] === 'executeCut' && vrCutterPlaced);
                 if (subKeys[si] === 'cutterSize') {
-                    // カッターサイズスライダー
+                    // カッターサイズスライダー（Y位置を保存）
+                    vrCutterSliderY = y;
                     const csVal = typeof cutterTargetScales !== 'undefined' ?
                         (cutTargetMeshIdx >= 0 ? cutterTargetScales.vessel : cutterTargetScales.liver) : 1.0;
                     const csNorm = Math.max(0, Math.min(1, (csVal - 0.1) / 4.9));
@@ -3697,6 +3699,7 @@ let panelBtnWorldPos = [];    // 各ボタンの3Dワールド座標
 let panelSliderDragging = false;  // スライダードラッグ中フラグ
 let panelActiveSlider = null;    // 'alpha'|'vrScale'|'cutterSize'|null
 let vrLaserLine = null;          // レーザー描画用 [{x,y,z},{x,y,z}] or null
+let vrCutterSliderY = -1;        // カッターサイズスライダーの描画Y位置（動的）
 let panelPinchReleased = true;    // ピンチリリース検出（連続ピンチ対応）
 let panelPrePinchBtn = -1;        // ピンチ直前のホバーボタン（指移動対策）
 let panelIcons = {};  // アイコン Image オブジェクト
@@ -4616,14 +4619,9 @@ function processHandTracking(frame, src, hand) {
                 const slX2 = Math.max(0, Math.min(1, (sHit.x - 22) / (PANEL_W - 44)));
                 VR_SCALE = 0.01 + slX2 * 0.19;
             }
-            // Cutter Size スライダー（Free Cut 展開時）
-            if (sHit && vrActiveAction === 'freecut') {
-                // カッターサイズスライダーのY位置を動的計算
-                // ACTION label(28) + buttons before freecut(58) + freecut main(58)
-                // + sub-buttons: Execute(34) + Cancel(34) + Undo(34) = 102
-                // + CutterSize starts here
-                const csBaseY = LL.actionStartY + 28 + 58 + 58 + 34*3;
-                if (sHit.y >= csBaseY && sHit.y < csBaseY + 46 && (!panelActiveSlider || panelActiveSlider==='cutterSize')) {
+            // Cutter Size スライダー（描画時に保存したY位置を使用）
+            if (sHit && vrCutterSliderY >= 0) {
+                if (sHit.y >= vrCutterSliderY && sHit.y < vrCutterSliderY + 46 && (!panelActiveSlider || panelActiveSlider==='cutterSize')) {
                     panelSliderDragging = true; panelActiveSlider = 'cutterSize';
                     const csX = Math.max(0, Math.min(1, (sHit.x - 40) / (PANEL_W - 80)));
                     const csVal = 0.1 + csX * 4.9;
@@ -4649,11 +4647,10 @@ function processHandTracking(frame, src, hand) {
             const slHit = panelHitTest(ip.x, ip.y, ip.z);
             const nearAlpha = slHit && slHit.y >= LL.sliderY && slHit.y < LL.sliderY + 55;
             const nearVrScale = slHit && slHit.y >= LL.vrScaleSliderY && slHit.y < LL.vrScaleSliderY + 55;
-            // カッターサイズ: Free Cut 展開時のみ（動的Y位置）
+            // カッターサイズ: Free Cut 展開時のみ（描画時に保存したY位置を使用）
             let nearCutterSize = false;
-            if (slHit && vrActiveAction === 'freecut') {
-                const csBaseY = LL.actionStartY + 28 + 58 + 58 + 34*3;
-                nearCutterSize = slHit.y >= csBaseY && slHit.y < csBaseY + 46;
+            if (slHit && vrCutterSliderY >= 0) {
+                nearCutterSize = slHit.y >= vrCutterSliderY && slHit.y < vrCutterSliderY + 46;
             }
             if (nearAlpha) {
                 panelHoveredBtn = -2;
