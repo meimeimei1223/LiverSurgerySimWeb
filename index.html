@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v91</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v92</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -4318,8 +4318,16 @@ function processController(frame, src, hand) {
         const stickY = src.gamepad.axes[3] || 0;
         const deadzone = 0.15;
         if (hand === 'right') {
-            if (Math.abs(stickY) > deadzone)
-                VR_SCALE = Math.max(0.01, Math.min(1.0, VR_SCALE - stickY * 0.001));
+            if (Math.abs(stickY) > deadzone) {
+                const newScale = Math.max(0.01, Math.min(1.0, VR_SCALE - stickY * 0.001));
+                if (newScale !== VR_SCALE && sb) {
+                    const cx=sb.getMeshCentroidX(), cy2=sb.getMeshCentroidY(), cz=sb.getMeshCentroidZ();
+                    VR_OFFSET.x += (VR_SCALE - newScale) * cx;
+                    VR_OFFSET.y += (VR_SCALE - newScale) * cy2;
+                    VR_OFFSET.z += (VR_SCALE - newScale) * cz;
+                    VR_SCALE = newScale;
+                }
+            }
         } else {
             if (Math.abs(stickY) > deadzone) VR_OFFSET.y -= stickY * 0.01;
             if (Math.abs(stickX) > deadzone) VR_OFFSET.z += stickX * 0.01;
@@ -4618,7 +4626,14 @@ function processHandTracking(frame, src, hand) {
             if (sHit && sHit.y >= LL.vrScaleSliderY && sHit.y < LL.vrScaleSliderY + 55 && (!panelActiveSlider || panelActiveSlider==='vrScale')) {
                 panelSliderDragging = true; panelActiveSlider = 'vrScale';
                 const slX2 = Math.max(0, Math.min(1, (sHit.x - 22) / (PANEL_W - 44)));
-                VR_SCALE = 0.01 + slX2 * 0.19;
+                const newScale2 = 0.01 + slX2 * 0.19;
+                if (Math.abs(newScale2 - VR_SCALE) > 0.0001 && sb) {
+                    const cx=sb.getMeshCentroidX(), cy2=sb.getMeshCentroidY(), cz=sb.getMeshCentroidZ();
+                    VR_OFFSET.x += (VR_SCALE - newScale2) * cx;
+                    VR_OFFSET.y += (VR_SCALE - newScale2) * cy2;
+                    VR_OFFSET.z += (VR_SCALE - newScale2) * cz;
+                    VR_SCALE = newScale2;
+                }
             }
             // Cutter Size スライダー（描画時に保存したY位置を使用）
             if (sHit && vrCutterSliderY >= 0) {
