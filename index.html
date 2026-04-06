@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v95</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v96</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -3729,6 +3729,7 @@ let panelBtnWorldPos = [];    // 各ボタンの3Dワールド座標
 let panelSliderDragging = false;  // スライダードラッグ中フラグ
 let panelActiveSlider = null;    // 'alpha'|'vrScale'|'cutterSize'|null
 let vrLaserLine = null;          // レーザー描画用 [{x,y,z},{x,y,z}] or null
+let vrLaserColor = [0.2, 1.0, 0.3, 1.0];  // レーザー色（デフォルト緑）
 let vrCutterSliderY = -1;        // カッターサイズスライダーの描画Y位置（動的）
 let panelPinchReleased = true;    // ピンチリリース検出（連続ピンチ対応）
 let panelPrePinchBtn = -1;        // ピンチ直前のホバーボタン（指移動対策）
@@ -3970,7 +3971,7 @@ function drawVRLaser(V, P) {
     gl.uniformMatrix4fv(LW.uM, false, I);
     gl.uniformMatrix4fv(LW.uV, false, V);
     gl.uniformMatrix4fv(LW.uP, false, P);
-    gl.uniform4f(LW.uCol, 0.2, 1.0, 0.3, 1.0);  // 緑のレーザー
+    gl.uniform4f(LW.uCol, vrLaserColor[0], vrLaserColor[1], vrLaserColor[2], vrLaserColor[3]);
     gl.enableVertexAttribArray(LW.aPos);
     gl.vertexAttribPointer(LW.aPos, 3, gl.FLOAT, false, 0, 0);
     gl.drawArrays(gl.LINES, 0, 2);
@@ -4469,7 +4470,8 @@ function processHandTracking(frame, src, hand) {
             fingerDirLen = Math.sqrt(fingerDirX*fingerDirX + fingerDirY*fingerDirY + fingerDirZ*fingerDirZ) || 1;
         }
         // Handle Place モード時はレーザー表示
-        if (vrDeformSub === 'place' && actionMode === 'deform' && !isPinching) {
+        const isSegSelect = actionMode === 'segCut' && typeof segSelectMode !== 'undefined' && segSelectMode;
+        if ((vrDeformSub === 'place' && actionMode === 'deform' && !isPinching) || isSegSelect) {
             const laserLen = 0.5;
             vrLaserLine = [
                 { x: ip.x, y: ip.y, z: ip.z },
@@ -4477,6 +4479,9 @@ function processHandTracking(frame, src, hand) {
                   y: ip.y + (fingerDirY/fingerDirLen)*laserLen,
                   z: ip.z + (fingerDirZ/fingerDirLen)*laserLen }
             ];
+            vrLaserColor = isSegSelect
+                ? (segSelectMode === 'liver' ? [1.0, 0.9, 0.1, 1.0] : [1.0, 0.2, 1.0, 1.0])
+                : [0.2, 1.0, 0.3, 1.0];
         } else {
             vrLaserLine = null;
         }
@@ -4498,6 +4503,31 @@ function processHandTracking(frame, src, hand) {
                         sb.endGrabVR();
                     } else {
                         vrGrabs.right.active = sb.isGrabbingVR();
+                    }
+                }
+                panelPinchReleased = false;
+            }
+        } else if (isPinching && !vrGrabs.right.active && isSegSelect && !nearPanel) {
+            // Seg Select: レーザーでセグメント選択（ブラウザ版 1358-1388行と同じ）
+            if (panelPinchReleased && sb.isSkeletonAnalyzed()) {
+                const simO = vrToSim(ip.x, ip.y, ip.z);
+                const fdx = fingerDirX/fingerDirLen, fdy = fingerDirY/fingerDirLen, fdz = fingerDirZ/fingerDirLen;
+                const ray = { origin: simO, direction: [fdx, fdy, fdz] };
+                const targetMeshIdx = (segSelectMode === 'liver') ? -1 : 0;
+                const target = (segSelectMode === 'liver') ? 0 : 1;
+                const hit = raycastTargetMeshWithVertex(ray, targetMeshIdx);
+                if (hit && hit.vertexIdx >= 0) {
+                    const mode = (typeof segmentColorMode !== 'undefined' && segmentColorMode === 'obj') ? 1 : 0;
+                    const segId = sb.clickMeshForHighlight(target, hit.vertexIdx, mode, false);
+                    if (segId >= 0) {
+                        const lc = new Float32Array(sb.getLiverHighlightColors());
+                        gl.bindBuffer(gl.ARRAY_BUFFER, bLiverHL);
+                        gl.bufferData(gl.ARRAY_BUFFER, lc, gl.DYNAMIC_DRAW);
+                        if (sb.getNumChildren() > 0) {
+                            const pc = new Float32Array(sb.getPortalHighlightColors());
+                            gl.bindBuffer(gl.ARRAY_BUFFER, bPortalHL);
+                            gl.bufferData(gl.ARRAY_BUFFER, pc, gl.DYNAMIC_DRAW);
+                        }
                     }
                 }
                 panelPinchReleased = false;
