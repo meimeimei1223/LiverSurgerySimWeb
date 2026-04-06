@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v101</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v102</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -4112,11 +4112,16 @@ function drawHandleSpheresVR(M, V, P, cp) {
 }
 
 function drawSceneXR(M, V, P, cp) {
-    const simCp = vrToSim(cp[0], cp[1], cp[2]);  // ソート用
+    // ブラウザ版と完全同一のライティング:
+    // M=単位行列, V=V*M(VR変換込み), cp=simCp(シミュレーション座標)
+    // → vFrag がシミュレーション座標になり uLP/uVP と座標系一致
+    const VM = mat4multiply(V, M);
+    const simCp = vrToSim(cp[0], cp[1], cp[2]);
+    const I = new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
     const fragPending = sb.hasPendingFragment();
     const fragChildIdx = fragPending ? sb.getPendingFragmentChildIdx() : -2;
     const drawList = buildDrawList(fragPending, fragChildIdx);
-    drawAllDepthSorted(drawList, M, V, P, cp, simCp);  // v96と同じ（lightCpなし）
+    drawAllDepthSorted(drawList, I, VM, P, simCp, simCp);
 
     // カッター描画（Free Cut モード中は常時表示）
     if (cutMode) {
