@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v96</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v97</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -2189,8 +2189,9 @@ function drawMeshEntry(entry, M, V, P, cp) {
     }
 }
 
-function drawAllDepthSorted(drawList, M, V, P, cp, sortCp) {
+function drawAllDepthSorted(drawList, M, V, P, cp, sortCp, lightCp) {
     const sc = sortCp || cp;
+    const lc = lightCp || cp;
     if (drawList.length === 0) return;
     // Pass 1: 不透明 (alpha >= 1.0)
     gl.depthMask(true); gl.disable(gl.BLEND);
@@ -2198,7 +2199,7 @@ function drawAllDepthSorted(drawList, M, V, P, cp, sortCp) {
     let hasTransparent = false;
     for (const entry of drawList) {
         if (entry.alpha < 1.0) { hasTransparent = true; continue; }
-        drawMeshEntry(entry, M, V, P, cp);
+        drawMeshEntry(entry, M, V, P, lc);
     }
     if (!hasTransparent) return;
     // Pass 2: 半透明 — C++で全メッシュ三角形をグローバルソート
@@ -2233,7 +2234,7 @@ function drawAllDepthSorted(drawList, M, V, P, cp, sortCp) {
         const buf = extUint ? new Uint32Array(batchIndices) : new Uint16Array(batchIndices);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, tempBuf);
         gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, buf, gl.DYNAMIC_DRAW);
-        drawMeshEntrySetup(entry, M, V, P, cp);
+        drawMeshEntrySetup(entry, M, V, P, lc);
         gl.drawElements(gl.TRIANGLES, buf.length,
             extUint ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);
         batchIndices = [];
@@ -4111,12 +4112,22 @@ function drawHandleSpheresVR(M, V, P, cp) {
 }
 
 function drawSceneXR(M, V, P, cp) {
-    // ブラウザ版と共通の描画パス（セグメント色/ハイライト/alpha 自動反映）
-    const simCp = vrToSim(cp[0], cp[1], cp[2]);  // ソート用（シミュレーション座標）
+    const simCp = vrToSim(cp[0], cp[1], cp[2]);  // ソート用
+
+    // 光源: カメラ→モデル方向の逆（カメラ後方）に遠く配置（ブラウザ版相当の距離）
+    const toCamX = cp[0] - VR_OFFSET.x, toCamY = cp[1] - VR_OFFSET.y, toCamZ = cp[2] - VR_OFFSET.z;
+    const toCamLen = Math.sqrt(toCamX*toCamX + toCamY*toCamY + toCamZ*toCamZ) || 1;
+    const lightDist = 11.35 * VR_SCALE;
+    const lightCp = [
+        VR_OFFSET.x + (toCamX / toCamLen) * lightDist,
+        VR_OFFSET.y + (toCamY / toCamLen) * lightDist,
+        VR_OFFSET.z + (toCamZ / toCamLen) * lightDist,
+    ];
+
     const fragPending = sb.hasPendingFragment();
     const fragChildIdx = fragPending ? sb.getPendingFragmentChildIdx() : -2;
     const drawList = buildDrawList(fragPending, fragChildIdx);
-    drawAllDepthSorted(drawList, M, V, P, cp, simCp);  // cp=ライティング, simCp=ソート
+    drawAllDepthSorted(drawList, M, V, P, cp, simCp, lightCp);
 
     // カッター描画（Free Cut モード中は常時表示）
     if (cutMode) {
@@ -4518,7 +4529,7 @@ function processHandTracking(frame, src, hand) {
                 const hit = raycastTargetMeshWithVertex(ray, targetMeshIdx);
                 if (hit && hit.vertexIdx >= 0) {
                     const mode = (typeof segmentColorMode !== 'undefined' && segmentColorMode === 'obj') ? 1 : 0;
-                    const segId = sb.clickMeshForHighlight(target, hit.vertexIdx, mode, false);
+                    const segId = sb.clickMeshForHighlight(target, hit.vertexIdx, mode, true);  // VR: 常にトグル（複数選択）
                     if (segId >= 0) {
                         const lc = new Float32Array(sb.getLiverHighlightColors());
                         gl.bindBuffer(gl.ARRAY_BUFFER, bLiverHL);
