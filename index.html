@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v102</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v103</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -3265,6 +3265,12 @@ function renderXR(time, frame) {
         // パネル描画（シーンより先に描画、深度テスト無効）
         drawTestCube(V, P, pose);
 
+        // Seg Overlay: カッター表示中に毎フレーム更新
+        if (cutMode && cutterPlaced && typeof segOverlayMode !== 'undefined' && segOverlayMode && sb.isSkeletonAnalyzed()) {
+            const cx = sb.getCutterCenterX(), cy = sb.getCutterCenterY(), cz = sb.getCutterCenterZ();
+            if (typeof updateSegOverlayColors === 'function') updateSegOverlayColors(cx, cy, cz, cutTargetMeshIdx);
+        }
+
         // メインメッシュ + 子メッシュ描画
         drawSceneXR(M, V, P, cp);
 
@@ -3526,7 +3532,7 @@ function drawPanelCanvas() {
         // サブボタン（展開時のみ描画）
         if (expanded && a.sub.length > 0) {
             const subKeys = ai===0 ? ['place','deform','undoHandle','clearAll']
-                          : ai===1 ? ['executeCut','cancelCut','undoCut','cutterSize']
+                          : ai===1 ? ['segOverlay','undoCut','cutterSize']
                           : ai===2 ? ['liverSelect','portalSelect','segCut','segUndo','clearSel'] : [];
             for (let si = 0; si < a.sub.length; si++) {
                 const subHovered = panelHoveredBtn >= 0 && panelBtnWorldPos[panelHoveredBtn]
@@ -3534,7 +3540,7 @@ function drawPanelCanvas() {
                     && panelBtnWorldPos[panelHoveredBtn].idx === si;
                 const subActive = (subKeys[si] === 'place' && vrDeformSub === 'place')
                     || (subKeys[si] === 'deform' && vrDeformSub === 'deform')
-                    || (subKeys[si] === 'executeCut' && vrCutterPlaced)
+                    || (subKeys[si] === 'segOverlay' && typeof segOverlayMode !== 'undefined' && segOverlayMode)
                     || (subKeys[si] === 'liverSelect' && typeof segSelectMode !== 'undefined' && segSelectMode === 'liver')
                     || (subKeys[si] === 'portalSelect' && typeof segSelectMode !== 'undefined' && segSelectMode === 'portal');
                 if (subKeys[si] === 'cutterSize') {
@@ -3805,7 +3811,7 @@ function getPanelButtons() {
     // ACTION ボタン + サブボタン（展開状態に応じて動的）
     const actionDefs = [
         { mode:'deform',    subs:['place','deform','undoHandle','clearAll'] },
-        { mode:'freecut',   subs:['executeCut','cancelCut','undoCut'] },
+        { mode:'freecut',   subs:['segOverlay','undoCut'] },
         { mode:'segcut',    subs:['liverSelect','portalSelect','segCut','segUndo','clearSel'] },
         { mode:'transform', subs:[] },
     ];
@@ -4685,10 +4691,8 @@ function processHandTracking(frame, src, hand) {
                         vrDeformSub = 'none'; handleMode = false; deformSub = 'none';
                     }
                     // Free Cut サブボタン
-                    else if (nearest.mode === 'executeCut') {
-                        vrExecuteCut();
-                    } else if (nearest.mode === 'cancelCut') {
-                        vrCancelCut();
+                    else if (nearest.mode === 'segOverlay') {
+                        if (typeof toggleSegOverlay === 'function') toggleSegOverlay();
                     } else if (nearest.mode === 'undoCut') {
                         vrUndoCut();
                     }
