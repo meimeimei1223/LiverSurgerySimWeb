@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v94</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v95</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -2189,7 +2189,8 @@ function drawMeshEntry(entry, M, V, P, cp) {
     }
 }
 
-function drawAllDepthSorted(drawList, M, V, P, cp) {
+function drawAllDepthSorted(drawList, M, V, P, cp, sortCp) {
+    const sc = sortCp || cp;
     if (drawList.length === 0) return;
     // Pass 1: 不透明 (alpha >= 1.0)
     gl.depthMask(true); gl.disable(gl.BLEND);
@@ -2202,7 +2203,7 @@ function drawAllDepthSorted(drawList, M, V, P, cp) {
     if (!hasTransparent) return;
     // Pass 2: 半透明 — C++で全メッシュ三角形をグローバルソート
     const globalData = new Int32Array(sb.getGlobalSortedTriIndices(
-        cp[0], cp[1], cp[2],
+        sc[0], sc[1], sc[2],
         meshAlphaValues[0], meshAlphaValues[1], meshAlphaValues[2],
         meshAlphaValues[3], meshAlphaValues[4]));
     if (globalData.length === 0) return;
@@ -3451,8 +3452,33 @@ function drawPanelCanvas() {
     c.fillStyle = '#fff';
     c.beginPath(); c.arc(vsX + vsW * vrScaleNorm, vsY2 + vsH/2, 8, 0, Math.PI*2); c.fill();
 
+    // ===== DISPLAY =====
+    y = L.displayStartY;
+    c.fillStyle = '#4a8ccc';
+    c.font = 'bold 14px Arial';
+    c.fillText('DISPLAY', 16, y + 14); y += 20;
+    const dispLabels = ['Normal','Auto Seg','Preset Seg'];
+    const curDisp = typeof segmentColorMode !== 'undefined' ? segmentColorMode : false;
+    const dispBtnW = Math.floor((W - 32 - 8) / 3);
+    for (let di = 0; di < 3; di++) {
+        const bx = 16 + di * (dispBtnW + 4);
+        const isActive = (di===0 && !curDisp) || (di===1 && curDisp==='skeleton') || (di===2 && curDisp==='obj');
+        const isHovered = panelHoveredBtn >= 0 && panelBtnWorldPos[panelHoveredBtn]
+            && panelBtnWorldPos[panelHoveredBtn].action === 'display' && panelBtnWorldPos[panelHoveredBtn].idx === di;
+        c.fillStyle = isActive ? 'rgba(0,200,150,0.25)' : isHovered ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.05)';
+        c.fillRect(bx, y, dispBtnW, 30);
+        c.strokeStyle = isActive ? '#00ccaa' : isHovered ? '#fff' : 'rgba(255,255,255,0.1)';
+        c.lineWidth = isActive ? 2 : 1;
+        c.strokeRect(bx, y, dispBtnW, 30);
+        c.fillStyle = isActive ? '#00ffdd' : '#aaa';
+        c.font = isActive ? 'bold 12px Arial' : '12px Arial';
+        c.textAlign = 'center';
+        c.fillText(dispLabels[di], bx + dispBtnW/2, y + 20);
+        c.textAlign = 'left';
+    }
+
     // ===== ACTION =====
-    vrCutterSliderY = -1;  // リセット（Free Cut 展開時のみ再設定）
+    vrCutterSliderY = -1;
     y = L.actionStartY;
     c.fillStyle = '#4a8ccc';
     c.font = 'bold 18px Arial';
@@ -3750,8 +3776,9 @@ function getPanelLayout() {
     const cardEndY = cardStartY + 2 * (cardSize + cardGap);
     const sliderY = cardEndY + 30;
     const vrScaleSliderY = sliderY + 60;
-    const actionStartY = vrScaleSliderY + 60;
-    return { cardCols, cardGap, cardSize, cardStartY, cardEndY, sliderY, vrScaleSliderY, actionStartY };
+    const displayStartY = vrScaleSliderY + 60;
+    const actionStartY = displayStartY + 50;
+    return { cardCols, cardGap, cardSize, cardStartY, cardEndY, sliderY, vrScaleSliderY, displayStartY, actionStartY };
 }
 
 // パネル上のボタン定義（キャンバス座標での中心点）
@@ -3766,6 +3793,13 @@ function getPanelButtons() {
         btns.push({ cx, cy, action: 'vis', idx: i });
     }
     // スライダーは3D競合から除外（別ロジックで処理）
+    // DISPLAY ボタン（3個）
+    const dispBtnW2 = Math.floor((PANEL_W - 32 - 8) / 3);
+    const dispY = L.displayStartY + 20 + 15;
+    for (let di = 0; di < 3; di++) {
+        const bx = 16 + di * (dispBtnW2 + 4) + dispBtnW2/2;
+        btns.push({ cx: bx, cy: dispY, action: 'display', idx: di, mode: ['normal','skeleton','obj'][di] });
+    }
     // ACTION ボタン + サブボタン（展開状態に応じて動的）
     const actionDefs = [
         { mode:'deform',    subs:['place','deform','undoHandle','clearAll'] },
@@ -4076,13 +4110,12 @@ function drawHandleSpheresVR(M, V, P, cp) {
 }
 
 function drawSceneXR(M, V, P, cp) {
-    // ブラウザ版と完全共通の描画パスを使用
-    // segmentColorMode/ハイライト/alpha を自動で反映
-    const simCp = vrToSim(cp[0], cp[1], cp[2]);
+    // ブラウザ版と共通の描画パス（セグメント色/ハイライト/alpha 自動反映）
+    const simCp = vrToSim(cp[0], cp[1], cp[2]);  // ソート用（シミュレーション座標）
     const fragPending = sb.hasPendingFragment();
     const fragChildIdx = fragPending ? sb.getPendingFragmentChildIdx() : -2;
     const drawList = buildDrawList(fragPending, fragChildIdx);
-    drawAllDepthSorted(drawList, M, V, P, simCp);
+    drawAllDepthSorted(drawList, M, V, P, cp, simCp);  // cp=ライティング, simCp=ソート
 
     // カッター描画（Free Cut モード中は常時表示）
     if (cutMode) {
@@ -4636,6 +4669,9 @@ function processHandTracking(frame, src, hand) {
                     } else if (nearest.mode === 'clearSel') {
                         if (typeof doClearSelection === 'function') doClearSelection();
                     }
+                } else if (nearest.action === 'display') {
+                    const modeMap = [false, 'skeleton', 'obj'];
+                    if (typeof setVisualMode === 'function') setVisualMode(modeMap[nearest.idx]);
                 } else if (nearest.action === 'wire') {
                     wireOn = !wireOn;
                     if (wireOn && sb) updateWire();
