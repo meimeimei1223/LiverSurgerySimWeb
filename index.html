@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v105</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v106</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -3237,7 +3237,7 @@ function renderXR(time, frame) {
         const nearPos = new Float32Array(sb.getNearestSurfacePos(cx, cy, cz));
         const ddx = cx-nearPos[0], ddy = cy-nearPos[1], ddz = cz-nearPos[2];
         const distToMesh = Math.sqrt(ddx*ddx + ddy*ddy + ddz*ddz);
-        if (distToMesh < 1.0) {
+        if (distToMesh < 3.0) {  // モデルスパン約3単位、カッタースケール含めて余裕を持たせる
             if (typeof updateSegOverlayColors === 'function') updateSegOverlayColors(cx, cy, cz, cutTargetMeshIdx);
         } else {
             sb.clearHighlight();
