@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v107</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v108</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -3231,13 +3231,13 @@ function renderXR(time, frame) {
     updateMesh();
     if (childBuffers.length > 0) updateChildren();
 
-    // Seg Overlay: カッターがメッシュと交差している時のみ更新
+    // Seg Overlay: カッターが肝臓のBB内にある時のみ更新
     if (cutMode && cutterPlaced && typeof segOverlayMode !== 'undefined' && segOverlayMode && sb.isSkeletonAnalyzed()) {
-        // カッターとメッシュの交差判定（既存のC++ intersect判定を利用）
-        sb.testCutIntersection();
-        const hitCount = sb.getIntersectedSurfaceTriCount();
-        if (hitCount > 0) {
-            const cx = sb.getCutterCenterX(), cy = sb.getCutterCenterY(), cz = sb.getCutterCenterZ();
+        const cx = sb.getCutterCenterX(), cy = sb.getCutterCenterY(), cz = sb.getCutterCenterZ();
+        const lcx = sb.getMeshCentroidX(), lcy = sb.getMeshCentroidY(), lcz = sb.getMeshCentroidZ();
+        const margin = 2.5;  // 肝臓の近似半径 + カッターサイズの余裕
+        const inBB = Math.abs(cx-lcx) < margin && Math.abs(cy-lcy) < margin && Math.abs(cz-lcz) < margin;
+        if (inBB) {
             if (typeof updateSegOverlayColors === 'function') updateSegOverlayColors(cx, cy, cz, cutTargetMeshIdx);
         } else {
             sb.clearHighlight();
