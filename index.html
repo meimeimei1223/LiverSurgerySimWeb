@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v111</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v112</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -1988,7 +1988,7 @@ function updateVolumePanel() {
     const useOBJ = sb.isOBJSegmentsBound();
     if (useOBJ || sb.isSkeletonAnalyzed()) {
         html += '<div style="margin-top:6px;border-top:1px solid #333;padding-top:4px;font-size:11px;">';
-        html += '<div style="color:#556;font-size:10px;margin-bottom:2px;">Segments</div>';
+        html += '<div style="display:flex;gap:4px;font-size:10px;color:#556;margin-bottom:2px;"><span style="min-width:22px;"></span><span style="min-width:55px;">vol</span><span style="min-width:40px;">%</span><span>remain</span></div>';
         for (let id = 1; id <= 8; id++) {
             const origVol = sb.getOriginalSegmentVolume(id, useOBJ);
             const curVol = sb.calculateSegmentVolume(id, useOBJ);
@@ -3644,7 +3644,11 @@ function drawPanelCanvas() {
             c.fillRect(12, y, W - 24, 2); y += 6;
             c.fillStyle = '#556';
             c.font = '10px Arial';
-            c.fillText('Segments', 16, y + 6); y += 12;
+            c.fillText('', 16, y + 6);
+            c.fillText('vol', 38, y + 6);
+            c.fillText('%', 110, y + 6);
+            c.fillText('remain', 165, y + 6);
+            y += 12;
             for (let id = 1; id <= 8; id++) {
                 const origV = sb.getOriginalSegmentVolume(id, useOBJ);
                 const curV = sb.calculateSegmentVolume(id, useOBJ);
