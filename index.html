@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v116</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v117</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -3221,7 +3221,6 @@ function onXREnd() {
     vrResetConfirm = 0;
     vrGrabOwner = null;
     vrLeftMode = 'transform';
-    vrLeftMiddlePinchDone = false;
     panelFixed = false;
     panelWorldCenter = null;
     if (sb) sb.endGrabVR();
@@ -3866,8 +3865,7 @@ let vrCutterEverPlaced = false;
 let vrCutterPrevOri = null;
 let vrCutterLastQuat = null;
 let vrMiddlePinchDone = false;   // 中指サイクル済み（開き直すまでロック）
-let vrLeftMode = 'transform';       // 'transform' | 'deform' — 左手モード
-let vrLeftMiddlePinchDone = false;  // 左手中指ピンチ one-shot
+let vrLeftMode = 'transform';       // 'transform' | 'deform' — 左手の現在アクション
 let vrGrabOwner = null;             // null | 'left' | 'right' — グラブ所有者追跡
 // カットターゲットサイクル: -1=Liver, 0=Portal, 1=Vein
 const VR_CUT_TARGETS = [
@@ -4730,35 +4728,40 @@ function processHandTracking(frame, src, hand) {
         }  // end of else block (after Free Cut)
         }  // end of else (non-transform modes)
     } else {
-        // === 左手: 中指ピンチでモード切替（Transform ⇔ Deform）===
+        // === 左手: 人差指ピンチ→Transform、中指ピンチ→Deform、両方→無効 ===
         const middleTipL = src.hand.get('middle-finger-tip');
         const middlePoseL = middleTipL ? frame.getJointPose(middleTipL, xrRefSpace) : null;
         let middleDistL = Infinity;
+        let mmX = midX, mmY = midY, mmZ = midZ;  // 中指ピンチ中心点
         if (middlePoseL) {
             const mp = middlePoseL.transform.position;
             const mdx = mp.x - tp.x, mdy = mp.y - tp.y, mdz = mp.z - tp.z;
             middleDistL = Math.sqrt(mdx*mdx + mdy*mdy + mdz*mdz);
+            mmX = (mp.x + tp.x) / 2;
+            mmY = (mp.y + tp.y) / 2;
+            mmZ = (mp.z + tp.z) / 2;
         }
-        if (middleDistL > 0.08) vrLeftMiddlePinchDone = false;
-        if (middleDistL < 0.025 && !vrLeftMiddlePinchDone) {
-            vrLeftMiddlePinchDone = true;
-            // 切替前に現在のアクションをクリーンに終了
-            if (vrLeftMode === 'transform' && vrGrabs.left.active) {
-                vrGrabs.left.active = false; vrLeftPrev = null;
-            } else if (vrLeftMode === 'deform' && vrGrabs.left.active) {
-                sb.endGrabVR(); vrGrabs.left.active = false; vrGrabOwner = null;
-            }
-            vrLeftMode = (vrLeftMode === 'transform') ? 'deform' : 'transform';
-            console.log('[VR] Left hand mode:', vrLeftMode);
+        const middlePinchL = middleDistL < 0.025;
+        const doTransform = isPinching && !middlePinchL;   // 人差指のみ
+        const doDeform = middlePinchL && !isPinching;       // 中指のみ
+
+        // 前フレームのアクションと違う場合はクリーンアップ
+        if (vrLeftMode === 'transform' && !doTransform) {
+            processTransform('left', false, {x:midX,y:midY,z:midZ}, {x:wo.x,y:wo.y,z:wo.z,w:wo.w});
+        }
+        if (vrLeftMode === 'deform' && !doDeform) {
+            processLeftHandDeform(false, mmX, mmY, mmZ, wp, wo);
         }
 
-        if (vrLeftMode === 'transform') {
-            processLeftHandTransform(isPinching,
-                { x: midX, y: midY, z: midZ },
-                { x: wo.x, y: wo.y, z: wo.z, w: wo.w });
-        } else {
-            processLeftHandDeform(isPinching, midX, midY, midZ, wp, wo);
+        // 実行
+        if (doTransform) {
+            vrLeftMode = 'transform';
+            processTransform('left', true, {x:midX,y:midY,z:midZ}, {x:wo.x,y:wo.y,z:wo.z,w:wo.w});
+        } else if (doDeform) {
+            vrLeftMode = 'deform';
+            processLeftHandDeform(true, mmX, mmY, mmZ, wp, wo);
         }
+        // 両方ピンチ or 両方離し → 何もしない（クリーンアップ済み）
     }
 
     // === 右手: パネル操作 ===
