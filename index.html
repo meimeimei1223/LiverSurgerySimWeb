@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v115</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v116</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -3219,6 +3219,9 @@ function onXREnd() {
     vrLeftPrev = null;
     vrRightPrev = null;
     vrResetConfirm = 0;
+    vrGrabOwner = null;
+    vrLeftMode = 'transform';
+    vrLeftMiddlePinchDone = false;
     panelFixed = false;
     panelWorldCenter = null;
     if (sb) sb.endGrabVR();
@@ -3863,6 +3866,9 @@ let vrCutterEverPlaced = false;
 let vrCutterPrevOri = null;
 let vrCutterLastQuat = null;
 let vrMiddlePinchDone = false;   // 中指サイクル済み（開き直すまでロック）
+let vrLeftMode = 'transform';       // 'transform' | 'deform' — 左手モード
+let vrLeftMiddlePinchDone = false;  // 左手中指ピンチ one-shot
+let vrGrabOwner = null;             // null | 'left' | 'right' — グラブ所有者追跡
 // カットターゲットサイクル: -1=Liver, 0=Portal, 1=Vein
 const VR_CUT_TARGETS = [
     { meshIdx:-1, label:'Liver',  scale:'liver',  color:'-1' },
@@ -4101,7 +4107,8 @@ function drawVRHands(V, P) {
 
     const hands = [
         { key: 'left',  active: vrGrabs.left.active,
-          ptCol: [0.2, 0.9, 0.9, 0.9], lineCol: [0.15, 0.7, 0.7, 0.7],
+          ptCol: vrLeftMode === 'deform' ? [0.85, 0.2, 0.9, 0.9] : [0.2, 0.9, 0.9, 0.9],
+          lineCol: vrLeftMode === 'deform' ? [0.65, 0.15, 0.7, 0.7] : [0.15, 0.7, 0.7, 0.7],
           activeCol: [0.3, 1.0, 0.4, 1.0], activeLineCol: [0.2, 0.85, 0.3, 0.9] },
         { key: 'right', active: vrGrabs.right.active || panelHoveredBtn >= 0,
           ptCol: [1.0, 0.6, 0.2, 0.9], lineCol: [0.8, 0.45, 0.15, 0.7],
@@ -4402,18 +4409,20 @@ function processController(frame, src, hand) {
         const dirY = 2 * (qy * qz - qx * qw);
         const dirZ = 1 - 2 * (qx * qx + qy * qy);
 
-        if (trigger && !vrGrabs.right.active) {
+        if (trigger && !vrGrabs.right.active && vrGrabOwner === null) {
             const simO = vrToSim(pos.x, pos.y, pos.z);
             const simD = [-dirX / VR_SCALE, -dirY / VR_SCALE, -dirZ / VR_SCALE];
             sb.startGrabVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2]);
             vrGrabs.right.active = sb.isGrabbingVR();
-        } else if (trigger && vrGrabs.right.active) {
+            if (vrGrabs.right.active) vrGrabOwner = 'right';
+        } else if (trigger && vrGrabs.right.active && vrGrabOwner === 'right') {
             const simO = vrToSim(pos.x, pos.y, pos.z);
             const simD = [-dirX / VR_SCALE, -dirY / VR_SCALE, -dirZ / VR_SCALE];
             sb.moveGrabVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2], 1/72);
         } else if (!trigger && vrGrabs.right.active) {
             sb.endGrabVR();
             vrGrabs.right.active = false;
+            vrGrabOwner = null;
         }
     } else {
         // === 左手: モデル移動/回転 (translateModel + rotateModel) ===
@@ -4472,6 +4481,30 @@ function processTransform(hand, active, pos, ori) {
 }
 // 後方互換
 function processLeftHandTransform(active, pos, ori) { processTransform('left', active, pos, ori); }
+
+// 左手 Deform 処理（proximity-based grab、右手と同じロジック）
+function processLeftHandDeform(isPinching, midX, midY, midZ, wp, wo) {
+    if (isPinching && !vrGrabs.left.active && vrGrabOwner === null) {
+        const simPos = vrToSim(midX, midY, midZ);
+        sb.startGrabVRNearest(simPos[0], simPos[1], simPos[2], 1.0);
+        vrGrabs.left.active = sb.isGrabbingVR();
+        if (vrGrabs.left.active) {
+            vrGrabOwner = 'left';
+            const sw = vrToSim(wp.x, wp.y, wp.z);
+            sb.setGrabVRWristState(sw[0], sw[1], sw[2], wo.x, wo.y, wo.z, wo.w);
+        }
+    } else if (isPinching && vrGrabs.left.active && vrGrabOwner === 'left') {
+        const simPos = vrToSim(midX, midY, midZ);
+        const simWrist = vrToSim(wp.x, wp.y, wp.z);
+        sb.moveGrabVRWithRot(simPos[0], simPos[1], simPos[2],
+            simWrist[0], simWrist[1], simWrist[2],
+            wo.x, wo.y, wo.z, wo.w, 1/72);
+    } else if (!isPinching && vrGrabs.left.active) {
+        sb.endGrabVR();
+        vrGrabs.left.active = false;
+        vrGrabOwner = null;
+    }
+}
 
 // ハンドトラッキング（ピンチジェスチャー）
 function processHandTracking(frame, src, hand) {
@@ -4637,16 +4670,16 @@ function processHandTracking(frame, src, hand) {
                 const fdx = fingerDirX/fingerDirLen, fdy = fingerDirY/fingerDirLen, fdz = fingerDirZ/fingerDirLen;
                 const simD = [fdx, fdy, fdz];
                 const placed = sb.addHandleSphereVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2], 0.5);
-                if (!placed && sb.getNumHandleSpheres() > 0) {
+                if (!placed && sb.getNumHandleSpheres() > 0 && vrGrabOwner === null) {
                     // 配置失敗 → 既存ハンドル球のグラブを試行
                     const simPos = vrToSim(midX, midY, midZ);
                     sb.startGrabVRNearest(simPos[0], simPos[1], simPos[2], 1.0);
                     { const sw=vrToSim(wp.x,wp.y,wp.z); sb.setGrabVRWristState(sw[0],sw[1],sw[2],wo.x,wo.y,wo.z,wo.w); }
                     if (sb.isGrabbingVR() && !sb.isHandleGrabbing()) {
-                        // 通常メッシュグラブ → Handle Place モードでは無効、キャンセル
                         sb.endGrabVR();
                     } else {
                         vrGrabs.right.active = sb.isGrabbingVR();
+                        if (vrGrabs.right.active) vrGrabOwner = 'right';
                     }
                 }
                 panelPinchReleased = false;
@@ -4676,13 +4709,13 @@ function processHandTracking(frame, src, hand) {
                 }
                 panelPinchReleased = false;
             }
-        } else if (isPinching && !vrGrabs.right.active && !nearPanel) {
+        } else if (isPinching && !vrGrabs.right.active && !nearPanel && vrGrabOwner === null) {
             // 近接グラブ: ピンチ位置から最近頂点を探す（レイキャストではなく距離ベース）
             const simPos = vrToSim(midX, midY, midZ);
             sb.startGrabVRNearest(simPos[0], simPos[1], simPos[2], 1.0);
             vrGrabs.right.active = sb.isGrabbingVR();
-            if (vrGrabs.right.active) { const sw=vrToSim(wp.x,wp.y,wp.z); sb.setGrabVRWristState(sw[0],sw[1],sw[2],wo.x,wo.y,wo.z,wo.w); }
-        } else if (isPinching && vrGrabs.right.active) {
+            if (vrGrabs.right.active) { vrGrabOwner = 'right'; const sw=vrToSim(wp.x,wp.y,wp.z); sb.setGrabVRWristState(sw[0],sw[1],sw[2],wo.x,wo.y,wo.z,wo.w); }
+        } else if (isPinching && vrGrabs.right.active && vrGrabOwner === 'right') {
             // 回転 + 移動（手首クォータニオンで弧を描く移動）
             const simPos = vrToSim(midX, midY, midZ);
             const simWrist = vrToSim(wp.x, wp.y, wp.z);
@@ -4692,14 +4725,40 @@ function processHandTracking(frame, src, hand) {
         } else if (!isPinching && vrGrabs.right.active) {
             sb.endGrabVR();
             vrGrabs.right.active = false;
+            vrGrabOwner = null;
         }
         }  // end of else block (after Free Cut)
         }  // end of else (non-transform modes)
     } else {
-        // === 左手: モデル移動/回転 ===
-        processLeftHandTransform(isPinching,
-            { x: midX, y: midY, z: midZ },
-            { x: wo.x, y: wo.y, z: wo.z, w: wo.w });
+        // === 左手: 中指ピンチでモード切替（Transform ⇔ Deform）===
+        const middleTipL = src.hand.get('middle-finger-tip');
+        const middlePoseL = middleTipL ? frame.getJointPose(middleTipL, xrRefSpace) : null;
+        let middleDistL = Infinity;
+        if (middlePoseL) {
+            const mp = middlePoseL.transform.position;
+            const mdx = mp.x - tp.x, mdy = mp.y - tp.y, mdz = mp.z - tp.z;
+            middleDistL = Math.sqrt(mdx*mdx + mdy*mdy + mdz*mdz);
+        }
+        if (middleDistL > 0.08) vrLeftMiddlePinchDone = false;
+        if (middleDistL < 0.025 && !vrLeftMiddlePinchDone) {
+            vrLeftMiddlePinchDone = true;
+            // 切替前に現在のアクションをクリーンに終了
+            if (vrLeftMode === 'transform' && vrGrabs.left.active) {
+                vrGrabs.left.active = false; vrLeftPrev = null;
+            } else if (vrLeftMode === 'deform' && vrGrabs.left.active) {
+                sb.endGrabVR(); vrGrabs.left.active = false; vrGrabOwner = null;
+            }
+            vrLeftMode = (vrLeftMode === 'transform') ? 'deform' : 'transform';
+            console.log('[VR] Left hand mode:', vrLeftMode);
+        }
+
+        if (vrLeftMode === 'transform') {
+            processLeftHandTransform(isPinching,
+                { x: midX, y: midY, z: midZ },
+                { x: wo.x, y: wo.y, z: wo.z, w: wo.w });
+        } else {
+            processLeftHandDeform(isPinching, midX, midY, midZ, wp, wo);
+        }
     }
 
     // === 右手: パネル操作 ===
@@ -4863,7 +4922,7 @@ function processHandTracking(frame, src, hand) {
                     if (xrSession) xrSession.end();
                 }
                 panelPinchReleased = false;
-                if (vrGrabs.right.active) { sb.endGrabVR(); vrGrabs.right.active = false; }
+                if (vrGrabs.right.active) { sb.endGrabVR(); vrGrabs.right.active = false; vrGrabOwner = null; }
             }
         }
     }
