@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v112</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v113</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -3607,12 +3607,37 @@ function drawPanelCanvas() {
         }
     }
 
-    // ===== VOLUME =====
+    // ===== VOLUME（折りたたみ式）=====
     y += 8;
+    // ヘッダー（タップで展開/折りたたみ）
+    const volHovered = panelHoveredBtn >= 0 && panelBtnWorldPos[panelHoveredBtn]
+        && panelBtnWorldPos[panelHoveredBtn].action === 'volumeToggle';
+    c.fillStyle = volHovered ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.03)';
+    c.fillRect(16, y, W - 32, 30);
+    c.strokeStyle = volHovered ? '#fff' : 'rgba(255,255,255,0.06)';
+    c.lineWidth = volHovered ? 2 : 1;
+    c.strokeRect(16, y, W - 32, 30);
     c.fillStyle = '#4a8ccc';
-    c.font = 'bold 18px Arial';
-    c.fillText('VOLUME', 16, y + 14); y += 28;
+    c.font = 'bold 14px Arial';
+    c.fillText('VOLUME', 30, y + 20);
+    // 展開矢印 + 概要
+    c.fillStyle = '#555';
+    c.font = '14px Arial';
+    c.textAlign = 'right';
     if (sb && typeof sb.areVolumesCaptured === 'function' && sb.areVolumesCaptured()) {
+        const quickVol = sb.calculateTotalVolume();
+        const quickOrig = sb.getOriginalTotalVolume();
+        const quickPct = quickOrig > 0 ? (quickVol / quickOrig * 100) : 100;
+        c.fillStyle = '#4dc0e6';
+        c.font = '12px Arial';
+        c.fillText(quickVol.toFixed(0) + 'ml ' + quickPct.toFixed(0) + '%', W - 40, y + 20);
+    }
+    c.fillStyle = '#555';
+    c.font = '14px Arial';
+    c.fillText(vrVolumeExpanded ? '▼' : '▶', W - 24, y + 20);
+    c.textAlign = 'left';
+    y += 36;
+    if (vrVolumeExpanded && sb && typeof sb.areVolumesCaptured === 'function' && sb.areVolumesCaptured()) {
         const totalOrig = sb.getOriginalTotalVolume();
         const totalCur = sb.calculateTotalVolume();
         const remnantPct = totalOrig > 0 ? (totalCur / totalOrig * 100) : 100;
@@ -3674,7 +3699,7 @@ function drawPanelCanvas() {
         c.font = '14px Arial';
         c.fillText('-- ml  --%', 16, y + 8);
     }
-    y += 10;
+    }  // end vrVolumeExpanded
 
     // ===== Wireframe ボタン =====
     const wireHovered = panelHoveredBtn >= 0 && panelBtnWorldPos[panelHoveredBtn] && panelBtnWorldPos[panelHoveredBtn].action === 'wire';
@@ -3802,6 +3827,7 @@ let panelActiveSlider = null;    // 'alpha'|'vrScale'|'cutterSize'|null
 let vrLaserLine = null;          // レーザー描画用 [{x,y,z},{x,y,z}] or null
 let vrLaserColor = [0.2, 1.0, 0.3, 1.0];  // レーザー色（デフォルト緑）
 let vrCutterSliderY = -1;        // カッターサイズスライダーの描画Y位置（動的）
+let vrVolumeExpanded = false;    // Volume セクション展開状態
 let panelPinchReleased = true;    // ピンチリリース検出（連続ピンチ対応）
 let panelPrePinchBtn = -1;        // ピンチ直前のホバーボタン（指移動対策）
 let panelIcons = {};  // アイコン Image オブジェクト
@@ -3891,6 +3917,9 @@ function getPanelButtons() {
             }
         }
     }
+    // Volume トグルボタン
+    const volToggleY = L.actionStartY + 28 + 4 * 58 + 20;  // ACTION後の概算位置
+    btns.push({ cx: PANEL_W / 2, cy: volToggleY, action: 'volumeToggle', idx: -1 });
     // Wireframe ボタン（VOLUMEの後、Reset/Exitの前）
     const wireY = ay + 70;
     btns.push({ cx: PANEL_W / 2, cy: wireY + 18, action: 'wire', idx: -1 });
@@ -4775,6 +4804,8 @@ function processHandTracking(frame, src, hand) {
                 } else if (nearest.action === 'display') {
                     const modeMap = [false, 'skeleton', 'obj'];
                     if (typeof setVisualMode === 'function') setVisualMode(modeMap[nearest.idx]);
+                } else if (nearest.action === 'volumeToggle') {
+                    vrVolumeExpanded = !vrVolumeExpanded;
                 } else if (nearest.action === 'wire') {
                     wireOn = !wireOn;
                     if (wireOn && sb) updateWire();
