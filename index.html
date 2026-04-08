@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v113</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v114</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -3507,6 +3507,99 @@ function drawPanelCanvas() {
         c.fillText(dispLabels[di], bx + dispBtnW/2, y + 20);
         c.textAlign = 'left';
     }
+    y += 34;  // display buttons (30px) + gap (4px)
+
+    // ===== VOLUME（DISPLAYセクション内、折りたたみ式）=====
+    y += 4;
+    const volHovered = panelHoveredBtn >= 0 && panelBtnWorldPos[panelHoveredBtn]
+        && panelBtnWorldPos[panelHoveredBtn].action === 'volumeToggle';
+    c.fillStyle = volHovered ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.03)';
+    c.fillRect(16, y, W - 32, 30);
+    c.strokeStyle = volHovered ? '#fff' : 'rgba(255,255,255,0.06)';
+    c.lineWidth = volHovered ? 2 : 1;
+    c.strokeRect(16, y, W - 32, 30);
+    c.fillStyle = '#4a8ccc';
+    c.font = 'bold 14px Arial';
+    c.fillText('VOLUME', 30, y + 20);
+    c.fillStyle = '#555';
+    c.font = '14px Arial';
+    c.textAlign = 'right';
+    if (sb && typeof sb.areVolumesCaptured === 'function' && sb.areVolumesCaptured()) {
+        const quickVol = sb.calculateTotalVolume();
+        const quickOrig = sb.getOriginalTotalVolume();
+        const quickPct = quickOrig > 0 ? (quickVol / quickOrig * 100) : 100;
+        c.fillStyle = '#4dc0e6';
+        c.font = '12px Arial';
+        c.fillText(quickVol.toFixed(0) + 'ml ' + quickPct.toFixed(0) + '%', W - 40, y + 20);
+    }
+    c.fillStyle = '#555';
+    c.font = '14px Arial';
+    c.fillText(vrVolumeExpanded ? '▼' : '▶', W - 24, y + 20);
+    c.textAlign = 'left';
+    y += 36;
+    if (vrVolumeExpanded) {
+        if (sb && typeof sb.areVolumesCaptured === 'function' && sb.areVolumesCaptured()) {
+            const totalOrig = sb.getOriginalTotalVolume();
+            const totalCur = sb.calculateTotalVolume();
+            const remnantPct = totalOrig > 0 ? (totalCur / totalOrig * 100) : 100;
+            const pctCol = (remnantPct >= 80 && remnantPct <= 120) ? '#7dff7d' : '#ffcc33';
+            c.fillStyle = pctCol;
+            c.font = 'bold 20px Arial';
+            c.fillText(totalCur.toFixed(1) + ' ml', 16, y + 6);
+            c.fillStyle = '#4dc0e6';
+            c.font = '14px Arial';
+            c.textAlign = 'right';
+            c.fillText(remnantPct.toFixed(1) + '%', W - 16, y + 6);
+            c.textAlign = 'left';
+            y += 16;
+            c.fillStyle = 'rgba(255,255,255,0.08)';
+            c.fillRect(16, y, W - 32, 5);
+            c.fillStyle = pctCol;
+            c.fillRect(16, y, (W - 32) * Math.min(1, remnantPct / 100), 5);
+            y += 10;
+            c.fillStyle = '#556';
+            c.font = '10px Arial';
+            c.fillText('Original: ' + totalOrig.toFixed(1) + ' ml', 16, y + 6);
+            y += 14;
+            const useOBJ = typeof sb.isOBJSegmentsBound === 'function' && sb.isOBJSegmentsBound();
+            const hasSkel = typeof sb.isSkeletonAnalyzed === 'function' && sb.isSkeletonAnalyzed();
+            if (useOBJ || hasSkel) {
+                c.fillStyle = 'rgba(255,255,255,0.06)';
+                c.fillRect(12, y, W - 24, 2); y += 6;
+                c.fillStyle = '#556';
+                c.font = '10px Arial';
+                c.fillText('', 16, y + 6);
+                c.fillText('vol', 38, y + 6);
+                c.fillText('%', 110, y + 6);
+                c.fillText('remain', 165, y + 6);
+                y += 12;
+                for (let id = 1; id <= 8; id++) {
+                    const origV = sb.getOriginalSegmentVolume(id, useOBJ);
+                    const curV = sb.calculateSegmentVolume(id, useOBJ);
+                    const segPct = totalOrig > 0 ? (curV / totalOrig * 100) : 0;
+                    const ratio = origV > 0.01 ? (curV / origV * 100) : 100;
+                    const rCol = (ratio >= 80 && ratio <= 120) ? '#7dff7d' : ratio >= 60 ? '#ffcc33' : '#ff5555';
+                    c.fillStyle = '#aab';
+                    c.font = '11px Arial';
+                    c.fillText('S' + id, 16, y + 9);
+                    c.fillStyle = '#ccc';
+                    c.fillText(curV.toFixed(1) + ' ml', 38, y + 9);
+                    c.fillStyle = '#888';
+                    c.fillText('(' + segPct.toFixed(1) + '%)', 110, y + 9);
+                    if (origV > 0.01 && Math.abs(ratio - 100) > 0.5) {
+                        c.fillStyle = rCol;
+                        c.fillText('[' + ratio.toFixed(0) + '%]', 165, y + 9);
+                    }
+                    y += 14;
+                }
+            }
+        } else {
+            c.fillStyle = '#555';
+            c.font = '14px Arial';
+            c.fillText('-- ml  --%', 16, y + 8);
+            y += 20;
+        }
+    }
 
     // ===== ACTION =====
     vrCutterSliderY = -1;
@@ -3606,100 +3699,6 @@ function drawPanelCanvas() {
             }
         }
     }
-
-    // ===== VOLUME（折りたたみ式）=====
-    y += 8;
-    // ヘッダー（タップで展開/折りたたみ）
-    const volHovered = panelHoveredBtn >= 0 && panelBtnWorldPos[panelHoveredBtn]
-        && panelBtnWorldPos[panelHoveredBtn].action === 'volumeToggle';
-    c.fillStyle = volHovered ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.03)';
-    c.fillRect(16, y, W - 32, 30);
-    c.strokeStyle = volHovered ? '#fff' : 'rgba(255,255,255,0.06)';
-    c.lineWidth = volHovered ? 2 : 1;
-    c.strokeRect(16, y, W - 32, 30);
-    c.fillStyle = '#4a8ccc';
-    c.font = 'bold 14px Arial';
-    c.fillText('VOLUME', 30, y + 20);
-    // 展開矢印 + 概要
-    c.fillStyle = '#555';
-    c.font = '14px Arial';
-    c.textAlign = 'right';
-    if (sb && typeof sb.areVolumesCaptured === 'function' && sb.areVolumesCaptured()) {
-        const quickVol = sb.calculateTotalVolume();
-        const quickOrig = sb.getOriginalTotalVolume();
-        const quickPct = quickOrig > 0 ? (quickVol / quickOrig * 100) : 100;
-        c.fillStyle = '#4dc0e6';
-        c.font = '12px Arial';
-        c.fillText(quickVol.toFixed(0) + 'ml ' + quickPct.toFixed(0) + '%', W - 40, y + 20);
-    }
-    c.fillStyle = '#555';
-    c.font = '14px Arial';
-    c.fillText(vrVolumeExpanded ? '▼' : '▶', W - 24, y + 20);
-    c.textAlign = 'left';
-    y += 36;
-    if (vrVolumeExpanded && sb && typeof sb.areVolumesCaptured === 'function' && sb.areVolumesCaptured()) {
-        const totalOrig = sb.getOriginalTotalVolume();
-        const totalCur = sb.calculateTotalVolume();
-        const remnantPct = totalOrig > 0 ? (totalCur / totalOrig * 100) : 100;
-        // Total + プログレスバー
-        const pctCol = (remnantPct >= 80 && remnantPct <= 120) ? '#7dff7d' : '#ffcc33';
-        c.fillStyle = pctCol;
-        c.font = 'bold 20px Arial';
-        c.fillText(totalCur.toFixed(1) + ' ml', 16, y + 6);
-        c.fillStyle = '#4dc0e6';
-        c.font = '14px Arial';
-        c.textAlign = 'right';
-        c.fillText(remnantPct.toFixed(1) + '%', W - 16, y + 6);
-        c.textAlign = 'left';
-        y += 16;
-        c.fillStyle = 'rgba(255,255,255,0.08)';
-        c.fillRect(16, y, W - 32, 5);
-        c.fillStyle = pctCol;
-        c.fillRect(16, y, (W - 32) * Math.min(1, remnantPct / 100), 5);
-        y += 10;
-        c.fillStyle = '#556';
-        c.font = '10px Arial';
-        c.fillText('Original: ' + totalOrig.toFixed(1) + ' ml', 16, y + 6);
-        y += 14;
-        // S1-S8 セグメント別
-        const useOBJ = typeof sb.isOBJSegmentsBound === 'function' && sb.isOBJSegmentsBound();
-        const hasSkel = typeof sb.isSkeletonAnalyzed === 'function' && sb.isSkeletonAnalyzed();
-        if (useOBJ || hasSkel) {
-            c.fillStyle = 'rgba(255,255,255,0.06)';
-            c.fillRect(12, y, W - 24, 2); y += 6;
-            c.fillStyle = '#556';
-            c.font = '10px Arial';
-            c.fillText('', 16, y + 6);
-            c.fillText('vol', 38, y + 6);
-            c.fillText('%', 110, y + 6);
-            c.fillText('remain', 165, y + 6);
-            y += 12;
-            for (let id = 1; id <= 8; id++) {
-                const origV = sb.getOriginalSegmentVolume(id, useOBJ);
-                const curV = sb.calculateSegmentVolume(id, useOBJ);
-                const segPct = totalOrig > 0 ? (curV / totalOrig * 100) : 0;
-                const ratio = origV > 0.01 ? (curV / origV * 100) : 100;
-                const rCol = (ratio >= 80 && ratio <= 120) ? '#7dff7d' : ratio >= 60 ? '#ffcc33' : '#ff5555';
-                c.fillStyle = '#aab';
-                c.font = '11px Arial';
-                c.fillText('S' + id, 16, y + 9);
-                c.fillStyle = '#ccc';
-                c.fillText(curV.toFixed(1) + ' ml', 38, y + 9);
-                c.fillStyle = '#888';
-                c.fillText('(' + segPct.toFixed(1) + '%)', 110, y + 9);
-                if (origV > 0.01 && Math.abs(ratio - 100) > 0.5) {
-                    c.fillStyle = rCol;
-                    c.fillText('[' + ratio.toFixed(0) + '%]', 165, y + 9);
-                }
-                y += 14;
-            }
-        }
-    } else {
-        c.fillStyle = '#555';
-        c.font = '14px Arial';
-        c.fillText('-- ml  --%', 16, y + 8);
-    }
-    }  // end vrVolumeExpanded
 
     // ===== Wireframe ボタン =====
     const wireHovered = panelHoveredBtn >= 0 && panelBtnWorldPos[panelHoveredBtn] && panelBtnWorldPos[panelHoveredBtn].action === 'wire';
@@ -3875,8 +3874,22 @@ function getPanelLayout() {
     const sliderY = cardEndY + 30;
     const vrScaleSliderY = sliderY + 60;
     const displayStartY = vrScaleSliderY + 60;
-    const actionStartY = displayStartY + 50;
-    return { cardCols, cardGap, cardSize, cardStartY, cardEndY, sliderY, vrScaleSliderY, displayStartY, actionStartY };
+    // Volume header: after DISPLAY header(20) + buttons(30) + gap(4) + gap(4)
+    const volumeHeaderY = displayStartY + 58;
+    // Volume section height (dynamic)
+    let volSectionH = 36;  // header only (collapsed)
+    if (vrVolumeExpanded) {
+        if (sb && typeof sb.areVolumesCaptured === 'function' && sb.areVolumesCaptured()) {
+            volSectionH += 16 + 10 + 14;
+            const hasSegData = (typeof sb !== 'undefined' && typeof sb.isOBJSegmentsBound === 'function' && sb.isOBJSegmentsBound()) ||
+                              (typeof sb !== 'undefined' && typeof sb.isSkeletonAnalyzed === 'function' && sb.isSkeletonAnalyzed());
+            if (hasSegData) volSectionH += 6 + 12 + 8 * 14;
+        } else {
+            volSectionH += 20;
+        }
+    }
+    const actionStartY = volumeHeaderY + volSectionH + 10;
+    return { cardCols, cardGap, cardSize, cardStartY, cardEndY, sliderY, vrScaleSliderY, displayStartY, volumeHeaderY, actionStartY };
 }
 
 // パネル上のボタン定義（キャンバス座標での中心点）
@@ -3917,9 +3930,8 @@ function getPanelButtons() {
             }
         }
     }
-    // Volume トグルボタン
-    const volToggleY = L.actionStartY + 28 + 4 * 58 + 20;  // ACTION後の概算位置
-    btns.push({ cx: PANEL_W / 2, cy: volToggleY, action: 'volumeToggle', idx: -1 });
+    // Volume トグルボタン（DISPLAYセクション内）
+    btns.push({ cx: PANEL_W / 2, cy: L.volumeHeaderY + 15, action: 'volumeToggle', idx: -1 });
     // Wireframe ボタン（VOLUMEの後、Reset/Exitの前）
     const wireY = ay + 70;
     btns.push({ cx: PANEL_W / 2, cy: wireY + 18, action: 'wire', idx: -1 });
@@ -5170,6 +5182,17 @@ function vrExitVR() { if (xrSession) xrSession.end(); }
     <button class="vr-disp-btn" id="vr-disp-preset" onclick="vrSetDisp('preset')">Preset Seg</button>
   </div>
 
+  <div class="vr-sec-label">VOLUME</div>
+  <div id="vr-vol-box" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:9px;padding:9px 13px;margin-bottom:10px;">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px;">
+      <span style="font-size:10px;color:#556;letter-spacing:0.08em;">REMNANT</span>
+      <span><span id="vr-vol-num" style="font-size:18px;font-weight:500;color:#7dff7d;">-- ml</span><span id="vr-vol-pct" style="font-size:13px;color:#4dc0e6;margin-left:6px;">--%</span></span>
+    </div>
+    <div style="height:4px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden;">
+      <div id="vr-vol-bar" style="height:100%;background:#1d9e75;border-radius:2px;width:100%;transition:width 0.3s;"></div>
+    </div>
+  </div>
+
   <div class="vr-sec-label">ACTION</div>
   <div id="vr-action-list" style="display:flex;flex-direction:column;gap:5px;margin-bottom:10px;">
     <div class="vr-act-btn" id="vr-act-deform" onclick="vrSetAction('deform')">
@@ -5201,17 +5224,6 @@ function vrExitVR() { if (xrSession) xrSession.end(); }
     <div class="vr-act-btn" id="vr-act-transform" onclick="vrSetAction('transform')">
       <div class="vr-act-header"><span class="vr-act-icon">⟳</span><span class="vr-act-label">Transform</span></div>
       <div class="vr-sub-panel"></div>
-    </div>
-  </div>
-
-  <div class="vr-sec-label">VOLUME</div>
-  <div id="vr-vol-box" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:9px;padding:9px 13px;margin-bottom:10px;">
-    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px;">
-      <span style="font-size:10px;color:#556;letter-spacing:0.08em;">REMNANT</span>
-      <span><span id="vr-vol-num" style="font-size:18px;font-weight:500;color:#7dff7d;">-- ml</span><span id="vr-vol-pct" style="font-size:13px;color:#4dc0e6;margin-left:6px;">--%</span></span>
-    </div>
-    <div style="height:4px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden;">
-      <div id="vr-vol-bar" style="height:100%;background:#1d9e75;border-radius:2px;width:100%;transition:width 0.3s;"></div>
     </div>
   </div>
 
