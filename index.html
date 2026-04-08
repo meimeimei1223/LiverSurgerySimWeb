@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v114</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v115</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -3051,6 +3051,8 @@ const vrGrabs = {
     right: { active: false }
 };
 let vrLeftPrev = null;  // { pos:[x,y,z], ori:{x,y,z,w} } 左手の前フレーム状態
+let vrRightPrev = null; // 右手Transform用の前フレーム状態
+let vrResetConfirm = 0; // VR Reset 2段階確認 (0=通常, timestamp=確認待ち)
 let vrHandJoints = { left: {}, right: {} };  // jointName → {x,y,z}
 let bVRHandPts = null, bVRHandLines = null;  // GLバッファ
 
@@ -3215,6 +3217,8 @@ function onXREnd() {
     vrGrabs.left.active = false;
     vrGrabs.right.active = false;
     vrLeftPrev = null;
+    vrRightPrev = null;
+    vrResetConfirm = 0;
     panelFixed = false;
     panelWorldCenter = null;
     if (sb) sb.endGrabVR();
@@ -3717,16 +3721,17 @@ function drawPanelCanvas() {
     // ===== Reset / Exit =====
     const resetHovered = panelHoveredBtn >= 0 && panelBtnWorldPos[panelHoveredBtn] && panelBtnWorldPos[panelHoveredBtn].action === 'reset';
     const exitHovered = panelHoveredBtn >= 0 && panelBtnWorldPos[panelHoveredBtn] && panelBtnWorldPos[panelHoveredBtn].action === 'exit';
-    // Reset
-    c.fillStyle = resetHovered ? 'rgba(200,60,60,0.3)' : 'rgba(200,60,60,0.1)';
+    // Reset（2段階確認: 1回目→Confirm?表示、3秒以内に2回目→実行）
+    const resetConfirming = vrResetConfirm > 0 && (Date.now() - vrResetConfirm) < 3000;
+    c.fillStyle = resetConfirming ? 'rgba(255,50,50,0.4)' : resetHovered ? 'rgba(200,60,60,0.3)' : 'rgba(200,60,60,0.1)';
     c.fillRect(16, y, (W-40)/2, 36);
-    c.strokeStyle = resetHovered ? '#ff6666' : 'rgba(200,60,60,0.4)';
-    c.lineWidth = resetHovered ? 3 : 1;
+    c.strokeStyle = resetConfirming ? '#ff3333' : resetHovered ? '#ff6666' : 'rgba(200,60,60,0.4)';
+    c.lineWidth = resetConfirming ? 3 : resetHovered ? 3 : 1;
     c.strokeRect(16, y, (W-40)/2, 36);
-    c.fillStyle = '#e07070';
+    c.fillStyle = resetConfirming ? '#ff4444' : '#e07070';
     c.font = 'bold 15px Arial';
     c.textAlign = 'center';
-    c.fillText('Reset', 16 + (W-40)/4, y + 24);
+    c.fillText(resetConfirming ? 'Confirm?' : 'Reset', 16 + (W-40)/4, y + 24);
     // Exit
     const exX = 16 + (W-40)/2 + 8;
     c.fillStyle = exitHovered ? 'rgba(180,140,60,0.3)' : 'rgba(180,140,60,0.1)';
@@ -4386,6 +4391,11 @@ function processController(frame, src, hand) {
     const trigger = src.gamepad.buttons[0]?.pressed || false;
 
     if (hand === 'right') {
+        if (actionMode === 'transform') {
+            // === 右手: Transform モード時はモデル移動/回転 ===
+            processTransform('right', trigger, pos, ori);
+            return;
+        }
         // === 右手: メッシュグラブ ===
         const qx = ori.x, qy = ori.y, qz = ori.z, qw = ori.w;
         const dirX = 2 * (qx * qz + qy * qw);
@@ -4411,20 +4421,24 @@ function processController(frame, src, hand) {
     }
 }
 
-// 左手 Transform 共通処理（コントローラー/ハンドトラッキング共用）
-function processLeftHandTransform(active, pos, ori) {
-    if (active && !vrGrabs.left.active) {
+// Transform 共通処理（左手・右手両対応、コントローラー/ハンドトラッキング共用）
+function processTransform(hand, active, pos, ori) {
+    const grab = vrGrabs[hand];
+    const prev = (hand === 'left') ? vrLeftPrev : vrRightPrev;
+    const setPrev = (v) => { if (hand === 'left') vrLeftPrev = v; else vrRightPrev = v; };
+
+    if (active && !grab.active) {
         // 開始: 初期位置・向きを保存
-        vrLeftPrev = {
+        setPrev({
             pos: [pos.x, pos.y, pos.z],
             ori: { x: ori.x, y: ori.y, z: ori.z, w: ori.w }
-        };
-        vrGrabs.left.active = true;
-    } else if (active && vrGrabs.left.active && vrLeftPrev) {
+        });
+        grab.active = true;
+    } else if (active && grab.active && prev) {
         // 移動中: デルタを計算して translate + rotate
-        const dx = pos.x - vrLeftPrev.pos[0];
-        const dy = pos.y - vrLeftPrev.pos[1];
-        const dz = pos.z - vrLeftPrev.pos[2];
+        const dx = pos.x - prev.pos[0];
+        const dy = pos.y - prev.pos[1];
+        const dz = pos.z - prev.pos[2];
 
         // 移動（VR空間のデルタ → シミュレーション空間）
         if (Math.abs(dx) > 1e-5 || Math.abs(dy) > 1e-5 || Math.abs(dz) > 1e-5) {
@@ -4432,7 +4446,7 @@ function processLeftHandTransform(active, pos, ori) {
         }
 
         // 回転（クォータニオンのデルタから軸角度を抽出）
-        const q1 = vrLeftPrev.ori;
+        const q1 = prev.ori;
         const q2 = { x: ori.x, y: ori.y, z: ori.z, w: ori.w };
         // dq = q2 * inverse(q1)
         const q1inv = { x: -q1.x, y: -q1.y, z: -q1.z, w: q1.w };
@@ -4448,14 +4462,16 @@ function processLeftHandTransform(active, pos, ori) {
             sb.rotateModel(angle, dq.x/sinHalf, dq.y/sinHalf, dq.z/sinHalf);
         }
 
-        vrLeftPrev.pos = [pos.x, pos.y, pos.z];
-        vrLeftPrev.ori = q2;
-    } else if (!active && vrGrabs.left.active) {
+        prev.pos = [pos.x, pos.y, pos.z];
+        prev.ori = q2;
+    } else if (!active && grab.active) {
         // 終了
-        vrGrabs.left.active = false;
-        vrLeftPrev = null;
+        grab.active = false;
+        setPrev(null);
     }
 }
+// 後方互換
+function processLeftHandTransform(active, pos, ori) { processTransform('left', active, pos, ori); }
 
 // ハンドトラッキング（ピンチジェスチャー）
 function processHandTracking(frame, src, hand) {
@@ -4486,6 +4502,18 @@ function processHandTracking(frame, src, hand) {
     const wo = wristPose.transform.orientation;
 
     if (hand === 'right') {
+        // === 右手: Transform モード時はモデル移動/回転（パネル操作は後で別途処理） ===
+        if (actionMode === 'transform') {
+            const nearPanel = panelPrePinchBtn >= 0 || panelHoveredBtn >= 0 || panelHoveredBtn <= -2;
+            if (!nearPanel) {
+                processTransform('right', isPinching,
+                    { x: midX, y: midY, z: midZ },
+                    { x: wo.x, y: wo.y, z: wo.z, w: wo.w });
+            } else if (!isPinching && vrGrabs.right.active) {
+                // パネル近くでピンチ解除 → Transform終了
+                vrGrabs.right.active = false; vrRightPrev = null;
+            }
+        } else {
         // === 右手: パネル近くならパネル優先、それ以外はモード別操作 ===
         const rayDx = midX - wp.x, rayDy = midY - wp.y, rayDz = midZ - wp.z;
         const rayLen = Math.sqrt(rayDx*rayDx + rayDy*rayDy + rayDz*rayDz) || 1;
@@ -4666,6 +4694,7 @@ function processHandTracking(frame, src, hand) {
             vrGrabs.right.active = false;
         }
         }  // end of else block (after Free Cut)
+        }  // end of else (non-transform modes)
     } else {
         // === 左手: モデル移動/回転 ===
         processLeftHandTransform(isPinching,
@@ -4822,7 +4851,14 @@ function processHandTracking(frame, src, hand) {
                     wireOn = !wireOn;
                     if (wireOn && sb) updateWire();
                 } else if (nearest.action === 'reset') {
-                    document.getElementById('reset-popup').style.display = 'block';
+                    if (vrResetConfirm > 0 && (Date.now() - vrResetConfirm) < 3000) {
+                        // 2回目タップ → 実行
+                        vrResetConfirm = 0;
+                        doReset();
+                    } else {
+                        // 1回目タップ → 確認待ち（3秒間）
+                        vrResetConfirm = Date.now();
+                    }
                 } else if (nearest.action === 'exit') {
                     if (xrSession) xrSession.end();
                 }
