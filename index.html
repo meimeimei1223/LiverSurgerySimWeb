@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v110</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v111</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -1972,19 +1972,36 @@ function cancelFragment() {
 // ボリューム表示パネル更新 (main.cpp renderVolumeOverlay 準拠)
 function updateVolumePanel() {
     if (!sb || !sb.areVolumesCaptured()) return;
-    const totalVol = sb.getOriginalTotalVolume();
-    const currentVol = sb.calculateTotalVolume();
-    const remnantPct = totalVol > 0 ? (currentVol / totalVol * 100).toFixed(1) : '0.0';
+    const totalOrig = sb.getOriginalTotalVolume();
+    const totalCur = sb.calculateTotalVolume();
+    const remnantPct = totalOrig > 0 ? (totalCur / totalOrig * 100) : 100;
+    // 色判定
+    const pctColor = (p) => p >= 80 && p <= 120 ? '#7dff7d' : p >= 90 && p <= 110 ? '#7dff7d' : '#ffcc33';
+    const ratioColor = (r) => r >= 80 && r <= 120 ? '#7dff7d' : r >= 90 ? '#ffcc33' : '#ff5555';
     let html = '';
-    html += `<span style="color:#aaa;">Total:</span> <b>${totalVol.toFixed(1)}</b> ml<br>`;
-    html += `<span style="color:#7dff7d;">Remnant:</span> <b>${currentVol.toFixed(1)}</b> ml (<b>${remnantPct}%</b>)<br>`;
-    // S1-S8 セグメント別
-    if (sb.isOBJSegmentsBound()) {
-        html += '<div style="margin-top:4px;border-top:1px solid #444;padding-top:4px;font-size:11px;">';
+    html += `<div style="display:flex;justify-content:space-between;"><span style="color:#aaa;">Total</span><span style="color:#4dc0e6;font-size:16px;font-weight:bold;">${totalCur.toFixed(1)} ml</span></div>`;
+    // プログレスバー
+    const barPct = Math.min(100, Math.max(0, remnantPct));
+    html += `<div style="height:6px;background:#222;border-radius:3px;margin:4px 0;"><div style="height:100%;width:${barPct.toFixed(1)}%;background:${pctColor(remnantPct)};border-radius:3px;"></div></div>`;
+    html += `<div style="font-size:10px;color:#888;">Original: ${totalOrig.toFixed(1)} ml &nbsp; Remnant: <span style="color:${pctColor(remnantPct)}">${remnantPct.toFixed(1)}%</span></div>`;
+    // S1-S8 セグメント別（現在値 + 比率）
+    const useOBJ = sb.isOBJSegmentsBound();
+    if (useOBJ || sb.isSkeletonAnalyzed()) {
+        html += '<div style="margin-top:6px;border-top:1px solid #333;padding-top:4px;font-size:11px;">';
+        html += '<div style="color:#556;font-size:10px;margin-bottom:2px;">Segments</div>';
         for (let id = 1; id <= 8; id++) {
-            const origVol = sb.getOriginalSegmentVolume(id, true);
-            const pct = totalVol > 0 ? (origVol / totalVol * 100).toFixed(1) : '0.0';
-            html += `S${id}: ${origVol.toFixed(1)} ml (${pct}%)<br>`;
+            const origVol = sb.getOriginalSegmentVolume(id, useOBJ);
+            const curVol = sb.calculateSegmentVolume(id, useOBJ);
+            const pct = totalOrig > 0 ? (curVol / totalOrig * 100) : 0;
+            const ratio = origVol > 0.01 ? (curVol / origVol * 100) : 100;
+            html += `<div style="display:flex;gap:4px;line-height:1.6;">`;
+            html += `<span style="color:#aab;min-width:22px;">S${id}</span>`;
+            html += `<span style="color:#ccc;min-width:55px;">${curVol.toFixed(1)} ml</span>`;
+            html += `<span style="color:#888;min-width:40px;">(${pct.toFixed(1)}%)</span>`;
+            if (origVol > 0.01 && Math.abs(ratio - 100) > 0.5) {
+                html += `<span style="color:${ratioColor(ratio)};">[${ratio.toFixed(0)}%]</span>`;
+            }
+            html += `</div>`;
         }
         html += '</div>';
     }
@@ -3596,28 +3613,64 @@ function drawPanelCanvas() {
     c.font = 'bold 18px Arial';
     c.fillText('VOLUME', 16, y + 14); y += 28;
     if (sb && typeof sb.areVolumesCaptured === 'function' && sb.areVolumesCaptured()) {
-        const total = sb.getOriginalTotalVolume();
-        const current = sb.calculateTotalVolume();
-        const pct = total > 0 ? (current / total * 100) : 0;
-        c.fillStyle = '#7dff7d';
-        c.font = 'bold 24px Arial';
-        c.fillText(current.toFixed(1) + ' ml', 16, y + 8);
+        const totalOrig = sb.getOriginalTotalVolume();
+        const totalCur = sb.calculateTotalVolume();
+        const remnantPct = totalOrig > 0 ? (totalCur / totalOrig * 100) : 100;
+        // Total + プログレスバー
+        const pctCol = (remnantPct >= 80 && remnantPct <= 120) ? '#7dff7d' : '#ffcc33';
+        c.fillStyle = pctCol;
+        c.font = 'bold 20px Arial';
+        c.fillText(totalCur.toFixed(1) + ' ml', 16, y + 6);
         c.fillStyle = '#4dc0e6';
-        c.font = '16px Arial';
+        c.font = '14px Arial';
         c.textAlign = 'right';
-        c.fillText(pct.toFixed(1) + '%', W - 16, y + 8);
+        c.fillText(remnantPct.toFixed(1) + '%', W - 16, y + 6);
         c.textAlign = 'left';
-        y += 18;
+        y += 16;
         c.fillStyle = 'rgba(255,255,255,0.08)';
-        c.fillRect(16, y, W - 32, 6);
-        c.fillStyle = '#1d9e75';
-        c.fillRect(16, y, (W - 32) * pct / 100, 6);
+        c.fillRect(16, y, W - 32, 5);
+        c.fillStyle = pctCol;
+        c.fillRect(16, y, (W - 32) * Math.min(1, remnantPct / 100), 5);
+        y += 10;
+        c.fillStyle = '#556';
+        c.font = '10px Arial';
+        c.fillText('Original: ' + totalOrig.toFixed(1) + ' ml', 16, y + 6);
+        y += 14;
+        // S1-S8 セグメント別
+        const useOBJ = typeof sb.isOBJSegmentsBound === 'function' && sb.isOBJSegmentsBound();
+        const hasSkel = typeof sb.isSkeletonAnalyzed === 'function' && sb.isSkeletonAnalyzed();
+        if (useOBJ || hasSkel) {
+            c.fillStyle = 'rgba(255,255,255,0.06)';
+            c.fillRect(12, y, W - 24, 2); y += 6;
+            c.fillStyle = '#556';
+            c.font = '10px Arial';
+            c.fillText('Segments', 16, y + 6); y += 12;
+            for (let id = 1; id <= 8; id++) {
+                const origV = sb.getOriginalSegmentVolume(id, useOBJ);
+                const curV = sb.calculateSegmentVolume(id, useOBJ);
+                const segPct = totalOrig > 0 ? (curV / totalOrig * 100) : 0;
+                const ratio = origV > 0.01 ? (curV / origV * 100) : 100;
+                const rCol = (ratio >= 80 && ratio <= 120) ? '#7dff7d' : ratio >= 60 ? '#ffcc33' : '#ff5555';
+                c.fillStyle = '#aab';
+                c.font = '11px Arial';
+                c.fillText('S' + id, 16, y + 9);
+                c.fillStyle = '#ccc';
+                c.fillText(curV.toFixed(1) + ' ml', 38, y + 9);
+                c.fillStyle = '#888';
+                c.fillText('(' + segPct.toFixed(1) + '%)', 110, y + 9);
+                if (origV > 0.01 && Math.abs(ratio - 100) > 0.5) {
+                    c.fillStyle = rCol;
+                    c.fillText('[' + ratio.toFixed(0) + '%]', 165, y + 9);
+                }
+                y += 14;
+            }
+        }
     } else {
         c.fillStyle = '#555';
         c.font = '14px Arial';
         c.fillText('-- ml  --%', 16, y + 8);
     }
-    y += 30;
+    y += 10;
 
     // ===== Wireframe ボタン =====
     const wireHovered = panelHoveredBtn >= 0 && panelBtnWorldPos[panelHoveredBtn] && panelBtnWorldPos[panelHoveredBtn].action === 'wire';
