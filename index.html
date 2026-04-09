@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v125</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v126</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -3056,6 +3056,14 @@ let vrLeftPrev = null;  // { pos:[x,y,z], ori:{x,y,z,w} } 左手の前フレー�
 let vrRightPrev = null; // 右手Transform用の前フレーム状態
 let vrResetConfirm = 0; // VR Reset 2段階確認 (0=通常, timestamp=確認待ち)
 let vrHandJoints = { left: {}, right: {} };  // jointName → {x,y,z}
+let vrLeftWristOri = null;  // 左手首の向き {x,y,z,w} — 手首パネル用
+
+// ===== 手首パネル（腕時計型 FPS/パラメータ表示）=====
+const WRIST_W = 256, WRIST_H = 320;
+const WRIST_HW = 0.06, WRIST_HH = 0.075;  // 0.12m x 0.15m
+let wristCanvas = null, wristCtx = null, wristTex = null;
+let bWristVtx = null, bWristUV = null;
+let vrFps = 0;  // VR FPS表示用
 let bVRHandPts = null, bVRHandLines = null;  // GLバッファ
 
 // 手のボーン接続定義
@@ -3241,10 +3249,16 @@ function onXREnd() {
 }
 
 // XR レンダーループ
+let vrFc = 0, vrFt = 0;  // VR FPSカウンター
 function renderXR(time, frame) {
     if (!xrSession || !sb) { xrSession?.requestAnimationFrame(renderXR); return; }
 
     xrSession.requestAnimationFrame(renderXR);
+
+    // VR FPS計測
+    vrFc++;
+    if (time - vrFt >= 1000) { vrFps = vrFc; vrFc = 0; vrFt = time; }
+
     const pose = frame.getViewerPose(xrRefSpace);
     if (!pose) return;
 
@@ -3309,6 +3323,9 @@ function renderXR(time, frame) {
         // ハンドジョイント描画
         drawVRHands(V, P);
 
+        // 手首パネル描画（左手首に追従）
+        drawWristPanel(V, P);
+
         // レーザー描画（Handle Place モード時）
         drawVRLaser(V, P);
     }
@@ -3364,6 +3381,171 @@ function initPanelGL() {
 
     drawPanelCanvas();
     console.log('[Panel] initPanelGL OK');
+
+    // ===== 手首パネル初期化 =====
+    initWristPanelGL();
+}
+
+function initWristPanelGL() {
+    wristCanvas = document.createElement('canvas');
+    wristCanvas.width = WRIST_W;
+    wristCanvas.height = WRIST_H;
+    wristCtx = wristCanvas.getContext('2d');
+
+    wristTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, wristTex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+    console.log('[WristPanel] initWristPanelGL OK');
+}
+
+function drawWristPanelCanvas() {
+    if (!wristCtx) return;
+    const c = wristCtx;
+    const W = WRIST_W, H = WRIST_H;
+
+    // 背景
+    c.fillStyle = 'rgba(8, 12, 24, 0.92)';
+    c.fillRect(0, 0, W, H);
+    c.strokeStyle = 'rgba(77, 192, 230, 0.5)';
+    c.lineWidth = 2;
+    c.strokeRect(2, 2, W - 4, H - 4);
+
+    let y = 16;
+
+    // FPS
+    c.fillStyle = '#7dff7d';
+    c.font = 'bold 22px Arial';
+    c.fillText('FPS: ' + vrFps, 12, y + 18);
+    y += 32;
+
+    // 区切り線
+    c.fillStyle = 'rgba(255,255,255,0.08)';
+    c.fillRect(8, y, W - 16, 1);
+    y += 8;
+
+    // パラメータ表示
+    const params = [];
+    if (sb) {
+        params.push({ label: 'Substeps', value: sb.getNumSubsteps ? sb.getNumSubsteps().toString() : '3' });
+        const esEl = document.getElementById('es');
+        const vsEl = document.getElementById('vs');
+        const dsEl = document.getElementById('ds');
+        params.push({ label: 'Edge Comp', value: esEl ? parseFloat(esEl.value).toFixed(1) : '0.0' });
+        params.push({ label: 'Vol Comp', value: vsEl ? vsEl.value : '-99' });
+        params.push({ label: 'Damping', value: dsEl ? parseFloat(dsEl.value).toFixed(3) : '0.980' });
+    } else {
+        params.push({ label: 'Substeps', value: '--' });
+        params.push({ label: 'Edge Comp', value: '--' });
+        params.push({ label: 'Vol Comp', value: '--' });
+        params.push({ label: 'Damping', value: '--' });
+    }
+    params.push({ label: 'Gravity', value: gravY.toFixed(1) });
+
+    for (const p of params) {
+        c.fillStyle = '#888';
+        c.font = '13px Arial';
+        c.fillText(p.label, 12, y + 14);
+        c.fillStyle = '#4dc0e6';
+        c.font = 'bold 15px Arial';
+        c.textAlign = 'right';
+        c.fillText(p.value, W - 12, y + 14);
+        c.textAlign = 'left';
+        y += 24;
+    }
+
+    // モード表示
+    y += 4;
+    c.fillStyle = 'rgba(255,255,255,0.08)';
+    c.fillRect(8, y, W - 16, 1);
+    y += 8;
+    c.fillStyle = '#556';
+    c.font = '12px Arial';
+    const modeText = typeof actionMode !== 'undefined' ? actionMode.toUpperCase() : 'NONE';
+    c.fillText('Mode: ' + modeText, 12, y + 12);
+    y += 20;
+
+    // 左手モード
+    c.fillStyle = vrLeftMode === 'deform' ? '#c060e0' : '#4dc0e6';
+    c.font = 'bold 12px Arial';
+    c.fillText('L-Hand: ' + vrLeftMode.toUpperCase(), 12, y + 12);
+
+    // テクスチャ転送
+    gl.bindTexture(gl.TEXTURE_2D, wristTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, wristCanvas);
+}
+
+function drawWristPanel(V, P) {
+    if (!wristTex || !pPanel || !LPanel) return;
+    const wj = vrHandJoints['left'];
+    if (!wj || !wj['wrist'] || !vrLeftWristOri) return;
+
+    const wp = wj['wrist'];
+    const q = vrLeftWristOri;
+
+    // 手首クォータニオン → right/up/forward ベクトル
+    const rx = 1-2*(q.y*q.y+q.z*q.z), ry = 2*(q.x*q.y+q.w*q.z), rz = 2*(q.x*q.z-q.w*q.y);
+    const ux = 2*(q.x*q.y-q.w*q.z),   uy = 1-2*(q.x*q.x+q.z*q.z), uz = 2*(q.y*q.z+q.w*q.x);
+
+    // パネル中心: 手首から甲側に3cmオフセット
+    const cx = wp.x + ux * 0.03;
+    const cy = wp.y + uy * 0.03;
+    const cz = wp.z + uz * 0.03;
+
+    // Canvas更新
+    drawWristPanelCanvas();
+
+    // 6頂点（2三角形）ビルボード
+    const hw = WRIST_HW, hh = WRIST_HH;
+    const v = new Float32Array([
+        cx-rx*hw+ux*hh, cy-ry*hw+uy*hh, cz-rz*hw+uz*hh,
+        cx+rx*hw+ux*hh, cy+ry*hw+uy*hh, cz+rz*hw+uz*hh,
+        cx+rx*hw-ux*hh, cy+ry*hw-uy*hh, cz+rz*hw-uz*hh,
+        cx-rx*hw+ux*hh, cy-ry*hw+uy*hh, cz-rz*hw+uz*hh,
+        cx+rx*hw-ux*hh, cy+ry*hw-uy*hh, cz+rz*hw-uz*hh,
+        cx-rx*hw-ux*hh, cy-ry*hw-uy*hh, cz-rz*hw-uz*hh,
+    ]);
+    const uv = new Float32Array([0,0, 1,0, 1,1, 0,0, 1,1, 0,1]);
+
+    if (!bWristVtx) bWristVtx = gl.createBuffer();
+    if (!bWristUV) bWristUV = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, bWristVtx);
+    gl.bufferData(gl.ARRAY_BUFFER, v, gl.DYNAMIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, bWristUV);
+    gl.bufferData(gl.ARRAY_BUFFER, uv, gl.STATIC_DRAW);
+
+    const I = new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
+    gl.disable(gl.DEPTH_TEST);
+    gl.disable(gl.CULL_FACE);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+    gl.useProgram(pPanel);
+    gl.uniformMatrix4fv(LPanel.uM, false, I);
+    gl.uniformMatrix4fv(LPanel.uV, false, V);
+    gl.uniformMatrix4fv(LPanel.uP, false, P);
+    gl.uniform1f(LPanel.uAlpha, 0.95);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, wristTex);
+    gl.uniform1i(LPanel.uTex, 0);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, bWristVtx);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, bWristUV);
+    gl.enableVertexAttribArray(1);
+    gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
+
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    gl.disableVertexAttribArray(0);
+    gl.disableVertexAttribArray(1);
+
+    gl.enable(gl.DEPTH_TEST);
+    gl.enable(gl.CULL_FACE);
+    gl.disable(gl.BLEND);
 }
 
 function drawPanelCanvas() {
@@ -4730,6 +4912,8 @@ function processHandTracking(frame, src, hand) {
         }  // end of else block (after Free Cut)
         }  // end of else (non-transform modes)
     } else {
+        // === 左手: 手首の向きを保存（手首パネル用）===
+        vrLeftWristOri = { x: wo.x, y: wo.y, z: wo.z, w: wo.w };
         // === 左手: 人差指ピンチ→Transform、中指ピンチ→Deform、両方→無効 ===
         const middleTipL = src.hand.get('middle-finger-tip');
         const middlePoseL = middleTipL ? frame.getJointPose(middleTipL, xrRefSpace) : null;
