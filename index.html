@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v130</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v131</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -3324,7 +3324,7 @@ function renderXR(time, frame) {
         drawVRHands(V, P);
 
         // 手首パネル描画（左手首に追従）
-        drawWristPanel(V, P);
+        drawWristPanel(V, P, cp);
 
         // レーザー描画（Handle Place モード時）
         drawVRLaser(V, P);
@@ -3478,29 +3478,30 @@ function drawWristPanelCanvas() {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, wristCanvas);
 }
 
-function drawWristPanel(V, P) {
-    if (!wristTex || !pPanel || !LPanel) return;
+function drawWristPanel(V, P, headPos) {
+    if (!wristTex || !pPanel || !LPanel || !headPos) return;
     const wj = vrHandJoints['left'];
     if (!wj || !wj['wrist'] || !vrLeftWristOri) return;
 
-    // グー検出: 全指先が手首から12cm以内 → グーと判定
     const wpos = wj['wrist'];
-    const fingerTips = ['index-finger-tip','middle-finger-tip','ring-finger-tip','pinky-finger-tip'];
-    let isFist = true;
-    for (const tip of fingerTips) {
-        if (!wj[tip]) { isFist = false; break; }
-        const dx = wj[tip].x - wpos.x, dy = wj[tip].y - wpos.y, dz = wj[tip].z - wpos.z;
-        if (Math.sqrt(dx*dx + dy*dy + dz*dz) > 0.12) { isFist = false; break; }
-    }
-    if (!isFist) return;
-
-    const wp = wpos;
     const q = vrLeftWristOri;
 
-    // 手首クォータニオン → right/up/forward ベクトル
+    // 手の甲の法線（up方向）
+    const ux = 2*(q.x*q.y-q.w*q.z), uy = 1-2*(q.x*q.x+q.z*q.z), uz = 2*(q.y*q.z+q.w*q.x);
+
+    // 手首→頭への方向ベクトル
+    const toHeadX = headPos[0] - wpos.x;
+    const toHeadY = headPos[1] - wpos.y;
+    const toHeadZ = headPos[2] - wpos.z;
+    const toHeadLen = Math.sqrt(toHeadX*toHeadX + toHeadY*toHeadY + toHeadZ*toHeadZ) || 1;
+
+    // 手の甲法線と頭方向の内積（1=手のひらを自分に向けている、-1=手の甲を向けている）
+    const dot = (ux * toHeadX + uy * toHeadY + uz * toHeadZ) / toHeadLen;
+    if (dot < 0.5) return;  // 手のひらが自分を向いていない → 非表示
+
+    const wp = wpos;
+    // right / forward ベクトル（ux/uy/uz は上で計算済み）
     const rx = 1-2*(q.y*q.y+q.z*q.z), ry = 2*(q.x*q.y+q.w*q.z), rz = 2*(q.x*q.z-q.w*q.y);
-    const ux = 2*(q.x*q.y-q.w*q.z),   uy = 1-2*(q.x*q.x+q.z*q.z), uz = 2*(q.y*q.z+q.w*q.x);
-    // forward (Z軸負方向 = 指先方向)
     const fx = 2*(q.x*q.z+q.w*q.y),   fy = 2*(q.y*q.z-q.w*q.x),   fz = 1-2*(q.x*q.x+q.y*q.y);
 
     // パネル中心: 手首から甲側(up)に4cm + 指先方向(forward)に5cmオフセット
