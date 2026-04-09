@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v127</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v128</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -3483,14 +3483,14 @@ function drawWristPanel(V, P) {
     const wj = vrHandJoints['left'];
     if (!wj || !wj['wrist'] || !vrLeftWristOri) return;
 
-    // グー検出: 全指先が手首から7cm以内 → グーと判定
+    // グー検出: 全指先が手首から12cm以内 → グーと判定（開いた手は~18cm）
     const fingerTips = ['index-finger-tip','middle-finger-tip','ring-finger-tip','pinky-finger-tip'];
     const wpos = wj['wrist'];
     let isFist = true;
     for (const tip of fingerTips) {
         if (!wj[tip]) { isFist = false; break; }
         const dx = wj[tip].x - wpos.x, dy = wj[tip].y - wpos.y, dz = wj[tip].z - wpos.z;
-        if (Math.sqrt(dx*dx + dy*dy + dz*dz) > 0.07) { isFist = false; break; }
+        if (Math.sqrt(dx*dx + dy*dy + dz*dz) > 0.12) { isFist = false; break; }
     }
     if (!isFist) return;
 
