@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v131</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v132</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -3498,6 +3498,19 @@ function drawWristPanel(V, P, headPos) {
     // 手の甲法線と頭方向の内積（1=手のひらを自分に向けている、-1=手の甲を向けている）
     const dot = (ux * toHeadX + uy * toHeadY + uz * toHeadZ) / toHeadLen;
     if (dot < 0.5) return;  // 手のひらが自分を向いていない → 非表示
+
+    // ピンチ中は非表示（パー状態のみ表示）
+    if (vrGrabs.left.active) return;
+    const idxTip = wj['index-finger-tip'], thumbTip = wj['thumb-tip'];
+    if (idxTip && thumbTip) {
+        const pdx = idxTip.x-thumbTip.x, pdy = idxTip.y-thumbTip.y, pdz = idxTip.z-thumbTip.z;
+        if (Math.sqrt(pdx*pdx+pdy*pdy+pdz*pdz) < 0.03) return;  // 人差指ピンチ中
+    }
+    const midTip = wj['middle-finger-tip'];
+    if (midTip && thumbTip) {
+        const pdx = midTip.x-thumbTip.x, pdy = midTip.y-thumbTip.y, pdz = midTip.z-thumbTip.z;
+        if (Math.sqrt(pdx*pdx+pdy*pdy+pdz*pdz) < 0.03) return;  // 中指ピンチ中
+    }
 
     const wp = wpos;
     // right / forward ベクトル（ux/uy/uz は上で計算済み）
