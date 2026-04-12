@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v134</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v135</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -3071,6 +3071,8 @@ let wristPanelUp = null;       // [x,y,z]
 let wristSliderDefs = [];      // {y, h, key, min, max, step} — スライダー定義
 let wristHoveredSlider = -1;   // ホバー中のスライダーindex
 let wristActiveSlider = null;  // ドラッグ中のスライダーkey
+let wristPanelFrozen = false;  // ホバー/ドラッグ中はパネル位置を固定
+let wristFrozenPos = null;     // 固定時のパネル座標系 {cx,cy,cz, prx..puz}
 let bVRHandPts = null, bVRHandLines = null;  // GLバッファ
 
 // 手のボーン接続定義
@@ -3475,11 +3477,11 @@ function drawWristPanelCanvas() {
     const dsVal = dsEl ? parseFloat(dsEl.value) : 0.98;
 
     // norm: 0~1に正規化
-    drawSliderRow('Substeps', ssVal.toString(), (ssVal-1)/7, 'ss', '#4dc0e6', 0);
+    drawSliderRow('Substeps', ssVal.toString(), (ssVal-1)/11, 'ss', '#4dc0e6', 0);
     drawSliderRow('Edge Comp', esVal.toFixed(1), (esVal+3)/7, 'es', '#e6a04d', 1);
     drawSliderRow('Vol Comp', vsVal.toFixed(1), (vsVal+6)/8, 'vs', '#e67e00', 2);
     drawSliderRow('Damping', dsVal.toFixed(3), (dsVal-0.9)/0.1, 'ds', '#4de6a0', 3);
-    drawSliderRow('Gravity Y', gravY.toFixed(1), (gravY+20)/40, 'gy', '#cc6666', 4);
+    drawSliderRow('Gravity Y', gravY.toFixed(1), (gravY+100)/200, 'gy', '#cc6666', 4);
 
     // 区切り線
     y += 2;
@@ -3559,11 +3561,11 @@ function applyWristSlider(key, norm) {
     const ssEl = document.getElementById('ss');
     const gyEl = document.getElementById('gys');
     switch (key) {
-        case 'ss': if (ssEl) { ssEl.value = Math.round(1 + norm * 7); ssEl.dispatchEvent(new Event('input')); } break;
+        case 'ss': if (ssEl) { ssEl.value = Math.round(1 + norm * 11); ssEl.dispatchEvent(new Event('input')); } break;
         case 'es': if (esEl) { esEl.value = (-3 + norm * 7).toFixed(1); esEl.dispatchEvent(new Event('input')); } break;
         case 'vs': if (vsEl) { vsEl.value = (-6 + norm * 8).toFixed(1); vsEl.dispatchEvent(new Event('input')); } break;
         case 'ds': if (dsEl) { dsEl.value = (0.9 + norm * 0.1).toFixed(3); dsEl.dispatchEvent(new Event('input')); } break;
-        case 'gy': if (gyEl) { gyEl.value = (-20 + norm * 40).toFixed(1); gyEl.dispatchEvent(new Event('input')); } break;
+        case 'gy': if (gyEl) { gyEl.value = (-100 + norm * 200).toFixed(1); gyEl.dispatchEvent(new Event('input')); } break;
     }
 }
 
@@ -3606,20 +3608,32 @@ function drawWristPanel(V, P, headPos) {
     const rx = 1-2*(q.y*q.y+q.z*q.z), ry = 2*(q.x*q.y+q.w*q.z), rz = 2*(q.x*q.z-q.w*q.y);
     const fx = 2*(q.x*q.z+q.w*q.y),   fy = 2*(q.y*q.z-q.w*q.x),   fz = 1-2*(q.x*q.x+q.y*q.y);
 
-    // パネル中心: 手首から甲側(up)に4cm + 指先方向(forward)に5cmオフセット
-    // 肘を曲げて正面を向いた時にパネルが見える向き
-    const cx = wp.x + ux * 0.04 - fx * 0.05;
-    const cy = wp.y + uy * 0.04 - fy * 0.05;
-    const cz = wp.z + uz * 0.04 - fz * 0.05;
+    // ホバー/ドラッグ中はパネル位置を固定（右手操作時にブレない）
+    const shouldFreeze = wristHoveredSlider >= 0 || wristActiveSlider !== null;
+    let cx, cy, cz, prx, pry, prz, pux, puy, puz;
+
+    if (shouldFreeze && wristFrozenPos) {
+        // 固定位置を使用
+        wristPanelFrozen = true;
+        ({cx, cy, cz, prx, pry, prz, pux, puy, puz} = wristFrozenPos);
+    } else {
+        // パネル中心: 手首から甲側(up)に4cm + 指先方向(forward)に5cmオフセット
+        cx = wp.x + ux * 0.04 - fx * 0.05;
+        cy = wp.y + uy * 0.04 - fy * 0.05;
+        cz = wp.z + uz * 0.04 - fz * 0.05;
+        // CCW90: panel right = -forward, panel up = -right（腕時計の向き）
+        prx = -fx; pry = -fy; prz = -fz;
+        pux = -rx; puy = -ry; puz = -rz;
+        // 固定用に保存
+        wristFrozenPos = {cx, cy, cz, prx, pry, prz, pux, puy, puz};
+        wristPanelFrozen = false;
+    }
 
     // Canvas更新
     drawWristPanelCanvas();
 
-    // 6頂点（2三角形）— 反時計回り90度（時計を見る向き）
+    // 6頂点（2三角形）
     const hw = WRIST_HW, hh = WRIST_HH;
-    // CCW90: panel right = -forward, panel up = -right（腕時計の向き）
-    const prx = -fx, pry = -fy, prz = -fz;    // panel right = -forward
-    const pux = -rx, puy = -ry, puz = -rz;     // panel up = -right
 
     // ヒットテスト用にパネル座標系を保存
     wristPanelCenter = [cx, cy, cz];
