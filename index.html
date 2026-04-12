@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v135</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v136</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -454,13 +454,13 @@
     <input type="range" id="ds" min="0.90" max="1.00" step="0.005" value="0.98"
            oninput="updateDamp(this.value)">
     <label>Substeps: <span id="sv">3</span></label>
-    <input type="range" id="ss" min="1" max="8" step="1" value="3"
+    <input type="range" id="ss" min="1" max="12" step="1" value="3"
            oninput="updateSubsteps(this.value)">
     <label>Gravity X: <span id="gxv">0.0</span></label>
     <input type="range" id="gxs" min="-20" max="20" step="0.5" value="0"
            oninput="updateGravity()">
     <label>Gravity Y: <span id="gyv">0.0</span></label>
-    <input type="range" id="gys" min="-20" max="20" step="0.5" value="0"
+    <input type="range" id="gys" min="-100" max="100" step="0.5" value="0"
            oninput="updateGravity()">
     <label>Gravity Z: <span id="gzv">0.0</span></label>
     <input type="range" id="gzs" min="-20" max="20" step="0.5" value="0"
@@ -3555,17 +3555,43 @@ function processWristPanelInput(fingerX, fingerY, fingerZ, isPinching) {
 }
 
 function applyWristSlider(key, norm) {
-    const esEl = document.getElementById('es');
-    const vsEl = document.getElementById('vs');
-    const dsEl = document.getElementById('ds');
-    const ssEl = document.getElementById('ss');
-    const gyEl = document.getElementById('gys');
+    // DOM sliderのmax制限を避けるため、直接C++関数を呼ぶ
     switch (key) {
-        case 'ss': if (ssEl) { ssEl.value = Math.round(1 + norm * 11); ssEl.dispatchEvent(new Event('input')); } break;
-        case 'es': if (esEl) { esEl.value = (-3 + norm * 7).toFixed(1); esEl.dispatchEvent(new Event('input')); } break;
-        case 'vs': if (vsEl) { vsEl.value = (-6 + norm * 8).toFixed(1); vsEl.dispatchEvent(new Event('input')); } break;
-        case 'ds': if (dsEl) { dsEl.value = (0.9 + norm * 0.1).toFixed(3); dsEl.dispatchEvent(new Event('input')); } break;
-        case 'gy': if (gyEl) { gyEl.value = (-100 + norm * 200).toFixed(1); gyEl.dispatchEvent(new Event('input')); } break;
+        case 'ss': {
+            const v = Math.round(1 + norm * 11);
+            if (sb) sb.setNumSubsteps(v);
+            const el = document.getElementById('sv'); if (el) el.textContent = v;
+            break;
+        }
+        case 'es': {
+            const v = parseFloat((-3 + norm * 7).toFixed(1));
+            const val = Math.pow(10, v);
+            if (sb) sb.setEdgeCompliance(val);
+            const el = document.getElementById('ev'); if (el) el.textContent = val.toExponential(1);
+            const sl = document.getElementById('es'); if (sl) sl.value = v;
+            break;
+        }
+        case 'vs': {
+            const v = parseFloat((-6 + norm * 8).toFixed(1));
+            const val = v < -10 ? 0 : Math.pow(10, v);
+            if (sb) sb.setVolCompliance(val);
+            const el = document.getElementById('vv'); if (el) el.textContent = val === 0 ? '0' : val.toExponential(1);
+            const sl = document.getElementById('vs'); if (sl) sl.value = v;
+            break;
+        }
+        case 'ds': {
+            const v = parseFloat((0.9 + norm * 0.1).toFixed(3));
+            if (sb) sb.setDamping(v);
+            const el = document.getElementById('dv'); if (el) el.textContent = v.toFixed(3);
+            const sl = document.getElementById('ds'); if (sl) sl.value = v;
+            break;
+        }
+        case 'gy': {
+            const v = parseFloat((-100 + norm * 200).toFixed(1));
+            gravY = v;
+            const el = document.getElementById('gyv'); if (el) el.textContent = v.toFixed(1);
+            break;
+        }
     }
 }
 
@@ -3608,8 +3634,24 @@ function drawWristPanel(V, P, headPos) {
     const rx = 1-2*(q.y*q.y+q.z*q.z), ry = 2*(q.x*q.y+q.w*q.z), rz = 2*(q.x*q.z-q.w*q.y);
     const fx = 2*(q.x*q.z+q.w*q.y),   fy = 2*(q.y*q.z-q.w*q.x),   fz = 1-2*(q.x*q.x+q.y*q.y);
 
-    // ホバー/ドラッグ中はパネル位置を固定（右手操作時にブレない）
-    const shouldFreeze = wristHoveredSlider >= 0 || wristActiveSlider !== null;
+    // 右手と左手のジョイントが近い場合パネル位置を固定（操作時にブレない）
+    const rj = vrHandJoints['right'];
+    let handsClose = false;
+    if (rj) {
+        const lNames = Object.keys(wj), rNames = Object.keys(rj);
+        let minD2 = Infinity;
+        for (const ln of lNames) {
+            const lp = wj[ln];
+            for (const rn of rNames) {
+                const rp = rj[rn];
+                const ddx = lp.x-rp.x, ddy = lp.y-rp.y, ddz = lp.z-rp.z;
+                const d2 = ddx*ddx + ddy*ddy + ddz*ddz;
+                if (d2 < minD2) minD2 = d2;
+            }
+        }
+        handsClose = minD2 < 0.04 * 0.04;  // 4cm以内
+    }
+    const shouldFreeze = handsClose || wristActiveSlider !== null;
     let cx, cy, cz, prx, pry, prz, pux, puy, puz;
 
     if (shouldFreeze && wristFrozenPos) {
