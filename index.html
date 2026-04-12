@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v133</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v134</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -3068,8 +3068,9 @@ let vrFps = 0;  // VR FPS表示用
 let wristPanelCenter = null;   // [x,y,z]
 let wristPanelRight = null;    // [x,y,z]
 let wristPanelUp = null;       // [x,y,z]
-let wristBtnDefs = [];         // {cy, action, label} — パネル上のボタン定義
-let wristTapCooldown = 0;      // タップ連打防止タイマー
+let wristSliderDefs = [];      // {y, h, key, min, max, step} — スライダー定義
+let wristHoveredSlider = -1;   // ホバー中のスライダーindex
+let wristActiveSlider = null;  // ドラッグ中のスライダーkey
 let bVRHandPts = null, bVRHandLines = null;  // GLバッファ
 
 // 手のボーン接続定義
@@ -3412,7 +3413,7 @@ function drawWristPanelCanvas() {
     if (!wristCtx) return;
     const c = wristCtx;
     const W = WRIST_W, H = WRIST_H;
-    wristBtnDefs = [];
+    wristSliderDefs = [];
 
     // 背景
     c.fillStyle = 'rgba(8, 12, 24, 0.92)';
@@ -3429,48 +3430,42 @@ function drawWristPanelCanvas() {
     c.fillText('FPS: ' + vrFps, 12, y + 16);
     y += 28;
 
-    // 区切り線
     c.fillStyle = 'rgba(255,255,255,0.08)';
     c.fillRect(8, y, W - 16, 1);
     y += 6;
 
-    // パラメータ行の描画ヘルパー（ラベル + 値 + [-][+] ボタン）
-    const btnW = 32, btnH = 22;
-    function drawParamRow(label, value, action) {
-        c.fillStyle = '#888';
-        c.font = '12px Arial';
-        c.fillText(label, 10, y + 14);
-        c.fillStyle = '#4dc0e6';
-        c.font = 'bold 14px Arial';
-        c.textAlign = 'center';
-        c.fillText(value, W / 2, y + 14);
+    // スライダーバー描画ヘルパー
+    const slX = 12, slW = W - 24, slBarH = 8, slRowH = 38;
+    const sliderIdx = wristSliderDefs.length;  // 後でpushするので現在数を記録
+    function drawSliderRow(label, value, norm, key, color, idx) {
+        const isHovered = (wristHoveredSlider === idx);
+        const isActive = (wristActiveSlider === key);
+        // ラベル + 値
+        c.fillStyle = isHovered || isActive ? '#fff' : '#888';
+        c.font = '11px Arial';
+        c.fillText(label, slX, y + 12);
+        c.fillStyle = isActive ? '#fff' : '#4dc0e6';
+        c.font = 'bold 13px Arial';
+        c.textAlign = 'right';
+        c.fillText(value, W - 12, y + 12);
         c.textAlign = 'left';
-        // [-] ボタン
-        const minusX = W - 72;
-        c.fillStyle = 'rgba(255,255,255,0.08)';
-        c.fillRect(minusX, y, btnW, btnH);
-        c.strokeStyle = 'rgba(255,255,255,0.15)';
-        c.lineWidth = 1;
-        c.strokeRect(minusX, y, btnW, btnH);
-        c.fillStyle = '#ff8888';
-        c.font = 'bold 16px Arial';
-        c.textAlign = 'center';
-        c.fillText('−', minusX + btnW/2, y + 16);
-        wristBtnDefs.push({ cy: y + btnH/2, cx: minusX + btnW/2, action: action + '_dec', hw: btnW/2, hh: btnH/2 });
-        // [+] ボタン
-        const plusX = W - 36;
-        c.fillStyle = 'rgba(255,255,255,0.08)';
-        c.fillRect(plusX, y, btnW, btnH);
-        c.strokeStyle = 'rgba(255,255,255,0.15)';
-        c.strokeRect(plusX, y, btnW, btnH);
-        c.fillStyle = '#88ff88';
-        c.fillText('+', plusX + btnW/2, y + 16);
-        c.textAlign = 'left';
-        wristBtnDefs.push({ cy: y + btnH/2, cx: plusX + btnW/2, action: action + '_inc', hw: btnW/2, hh: btnH/2 });
-        y += btnH + 4;
+        y += 16;
+        // バー背景
+        c.fillStyle = isHovered || isActive ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.06)';
+        c.fillRect(slX, y, slW, slBarH);
+        // バー値
+        c.fillStyle = color;
+        c.fillRect(slX, y, slW * Math.max(0, Math.min(1, norm)), slBarH);
+        // ノブ
+        const knobX = slX + slW * Math.max(0, Math.min(1, norm));
+        c.fillStyle = isActive ? '#fff' : isHovered ? '#ddd' : '#bbb';
+        c.beginPath(); c.arc(knobX, y + slBarH/2, isHovered || isActive ? 7 : 5, 0, Math.PI*2); c.fill();
+        // スライダー定義を登録
+        wristSliderDefs.push({ y: y - 16, h: slBarH + 16, key, slX, slW, barY: y });
+        y += slBarH + 14;
     }
 
-    // パラメータ行
+    // パラメータ値取得
     const esEl = document.getElementById('es');
     const vsEl = document.getElementById('vs');
     const dsEl = document.getElementById('ds');
@@ -3479,11 +3474,12 @@ function drawWristPanelCanvas() {
     const vsVal = vsEl ? parseFloat(vsEl.value) : -99;
     const dsVal = dsEl ? parseFloat(dsEl.value) : 0.98;
 
-    drawParamRow('Substeps', ssVal.toString(), 'ss');
-    drawParamRow('Edge Comp', esVal.toFixed(1), 'es');
-    drawParamRow('Vol Comp', vsVal.toFixed(1), 'vs');
-    drawParamRow('Damping', dsVal.toFixed(3), 'ds');
-    drawParamRow('Gravity Y', gravY.toFixed(1), 'gy');
+    // norm: 0~1に正規化
+    drawSliderRow('Substeps', ssVal.toString(), (ssVal-1)/7, 'ss', '#4dc0e6', 0);
+    drawSliderRow('Edge Comp', esVal.toFixed(1), (esVal+3)/7, 'es', '#e6a04d', 1);
+    drawSliderRow('Vol Comp', vsVal.toFixed(1), (vsVal+6)/8, 'vs', '#e67e00', 2);
+    drawSliderRow('Damping', dsVal.toFixed(3), (dsVal-0.9)/0.1, 'ds', '#4de6a0', 3);
+    drawSliderRow('Gravity Y', gravY.toFixed(1), (gravY+20)/40, 'gy', '#cc6666', 4);
 
     // 区切り線
     y += 2;
@@ -3506,7 +3502,7 @@ function drawWristPanelCanvas() {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, wristCanvas);
 }
 
-// 手首パネルのヒットテスト（右手指先 → パネル上の座標に変換）
+// 手首パネルのヒットテスト（右手指先 → パネル上のCanvas座標に変換）
 function wristPanelHitTest(fingerX, fingerY, fingerZ) {
     if (!wristPanelCenter || !wristPanelRight || !wristPanelUp) return null;
     const dx = fingerX - wristPanelCenter[0];
@@ -3514,50 +3510,60 @@ function wristPanelHitTest(fingerX, fingerY, fingerZ) {
     const dz = fingerZ - wristPanelCenter[2];
     const localX = dx*wristPanelRight[0] + dy*wristPanelRight[1] + dz*wristPanelRight[2];
     const localY = dx*wristPanelUp[0] + dy*wristPanelUp[1] + dz*wristPanelUp[2];
-    // 法線方向の深度
     const nx = wristPanelRight[1]*wristPanelUp[2] - wristPanelRight[2]*wristPanelUp[1];
     const ny = wristPanelRight[2]*wristPanelUp[0] - wristPanelRight[0]*wristPanelUp[2];
     const nz = wristPanelRight[0]*wristPanelUp[1] - wristPanelRight[1]*wristPanelUp[0];
     const depth = Math.abs(dx*nx + dy*ny + dz*nz);
-    if (depth > 0.05) return null;  // 5cm以上離れている
-    if (Math.abs(localX) > WRIST_HW * 1.1 || Math.abs(localY) > WRIST_HH * 1.1) return null;
-    // ローカル座標→Canvas座標
+    if (depth > 0.06) return null;
+    if (Math.abs(localX) > WRIST_HW * 1.2 || Math.abs(localY) > WRIST_HH * 1.2) return null;
     const canvasX = (localX / WRIST_HW * 0.5 + 0.5) * WRIST_W;
     const canvasY = (-localY / WRIST_HH * 0.5 + 0.5) * WRIST_H;
     return { x: canvasX, y: canvasY };
 }
 
-// 手首パネルのボタンタップ処理
-function processWristPanelTap(fingerX, fingerY, fingerZ) {
-    if (Date.now() < wristTapCooldown) return;
+// 手首パネルのスライダー操作（ホバー + ドラッグ）
+function processWristPanelInput(fingerX, fingerY, fingerZ, isPinching) {
     const hit = wristPanelHitTest(fingerX, fingerY, fingerZ);
-    if (!hit) return;
-    for (const btn of wristBtnDefs) {
-        if (Math.abs(hit.x - btn.cx) < btn.hw + 8 && Math.abs(hit.y - btn.cy) < btn.hh + 8) {
-            wristTapCooldown = Date.now() + 300;  // 300msクールダウン
-            executeWristAction(btn.action);
-            return;
-        }
+    wristHoveredSlider = -1;
+
+    if (!hit) {
+        if (!isPinching) wristActiveSlider = null;
+        return;
+    }
+
+    // ホバー判定
+    for (let i = 0; i < wristSliderDefs.length; i++) {
+        const s = wristSliderDefs[i];
+        if (hit.y >= s.y && hit.y < s.y + s.h) { wristHoveredSlider = i; break; }
+    }
+
+    // ピンチ中 → スライダードラッグ
+    if (isPinching && (wristHoveredSlider >= 0 || wristActiveSlider)) {
+        const si = wristActiveSlider
+            ? wristSliderDefs.findIndex(s => s.key === wristActiveSlider)
+            : wristHoveredSlider;
+        if (si < 0) return;
+        const s = wristSliderDefs[si];
+        wristActiveSlider = s.key;
+        const norm = Math.max(0, Math.min(1, (hit.x - s.slX) / s.slW));
+        applyWristSlider(s.key, norm);
+    } else if (!isPinching) {
+        wristActiveSlider = null;
     }
 }
 
-function executeWristAction(action) {
+function applyWristSlider(key, norm) {
     const esEl = document.getElementById('es');
     const vsEl = document.getElementById('vs');
     const dsEl = document.getElementById('ds');
     const ssEl = document.getElementById('ss');
     const gyEl = document.getElementById('gys');
-    switch (action) {
-        case 'ss_inc': if (ssEl) { ssEl.value = Math.min(8, parseInt(ssEl.value)+1); ssEl.dispatchEvent(new Event('input')); } break;
-        case 'ss_dec': if (ssEl) { ssEl.value = Math.max(1, parseInt(ssEl.value)-1); ssEl.dispatchEvent(new Event('input')); } break;
-        case 'es_inc': if (esEl) { esEl.value = Math.min(4, parseFloat(esEl.value)+0.5); esEl.dispatchEvent(new Event('input')); } break;
-        case 'es_dec': if (esEl) { esEl.value = Math.max(-3, parseFloat(esEl.value)-0.5); esEl.dispatchEvent(new Event('input')); } break;
-        case 'vs_inc': if (vsEl) { vsEl.value = Math.min(2, parseFloat(vsEl.value)+0.5); vsEl.dispatchEvent(new Event('input')); } break;
-        case 'vs_dec': if (vsEl) { vsEl.value = Math.max(-6, parseFloat(vsEl.value)-0.5); vsEl.dispatchEvent(new Event('input')); } break;
-        case 'ds_inc': if (dsEl) { dsEl.value = Math.min(1, parseFloat(dsEl.value)+0.005).toFixed(3); dsEl.dispatchEvent(new Event('input')); } break;
-        case 'ds_dec': if (dsEl) { dsEl.value = Math.max(0.9, parseFloat(dsEl.value)-0.005).toFixed(3); dsEl.dispatchEvent(new Event('input')); } break;
-        case 'gy_inc': if (gyEl) { gyEl.value = Math.min(20, parseFloat(gyEl.value)+1); gyEl.dispatchEvent(new Event('input')); } break;
-        case 'gy_dec': if (gyEl) { gyEl.value = Math.max(-20, parseFloat(gyEl.value)-1); gyEl.dispatchEvent(new Event('input')); } break;
+    switch (key) {
+        case 'ss': if (ssEl) { ssEl.value = Math.round(1 + norm * 7); ssEl.dispatchEvent(new Event('input')); } break;
+        case 'es': if (esEl) { esEl.value = (-3 + norm * 7).toFixed(1); esEl.dispatchEvent(new Event('input')); } break;
+        case 'vs': if (vsEl) { vsEl.value = (-6 + norm * 8).toFixed(1); vsEl.dispatchEvent(new Event('input')); } break;
+        case 'ds': if (dsEl) { dsEl.value = (0.9 + norm * 0.1).toFixed(3); dsEl.dispatchEvent(new Event('input')); } break;
+        case 'gy': if (gyEl) { gyEl.value = (-20 + norm * 40).toFixed(1); gyEl.dispatchEvent(new Event('input')); } break;
     }
 }
 
@@ -5069,9 +5075,9 @@ function processHandTracking(frame, src, hand) {
         // 両方ピンチ or 両方離し → 何もしない（クリーンアップ済み）
     }
 
-    // === 右手: 手首パネルタップ ===
-    if (hand === 'right' && isPinching && wristPanelCenter) {
-        processWristPanelTap(ip.x, ip.y, ip.z);
+    // === 右手: 手首パネルスライダー操作 ===
+    if (hand === 'right' && wristPanelCenter) {
+        processWristPanelInput(ip.x, ip.y, ip.z, isPinching);
     }
 
     // === 右手: パネル操作 ===
