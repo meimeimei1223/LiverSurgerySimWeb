@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v132</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v133</span></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
     <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> verts, <span class="v" id="hi-t">-</span> tets<br>
@@ -3064,6 +3064,12 @@ const WRIST_HW = 0.08, WRIST_HH = 0.10;  // 0.16m x 0.20m
 let wristCanvas = null, wristCtx = null, wristTex = null;
 let bWristVtx = null, bWristUV = null;
 let vrFps = 0;  // VR FPS表示用
+// 手首パネル操作用
+let wristPanelCenter = null;   // [x,y,z]
+let wristPanelRight = null;    // [x,y,z]
+let wristPanelUp = null;       // [x,y,z]
+let wristBtnDefs = [];         // {cy, action, label} — パネル上のボタン定義
+let wristTapCooldown = 0;      // タップ連打防止タイマー
 let bVRHandPts = null, bVRHandLines = null;  // GLバッファ
 
 // 手のボーン接続定義
@@ -3406,6 +3412,7 @@ function drawWristPanelCanvas() {
     if (!wristCtx) return;
     const c = wristCtx;
     const W = WRIST_W, H = WRIST_H;
+    wristBtnDefs = [];
 
     // 背景
     c.fillStyle = 'rgba(8, 12, 24, 0.92)';
@@ -3414,68 +3421,144 @@ function drawWristPanelCanvas() {
     c.lineWidth = 2;
     c.strokeRect(2, 2, W - 4, H - 4);
 
-    let y = 16;
+    let y = 12;
 
     // FPS
     c.fillStyle = '#7dff7d';
-    c.font = 'bold 22px Arial';
-    c.fillText('FPS: ' + vrFps, 12, y + 18);
-    y += 32;
+    c.font = 'bold 20px Arial';
+    c.fillText('FPS: ' + vrFps, 12, y + 16);
+    y += 28;
 
     // 区切り線
     c.fillStyle = 'rgba(255,255,255,0.08)';
     c.fillRect(8, y, W - 16, 1);
-    y += 8;
+    y += 6;
 
-    // パラメータ表示
-    const params = [];
-    if (sb) {
-        params.push({ label: 'Substeps', value: sb.getNumSubsteps ? sb.getNumSubsteps().toString() : '3' });
-        const esEl = document.getElementById('es');
-        const vsEl = document.getElementById('vs');
-        const dsEl = document.getElementById('ds');
-        params.push({ label: 'Edge Comp', value: esEl ? parseFloat(esEl.value).toFixed(1) : '0.0' });
-        params.push({ label: 'Vol Comp', value: vsEl ? vsEl.value : '-99' });
-        params.push({ label: 'Damping', value: dsEl ? parseFloat(dsEl.value).toFixed(3) : '0.980' });
-    } else {
-        params.push({ label: 'Substeps', value: '--' });
-        params.push({ label: 'Edge Comp', value: '--' });
-        params.push({ label: 'Vol Comp', value: '--' });
-        params.push({ label: 'Damping', value: '--' });
-    }
-    params.push({ label: 'Gravity', value: gravY.toFixed(1) });
-
-    for (const p of params) {
+    // パラメータ行の描画ヘルパー（ラベル + 値 + [-][+] ボタン）
+    const btnW = 32, btnH = 22;
+    function drawParamRow(label, value, action) {
         c.fillStyle = '#888';
-        c.font = '13px Arial';
-        c.fillText(p.label, 12, y + 14);
+        c.font = '12px Arial';
+        c.fillText(label, 10, y + 14);
         c.fillStyle = '#4dc0e6';
-        c.font = 'bold 15px Arial';
-        c.textAlign = 'right';
-        c.fillText(p.value, W - 12, y + 14);
+        c.font = 'bold 14px Arial';
+        c.textAlign = 'center';
+        c.fillText(value, W / 2, y + 14);
         c.textAlign = 'left';
-        y += 24;
+        // [-] ボタン
+        const minusX = W - 72;
+        c.fillStyle = 'rgba(255,255,255,0.08)';
+        c.fillRect(minusX, y, btnW, btnH);
+        c.strokeStyle = 'rgba(255,255,255,0.15)';
+        c.lineWidth = 1;
+        c.strokeRect(minusX, y, btnW, btnH);
+        c.fillStyle = '#ff8888';
+        c.font = 'bold 16px Arial';
+        c.textAlign = 'center';
+        c.fillText('−', minusX + btnW/2, y + 16);
+        wristBtnDefs.push({ cy: y + btnH/2, cx: minusX + btnW/2, action: action + '_dec', hw: btnW/2, hh: btnH/2 });
+        // [+] ボタン
+        const plusX = W - 36;
+        c.fillStyle = 'rgba(255,255,255,0.08)';
+        c.fillRect(plusX, y, btnW, btnH);
+        c.strokeStyle = 'rgba(255,255,255,0.15)';
+        c.strokeRect(plusX, y, btnW, btnH);
+        c.fillStyle = '#88ff88';
+        c.fillText('+', plusX + btnW/2, y + 16);
+        c.textAlign = 'left';
+        wristBtnDefs.push({ cy: y + btnH/2, cx: plusX + btnW/2, action: action + '_inc', hw: btnW/2, hh: btnH/2 });
+        y += btnH + 4;
     }
 
-    // モード表示
-    y += 4;
+    // パラメータ行
+    const esEl = document.getElementById('es');
+    const vsEl = document.getElementById('vs');
+    const dsEl = document.getElementById('ds');
+    const ssVal = sb && sb.getNumSubsteps ? sb.getNumSubsteps() : 3;
+    const esVal = esEl ? parseFloat(esEl.value) : 0;
+    const vsVal = vsEl ? parseFloat(vsEl.value) : -99;
+    const dsVal = dsEl ? parseFloat(dsEl.value) : 0.98;
+
+    drawParamRow('Substeps', ssVal.toString(), 'ss');
+    drawParamRow('Edge Comp', esVal.toFixed(1), 'es');
+    drawParamRow('Vol Comp', vsVal.toFixed(1), 'vs');
+    drawParamRow('Damping', dsVal.toFixed(3), 'ds');
+    drawParamRow('Gravity Y', gravY.toFixed(1), 'gy');
+
+    // 区切り線
+    y += 2;
     c.fillStyle = 'rgba(255,255,255,0.08)';
     c.fillRect(8, y, W - 16, 1);
-    y += 8;
-    c.fillStyle = '#556';
-    c.font = '12px Arial';
-    const modeText = typeof actionMode !== 'undefined' ? actionMode.toUpperCase() : 'NONE';
-    c.fillText('Mode: ' + modeText, 12, y + 12);
-    y += 20;
+    y += 6;
 
-    // 左手モード
+    // モード + 左手モード
+    c.fillStyle = '#556';
+    c.font = '11px Arial';
+    const modeText = typeof actionMode !== 'undefined' ? actionMode.toUpperCase() : 'NONE';
+    c.fillText('Mode: ' + modeText, 10, y + 10);
     c.fillStyle = vrLeftMode === 'deform' ? '#c060e0' : '#4dc0e6';
-    c.font = 'bold 12px Arial';
-    c.fillText('L-Hand: ' + vrLeftMode.toUpperCase(), 12, y + 12);
+    c.textAlign = 'right';
+    c.fillText('L:' + vrLeftMode.toUpperCase(), W - 10, y + 10);
+    c.textAlign = 'left';
 
     // テクスチャ転送
     gl.bindTexture(gl.TEXTURE_2D, wristTex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, wristCanvas);
+}
+
+// 手首パネルのヒットテスト（右手指先 → パネル上の座標に変換）
+function wristPanelHitTest(fingerX, fingerY, fingerZ) {
+    if (!wristPanelCenter || !wristPanelRight || !wristPanelUp) return null;
+    const dx = fingerX - wristPanelCenter[0];
+    const dy = fingerY - wristPanelCenter[1];
+    const dz = fingerZ - wristPanelCenter[2];
+    const localX = dx*wristPanelRight[0] + dy*wristPanelRight[1] + dz*wristPanelRight[2];
+    const localY = dx*wristPanelUp[0] + dy*wristPanelUp[1] + dz*wristPanelUp[2];
+    // 法線方向の深度
+    const nx = wristPanelRight[1]*wristPanelUp[2] - wristPanelRight[2]*wristPanelUp[1];
+    const ny = wristPanelRight[2]*wristPanelUp[0] - wristPanelRight[0]*wristPanelUp[2];
+    const nz = wristPanelRight[0]*wristPanelUp[1] - wristPanelRight[1]*wristPanelUp[0];
+    const depth = Math.abs(dx*nx + dy*ny + dz*nz);
+    if (depth > 0.05) return null;  // 5cm以上離れている
+    if (Math.abs(localX) > WRIST_HW * 1.1 || Math.abs(localY) > WRIST_HH * 1.1) return null;
+    // ローカル座標→Canvas座標
+    const canvasX = (localX / WRIST_HW * 0.5 + 0.5) * WRIST_W;
+    const canvasY = (-localY / WRIST_HH * 0.5 + 0.5) * WRIST_H;
+    return { x: canvasX, y: canvasY };
+}
+
+// 手首パネルのボタンタップ処理
+function processWristPanelTap(fingerX, fingerY, fingerZ) {
+    if (Date.now() < wristTapCooldown) return;
+    const hit = wristPanelHitTest(fingerX, fingerY, fingerZ);
+    if (!hit) return;
+    for (const btn of wristBtnDefs) {
+        if (Math.abs(hit.x - btn.cx) < btn.hw + 8 && Math.abs(hit.y - btn.cy) < btn.hh + 8) {
+            wristTapCooldown = Date.now() + 300;  // 300msクールダウン
+            executeWristAction(btn.action);
+            return;
+        }
+    }
+}
+
+function executeWristAction(action) {
+    const esEl = document.getElementById('es');
+    const vsEl = document.getElementById('vs');
+    const dsEl = document.getElementById('ds');
+    const ssEl = document.getElementById('ss');
+    const gyEl = document.getElementById('gys');
+    switch (action) {
+        case 'ss_inc': if (ssEl) { ssEl.value = Math.min(8, parseInt(ssEl.value)+1); ssEl.dispatchEvent(new Event('input')); } break;
+        case 'ss_dec': if (ssEl) { ssEl.value = Math.max(1, parseInt(ssEl.value)-1); ssEl.dispatchEvent(new Event('input')); } break;
+        case 'es_inc': if (esEl) { esEl.value = Math.min(4, parseFloat(esEl.value)+0.5); esEl.dispatchEvent(new Event('input')); } break;
+        case 'es_dec': if (esEl) { esEl.value = Math.max(-3, parseFloat(esEl.value)-0.5); esEl.dispatchEvent(new Event('input')); } break;
+        case 'vs_inc': if (vsEl) { vsEl.value = Math.min(2, parseFloat(vsEl.value)+0.5); vsEl.dispatchEvent(new Event('input')); } break;
+        case 'vs_dec': if (vsEl) { vsEl.value = Math.max(-6, parseFloat(vsEl.value)-0.5); vsEl.dispatchEvent(new Event('input')); } break;
+        case 'ds_inc': if (dsEl) { dsEl.value = Math.min(1, parseFloat(dsEl.value)+0.005).toFixed(3); dsEl.dispatchEvent(new Event('input')); } break;
+        case 'ds_dec': if (dsEl) { dsEl.value = Math.max(0.9, parseFloat(dsEl.value)-0.005).toFixed(3); dsEl.dispatchEvent(new Event('input')); } break;
+        case 'gy_inc': if (gyEl) { gyEl.value = Math.min(20, parseFloat(gyEl.value)+1); gyEl.dispatchEvent(new Event('input')); } break;
+        case 'gy_dec': if (gyEl) { gyEl.value = Math.max(-20, parseFloat(gyEl.value)-1); gyEl.dispatchEvent(new Event('input')); } break;
+    }
 }
 
 function drawWristPanel(V, P, headPos) {
@@ -3531,6 +3614,11 @@ function drawWristPanel(V, P, headPos) {
     // CCW90: panel right = -forward, panel up = -right（腕時計の向き）
     const prx = -fx, pry = -fy, prz = -fz;    // panel right = -forward
     const pux = -rx, puy = -ry, puz = -rz;     // panel up = -right
+
+    // ヒットテスト用にパネル座標系を保存
+    wristPanelCenter = [cx, cy, cz];
+    wristPanelRight = [prx, pry, prz];
+    wristPanelUp = [pux, puy, puz];
     const v = new Float32Array([
         cx-prx*hw+pux*hh, cy-pry*hw+puy*hh, cz-prz*hw+puz*hh,
         cx+prx*hw+pux*hh, cy+pry*hw+puy*hh, cz+prz*hw+puz*hh,
@@ -4979,6 +5067,11 @@ function processHandTracking(frame, src, hand) {
             processLeftHandDeform(true, mmX, mmY, mmZ, wp, wo);
         }
         // 両方ピンチ or 両方離し → 何もしない（クリーンアップ済み）
+    }
+
+    // === 右手: 手首パネルタップ ===
+    if (hand === 'right' && isPinching && wristPanelCenter) {
+        processWristPanelTap(ip.x, ip.y, ip.z);
     }
 
     // === 右手: パネル操作 ===
