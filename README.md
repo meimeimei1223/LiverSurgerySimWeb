@@ -16,7 +16,7 @@ Real-time liver surgery simulation running in the browser via WebAssembly.
 
 ## Live Demo
 
-[**Launch Simulator**](https://meimeimei1223.github.io/LiverSurgerySimWeb/)
+[Launch Simulator](https://meimeimei1223.github.io/LiverSurgerySimWeb/)
 
 ## Controls
 
@@ -47,4 +47,57 @@ Real-time liver surgery simulation running in the browser via WebAssembly.
 
 ## License
 
-MIT License
+LiverSurgerySimWeb License
+
+Copyright (c) 2026 MEIDAI KASAI MD
+
+1. **Research and Education Use:**
+   Free to use, copy, modify, and distribute for non-commercial
+   research and educational purposes, provided this notice is retained.
+
+2. **Commercial Use:**
+   Any commercial use requires prior written permission from the author.
+   Contact: meidai1223@gmail.com
+
+3. **Disclaimer:**
+   This software is provided "as is" without warranty of any kind.
+   This software is NOT approved for clinical use.
+   The author is not liable for any damages arising from its use.
+
+4. **Third-Party Libraries (compiled into WebAssembly):**
+   The following libraries are statically compiled into `softbody.wasm`.
+
+   **ImGui**:
+   Copyright (c) 2014-2024 Omar Cornut
+   Licensed under MIT License
+   Source: https://github.com/ocornut/imgui
+
+   **GLM**:
+   Copyright (c) 2005 G-Truc Creation
+   Licensed under MIT License
+   Source: https://github.com/g-truc/glm
+
+   **stb_image**:
+   Copyright (c) 2017 Sean Barrett
+   Licensed under MIT License / Public Domain
+   Source: https://github.com/nothings/stb
+
+   **stb_truetype**:
+   Copyright (c) 2017 Sean Barrett
+   Licensed under MIT License / Public Domain
+   Source: https://github.com/nothings/stb
+
+   **tinyobjloader**:
+   Copyright (c) 2012-2019 Syoyo Fujita and many contributors
+   Licensed under MIT License
+   Source: https://github.com/tinyobjloader/tinyobjloader
+
+   **GLEW**:
+   Copyright (c) 2002-2007, Milan Ikits; Copyright (c) 2002-2007, Marcelo E. Magallon
+   Licensed under Modified BSD License / MIT License / SGI Free Software License B
+   Source: https://glew.sourceforge.net
+
+   **GLFW**:
+   Copyright (c) 2002-2006 Marcus Geelnard; Copyright (c) 2006-2019 Camilla Löwy
+   Licensed under zlib License
+   Source: https://www.glfw.org
