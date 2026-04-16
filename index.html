@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v147</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v148</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -5060,8 +5060,8 @@ function processHandTracking(frame, src, hand) {
         // === 左手: パネルグラブ → Transform → Deform の優先順位 ===
 
         // パネル外周枠のホバー判定（人差指先で判定）
-        const onEdge = panelFixed && panelEdgeHitTest(ip.x, ip.y, ip.z);
-        panelEdgeHovered = onEdge && !panelGrabActive;
+        const onPanel = panelFixed && panelGrabHitTest(ip.x, ip.y, ip.z);
+        panelEdgeHovered = onPanel && !panelGrabActive;
 
         // パネルグラブ処理
         if (panelGrabActive) {
@@ -5075,7 +5075,7 @@ function processHandTracking(frame, src, hand) {
                 panelGrabActive = false;
                 panelGrabOffset = null;
             }
-        } else if (isPinching && onEdge) {
+        } else if (isPinching && onPanel) {
             // 枠上でピンチ開始 → グラブ開始
             panelGrabActive = true;
             panelGrabOffset = [
@@ -5341,8 +5341,8 @@ function panelHitTest(fingerX, fingerY, fingerZ) {
     return { x: canvasX, y: canvasY, depth: depth };
 }
 
-// パネル外周枠ヒットテスト（左手用 — 枠の外周3cm帯 + 深さ6cm以内）
-function panelEdgeHitTest(fingerX, fingerY, fingerZ) {
+// パネル全面ヒットテスト（左手用 — パネル面+少し余裕、深さ8cm以内）
+function panelGrabHitTest(fingerX, fingerY, fingerZ) {
     if (!panelWorldCenter || !panelWorldRight || !panelWorldUp) return false;
     const dx = fingerX - panelWorldCenter[0];
     const dy = fingerY - panelWorldCenter[1];
@@ -5353,13 +5353,10 @@ function panelEdgeHitTest(fingerX, fingerY, fingerZ) {
     const ny = panelWorldRight[2]*panelWorldUp[0] - panelWorldRight[0]*panelWorldUp[2];
     const nz = panelWorldRight[0]*panelWorldUp[1] - panelWorldRight[1]*panelWorldUp[0];
     const depth = Math.abs(dx*nx + dy*ny + dz*nz);
-    if (depth > 0.06) return false;
-    const ax = Math.abs(localX), ay = Math.abs(localY);
-    // パネル範囲内かつ外周3cm帯（枠の内側端 = panelHW/HH - 0.03）
-    const edgeW = 0.03;
-    const inPanel = ax <= panelHW + edgeW && ay <= panelHH + edgeW;
-    const inInner = ax <= panelHW - edgeW && ay <= panelHH - edgeW;
-    return inPanel && !inInner;
+    if (depth > 0.08) return false;
+    // パネル面内 + 少し余裕(2cm)
+    const margin = 0.02;
+    return Math.abs(localX) <= panelHW + margin && Math.abs(localY) <= panelHH + margin;
 }
 
 // パネルタッチで何を実行するか判定
