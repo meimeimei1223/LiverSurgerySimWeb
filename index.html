@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v148</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v149</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -497,7 +497,7 @@ window.Module = {
     locateFile: function(path) { return path; }
 };
 </script>
-<script src="softbody.js?v=109"></script>
+<script src="softbody.js?v=149"></script>
 <script>
 'use strict';
 
@@ -1473,9 +1473,10 @@ canvas.addEventListener('pointermove', e=>{
         const sens = 0.005;
         const right = cam._right, up = cam._up, fwd = cam._fwd;
         if (transformDragging && !rightBtnDown) {
-            // 左ドラッグ = 回転 (C++: Y軸 + cameraRight軸、共通重心で2軸同時)
+            // 左ドラッグ = 回転 (カメラUp軸 + cameraRight軸、共通重心で2軸同時)
+            // cameraUpを使うことで変形後の姿勢に関わらずマウス方向と回転方向が常に一致する
             const cx = sb.getMeshCentroidX(), cy = sb.getMeshCentroidY(), cz = sb.getMeshCentroidZ();
-            sb.rotateModelAroundCenter(dx * 0.01, 0, 1, 0, cx, cy, cz);
+            sb.rotateModelAroundCenter(dx * 0.01, up[0], up[1], up[2], cx, cy, cz);
             sb.rotateModelAroundCenter(dy * 0.01, right[0], right[1], right[2], cx, cy, cz);
         } else if (rightBtnDown && !transformDragging) {
             // 右ドラッグ = 平行移動 (C++: cameraRight * dx + cameraUp * -dy)
