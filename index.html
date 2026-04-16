@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v146</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v147</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -3251,6 +3251,9 @@ function onXREnd() {
     vrLeftMode = 'transform';
     panelFixed = false;
     panelWorldCenter = null;
+    panelGrabActive = false;
+    panelGrabOffset = null;
+    panelEdgeHovered = false;
     sidePanelCenter = null;
     sideActiveSlider = null;
     sideHoveredSlider = -1;
@@ -3686,9 +3689,17 @@ function drawPanelCanvas() {
     c.fillStyle = 'rgba(10, 16, 30, 0.95)';
     c.fillRect(0, 0, W, H);
 
-    // 枠
-    c.strokeStyle = 'rgba(77, 192, 230, 0.6)';
-    c.lineWidth = 3;
+    // 枠（グラブ中 or ホバー中は色変更）
+    if (panelGrabActive) {
+        c.strokeStyle = 'rgba(255, 255, 100, 0.95)';
+        c.lineWidth = 6;
+    } else if (panelEdgeHovered) {
+        c.strokeStyle = 'rgba(0, 230, 255, 0.9)';
+        c.lineWidth = 5;
+    } else {
+        c.strokeStyle = 'rgba(77, 192, 230, 0.6)';
+        c.lineWidth = 3;
+    }
     c.strokeRect(3, 3, W - 6, H - 6);
 
     // ===== VISIBILITY（3列×2行の正方形カード）=====
@@ -4150,6 +4161,10 @@ let vrVolumeExpanded = false;    // Volume セクション展開状態
 let panelPinchReleased = true;    // ピンチリリース検出（連続ピンチ対応）
 let panelPrePinchBtn = -1;        // ピンチ直前のホバーボタン（指移動対策）
 let panelIcons = {};  // アイコン Image オブジェクト
+// パネルグラブ移動（左手ピンチ）
+let panelGrabActive = false;      // グラブ中フラグ
+let panelGrabOffset = null;       // グラブ開始時のオフセット [dx,dy,dz]
+let panelEdgeHovered = false;     // 左手がパネル外周枠にホバー中
 
 // アイコンプリロード
 (function loadPanelIcons() {
@@ -5042,40 +5057,73 @@ function processHandTracking(frame, src, hand) {
         }  // end of else block (after Free Cut)
         }  // end of else (non-transform modes)
     } else {
-        // === 左手: 人差指ピンチ→Transform、中指ピンチ→Deform、両方→無効 ===
-        const middleTipL = src.hand.get('middle-finger-tip');
-        const middlePoseL = middleTipL ? frame.getJointPose(middleTipL, xrRefSpace) : null;
-        let middleDistL = Infinity;
-        let mmX = midX, mmY = midY, mmZ = midZ;  // 中指ピンチ中心点
-        if (middlePoseL) {
-            const mp = middlePoseL.transform.position;
-            const mdx = mp.x - tp.x, mdy = mp.y - tp.y, mdz = mp.z - tp.z;
-            middleDistL = Math.sqrt(mdx*mdx + mdy*mdy + mdz*mdz);
-            mmX = (mp.x + tp.x) / 2;
-            mmY = (mp.y + tp.y) / 2;
-            mmZ = (mp.z + tp.z) / 2;
-        }
-        const middlePinchL = middleDistL < 0.025;
-        const doTransform = isPinching && !middlePinchL;   // 人差指のみ
-        const doDeform = middlePinchL && !isPinching;       // 中指のみ
+        // === 左手: パネルグラブ → Transform → Deform の優先順位 ===
 
-        // 前フレームのアクションと違う場合はクリーンアップ
-        if (vrLeftMode === 'transform' && !doTransform) {
-            processTransform('left', false, {x:midX,y:midY,z:midZ}, {x:wo.x,y:wo.y,z:wo.z,w:wo.w});
-        }
-        if (vrLeftMode === 'deform' && !doDeform) {
-            processLeftHandDeform(false, mmX, mmY, mmZ, wp, wo);
-        }
+        // パネル外周枠のホバー判定（人差指先で判定）
+        const onEdge = panelFixed && panelEdgeHitTest(ip.x, ip.y, ip.z);
+        panelEdgeHovered = onEdge && !panelGrabActive;
 
-        // 実行
-        if (doTransform) {
-            vrLeftMode = 'transform';
-            processTransform('left', true, {x:midX,y:midY,z:midZ}, {x:wo.x,y:wo.y,z:wo.z,w:wo.w});
-        } else if (doDeform) {
-            vrLeftMode = 'deform';
-            processLeftHandDeform(true, mmX, mmY, mmZ, wp, wo);
+        // パネルグラブ処理
+        if (panelGrabActive) {
+            // グラブ中: ピンチ継続→パネル平行移動、離す→固定
+            if (isPinching) {
+                panelWorldCenter[0] = midX - panelGrabOffset[0];
+                panelWorldCenter[1] = midY - panelGrabOffset[1];
+                panelWorldCenter[2] = midZ - panelGrabOffset[2];
+                panelEdgeHovered = false;
+            } else {
+                panelGrabActive = false;
+                panelGrabOffset = null;
+            }
+        } else if (isPinching && onEdge) {
+            // 枠上でピンチ開始 → グラブ開始
+            panelGrabActive = true;
+            panelGrabOffset = [
+                midX - panelWorldCenter[0],
+                midY - panelWorldCenter[1],
+                midZ - panelWorldCenter[2]
+            ];
+            panelEdgeHovered = false;
+            // Transform/Deform をクリーンアップ
+            if (vrLeftMode === 'transform') {
+                processTransform('left', false, {x:midX,y:midY,z:midZ}, {x:wo.x,y:wo.y,z:wo.z,w:wo.w});
+            }
+            if (vrLeftMode === 'deform') {
+                processLeftHandDeform(false, midX, midY, midZ, wp, wo);
+            }
+        } else {
+            // パネルグラブでない → 通常の Transform/Deform
+            const middleTipL = src.hand.get('middle-finger-tip');
+            const middlePoseL = middleTipL ? frame.getJointPose(middleTipL, xrRefSpace) : null;
+            let middleDistL = Infinity;
+            let mmX = midX, mmY = midY, mmZ = midZ;
+            if (middlePoseL) {
+                const mp = middlePoseL.transform.position;
+                const mdx = mp.x - tp.x, mdy = mp.y - tp.y, mdz = mp.z - tp.z;
+                middleDistL = Math.sqrt(mdx*mdx + mdy*mdy + mdz*mdz);
+                mmX = (mp.x + tp.x) / 2;
+                mmY = (mp.y + tp.y) / 2;
+                mmZ = (mp.z + tp.z) / 2;
+            }
+            const middlePinchL = middleDistL < 0.025;
+            const doTransform = isPinching && !middlePinchL;
+            const doDeform = middlePinchL && !isPinching;
+
+            if (vrLeftMode === 'transform' && !doTransform) {
+                processTransform('left', false, {x:midX,y:midY,z:midZ}, {x:wo.x,y:wo.y,z:wo.z,w:wo.w});
+            }
+            if (vrLeftMode === 'deform' && !doDeform) {
+                processLeftHandDeform(false, mmX, mmY, mmZ, wp, wo);
+            }
+
+            if (doTransform) {
+                vrLeftMode = 'transform';
+                processTransform('left', true, {x:midX,y:midY,z:midZ}, {x:wo.x,y:wo.y,z:wo.z,w:wo.w});
+            } else if (doDeform) {
+                vrLeftMode = 'deform';
+                processLeftHandDeform(true, mmX, mmY, mmZ, wp, wo);
+            }
         }
-        // 両方ピンチ or 両方離し → 何もしない（クリーンアップ済み）
     }
 
     // === 右手: サイドパネルスライダー操作 ===
@@ -5291,6 +5339,27 @@ function panelHitTest(fingerX, fingerY, fingerZ) {
     const canvasX = ((localX / panelHW) + 1) / 2 * PANEL_W;
     const canvasY = (1 - (localY / panelHH + 1) / 2) * PANEL_H;
     return { x: canvasX, y: canvasY, depth: depth };
+}
+
+// パネル外周枠ヒットテスト（左手用 — 枠の外周3cm帯 + 深さ6cm以内）
+function panelEdgeHitTest(fingerX, fingerY, fingerZ) {
+    if (!panelWorldCenter || !panelWorldRight || !panelWorldUp) return false;
+    const dx = fingerX - panelWorldCenter[0];
+    const dy = fingerY - panelWorldCenter[1];
+    const dz = fingerZ - panelWorldCenter[2];
+    const localX = dx * panelWorldRight[0] + dy * panelWorldRight[1] + dz * panelWorldRight[2];
+    const localY = dx * panelWorldUp[0] + dy * panelWorldUp[1] + dz * panelWorldUp[2];
+    const nx = panelWorldRight[1]*panelWorldUp[2] - panelWorldRight[2]*panelWorldUp[1];
+    const ny = panelWorldRight[2]*panelWorldUp[0] - panelWorldRight[0]*panelWorldUp[2];
+    const nz = panelWorldRight[0]*panelWorldUp[1] - panelWorldRight[1]*panelWorldUp[0];
+    const depth = Math.abs(dx*nx + dy*ny + dz*nz);
+    if (depth > 0.06) return false;
+    const ax = Math.abs(localX), ay = Math.abs(localY);
+    // パネル範囲内かつ外周3cm帯（枠の内側端 = panelHW/HH - 0.03）
+    const edgeW = 0.03;
+    const inPanel = ax <= panelHW + edgeW && ay <= panelHH + edgeW;
+    const inInner = ax <= panelHW - edgeW && ay <= panelHH - edgeW;
+    return inPanel && !inInner;
 }
 
 // パネルタッチで何を実行するか判定
