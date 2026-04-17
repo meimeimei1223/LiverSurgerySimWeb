@@ -330,7 +330,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v157</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v158</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -3278,6 +3278,9 @@ function onXREnd() {
     panelGrabOffset = null;
     panelEdgeHovered = false;
     vrHeadPos = null;
+    vrFragmentPending = false;
+    vrFragmentCount = 0;
+    vrFragmentHovered = -1;
     sidePanelCenter = null;
     sideActiveSlider = null;
     sideHoveredSlider = -1;
@@ -4055,6 +4058,46 @@ function drawPanelCanvas() {
                     y += 34;
                 }
             }
+            // フラグメント選択ボタン（Free Cut展開中 + pending時のみ）
+            if (ai === 1 && vrFragmentPending && vrFragmentCount > 0) {
+                y += 4;
+                c.fillStyle = '#ffcc33';
+                c.font = 'bold 13px Arial';
+                c.fillText('Choose Fragment:', 34, y + 14);
+                y += 20;
+                const fragColors = ['#3399ff','#ff6633','#33ff66','#ffff33','#cc33ff'];
+                for (let fi = 0; fi < vrFragmentCount; fi++) {
+                    const fHovered = panelHoveredBtn >= 0 && panelBtnWorldPos[panelHoveredBtn]
+                        && panelBtnWorldPos[panelHoveredBtn].action === 'fragment'
+                        && panelBtnWorldPos[panelHoveredBtn].idx === fi;
+                    const fc = fragColors[fi % 5];
+                    const pct = sb.getPendingFragmentPercent(fi).toFixed(1);
+                    const sz = sb.getPendingFragmentSize(fi);
+                    c.fillStyle = fHovered ? fc : 'rgba(255,255,255,0.06)';
+                    c.globalAlpha = fHovered ? 0.4 : 1.0;
+                    c.fillRect(30, y, W - 60, 34);
+                    c.globalAlpha = 1.0;
+                    c.strokeStyle = fHovered ? '#fff' : fc;
+                    c.lineWidth = fHovered ? 3 : 2;
+                    c.strokeRect(30, y, W - 60, 34);
+                    c.fillStyle = fHovered ? '#fff' : fc;
+                    c.font = 'bold 14px Arial';
+                    c.fillText('Keep #' + (fi+1) + '  ' + sz + ' tets  ' + pct + '%', 44, y + 22);
+                    y += 38;
+                }
+                // Cancel ボタン
+                const cancelHovered = panelHoveredBtn >= 0 && panelBtnWorldPos[panelHoveredBtn]
+                    && panelBtnWorldPos[panelHoveredBtn].action === 'fragmentCancel';
+                c.fillStyle = cancelHovered ? 'rgba(200,60,60,0.3)' : 'rgba(255,255,255,0.04)';
+                c.fillRect(30, y, W - 60, 30);
+                c.strokeStyle = cancelHovered ? '#ff6666' : 'rgba(200,60,60,0.4)';
+                c.lineWidth = cancelHovered ? 3 : 1;
+                c.strokeRect(30, y, W - 60, 30);
+                c.fillStyle = cancelHovered ? '#ff8888' : '#cc6666';
+                c.font = 'bold 14px Arial';
+                c.fillText('Cancel Cut', 44, y + 20);
+                y += 34;
+            }
         }
     }
 
@@ -4215,6 +4258,10 @@ let vrHeadPos = null;             // VRヘッドセット位置 [x,y,z]（毎フ
 // パネルのレイアウト定数を計算
 let vrActiveAction = null;  // 展開中のACTION ('deform','freecut','segcut','transform' or null)
 let vrDeformSub = 'none';  // 'none'|'place'|'deform' — VR版 Deform サブモード
+// VR Fragment Selection 状態
+let vrFragmentPending = false;   // フラグメント選択待ち
+let vrFragmentCount = 0;         // フラグメント数
+let vrFragmentHovered = -1;      // ホバー中のフラグメントindex
 // VR Free Cut 状態
 let vrCutterDragging = false;
 let vrCutterPlaced = false;
@@ -4294,6 +4341,16 @@ function getPanelButtons() {
                 btns.push({ cx: PANEL_W / 2, cy: ay + 15, action: 'sub', mode: actionDefs[i].subs[si], idx: si });
                 ay += 34;
             }
+        }
+        // フラグメント選択ボタン（Free Cut展開中 + pending時）
+        if (i === 1 && vrActiveAction === 'freecut' && vrFragmentPending && vrFragmentCount > 0) {
+            ay += 24;  // "Choose Fragment:" ラベル分
+            for (let fi = 0; fi < vrFragmentCount; fi++) {
+                btns.push({ cx: PANEL_W / 2, cy: ay + 17, action: 'fragment', idx: fi });
+                ay += 38;
+            }
+            btns.push({ cx: PANEL_W / 2, cy: ay + 15, action: 'fragmentCancel', idx: -1 });
+            ay += 34;
         }
     }
     // Volume トグルボタン（DISPLAYセクション内）
@@ -5271,6 +5328,17 @@ function processHandTracking(frame, src, hand) {
                 }
             }
             panelPrePinchBtn = panelHoveredBtn;
+            // フラグメントホバープレビュー更新
+            if (vrFragmentPending && panelHoveredBtn >= 0 && panelBtnWorldPos[panelHoveredBtn]) {
+                const hb = panelBtnWorldPos[panelHoveredBtn];
+                if (hb.action === 'fragment') {
+                    if (vrFragmentHovered !== hb.idx) { vrFragmentHovered = hb.idx; hoverFragment(hb.idx); }
+                } else if (vrFragmentHovered !== -1) {
+                    vrFragmentHovered = -1; hoverFragment(-1);
+                }
+            } else if (vrFragmentPending && vrFragmentHovered !== -1) {
+                vrFragmentHovered = -1; hoverFragment(-1);
+            }
         }
         // else: isPinching → panelHoveredBtn は前フレームの値を維持
 
@@ -5338,6 +5406,10 @@ function processHandTracking(frame, src, hand) {
                     }
                 } else if (nearest.action === 'exit') {
                     if (xrSession) xrSession.end();
+                } else if (nearest.action === 'fragment') {
+                    vrCompleteFragment(nearest.idx);
+                } else if (nearest.action === 'fragmentCancel') {
+                    vrCancelFragment();
                 }
                 panelPinchReleased = false;
                 if (vrGrabs.right.active) { sb.endGrabVR(); vrGrabs.right.active = false; vrGrabOwner = null; }
@@ -5490,22 +5562,31 @@ function vrExecuteCut() {
     if (!sb || !cutterPlaced) return;
     let count = 0;
     if (cutTargetMeshIdx < 0) {
-        // Liver カット
         sb.testCutIntersection();
         count = sb.executeCut();
         if (count === -1 && sb.hasPendingFragment()) {
-            sb.completePendingCut(0);
-            count = 1;
+            // フラグメント選択待ちに入る（自動選択しない）
+            vrFragmentPending = true;
+            vrFragmentCount = sb.getPendingFragmentCount();
+            vrFragmentHovered = -1;
+            vrActiveAction = 'freecut';  // Free Cutサブメニューを開く
+            hoverFragment(-1);  // 全フラグメント色分けプレビュー
+            console.log('[VR Cut] Fragment selection pending:', vrFragmentCount, 'fragments');
+            return;
         }
         if (count > 0) { initIdxBuffer(); updateMesh(); }
     } else {
-        // 子メッシュカット（Portal/Vein等）
         const ci = cutTargetMeshIdx;
         sb.testChildCutIntersection(ci);
         count = sb.executeChildCut(ci);
         if (count === -1 && sb.hasPendingFragment()) {
-            sb.completePendingCut(0);
-            count = 1;
+            vrFragmentPending = true;
+            vrFragmentCount = sb.getPendingFragmentCount();
+            vrFragmentHovered = -1;
+            vrActiveAction = 'freecut';
+            hoverFragment(-1);
+            console.log('[VR Cut] Child fragment selection pending:', vrFragmentCount, 'fragments');
+            return;
         }
         if (count > 0 && childBuffers[ci]) {
             const newIdx = new Int32Array(sb.getChildHighResSurfaceTriIds(ci));
@@ -5523,6 +5604,42 @@ function vrExecuteCut() {
     }
     numHighlightIdx = 0;
     console.log('[VR Cut]', cutTargetMeshIdx < 0 ? 'Liver' : 'Child'+cutTargetMeshIdx, count, 'tets');
+}
+
+function vrCompleteFragment(rank) {
+    if (!sb || !sb.hasPendingFragment()) return;
+    const removed = sb.completePendingCut(rank);
+    console.log('[VR Fragment] Completed rank', rank, ', removed', removed, 'tets');
+    vrFragmentPending = false;
+    vrFragmentCount = 0;
+    vrFragmentHovered = -1;
+    // バッファ更新
+    initIdxBuffer();
+    updateMesh();
+    if (wireOn) updateWire();
+    for (let ci = 0; ci < childBuffers.length; ci++) {
+        const cidx = new Int32Array(sb.getChildHighResSurfaceTriIds(ci));
+        const c = childBuffers[ci];
+        c.numIdx = cidx.length;
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, c.bIdx);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,
+            extUint ? new Uint32Array(cidx) : new Uint16Array(cidx), gl.STATIC_DRAW);
+    }
+    cutterPlaced = false;
+    vrCutterPlaced = false;
+    if (typeof updateVolumePanel === 'function') updateVolumePanel();
+    if (typeof syncHandlesAfterCut === 'function') syncHandlesAfterCut();
+}
+
+function vrCancelFragment() {
+    if (!sb || !sb.hasPendingFragment()) return;
+    sb.cancelPendingCut();
+    console.log('[VR Fragment] Cancelled');
+    vrFragmentPending = false;
+    vrFragmentCount = 0;
+    vrFragmentHovered = -1;
+    initIdxBuffer();
+    updateMesh();
 }
 
 function vrCancelCut() {
