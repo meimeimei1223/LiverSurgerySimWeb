@@ -299,6 +299,13 @@
         </div>
       </div>
     </details>
+    <div style="border-top:1px solid #334;padding-top:10px;margin-bottom:12px;">
+      <label style="display:flex;align-items:center;gap:8px;"><b style="color:#00d4ff;width:110px;">Skeleton Grid</b>
+        <input type="range" id="gs-skeleton" min="60" max="120" step="10" value="70" style="flex:1;"
+               oninput="document.getElementById('gv-skeleton').textContent=this.value">
+        <span id="gv-skeleton" style="width:28px;text-align:right;color:#ffcc00;">70</span></label>
+      <div style="font-size:10px;color:#666;margin-top:2px;">Auto Seg accuracy vs speed (60=fast, 120=precise)</div>
+    </div>
     <div style="display:flex;gap:10px;justify-content:flex-end;">
       <button id="tet-cancel-btn" style="background:#444;color:#fff;border:none;border-radius:6px;padding:8px 18px;cursor:pointer;">Cancel</button>
       <button id="tet-start-btn" style="background:#0077cc;color:#fff;border:none;border-radius:6px;padding:8px 18px;cursor:pointer;font-weight:bold;">Generate</button>
@@ -323,7 +330,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v153</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v155</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -627,6 +634,9 @@ const meshAlphaValues = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
 const organAlphaStates = [2, 2, 2, 2, 2, 1]; // 0=OFF, 1=50%, 2=ON
 const ORGAN_NUM_STATES = [3, 3, 3, 3, 3, 2];
 let liverAlphaValue = 1.0;
+
+// スケルトン解析グリッドサイズ（大きいほど精度UP、処理時間増、60-120）
+let SKELETON_GRID_SIZE = 70;
 
 // カット操作 (Step 4a)
 let cutMode = false;
@@ -1750,7 +1760,7 @@ document.getElementById('btn-analyze-skel').addEventListener('click', ()=>{
     document.getElementById('skel-status').textContent = 'Processing...';
     setTimeout(()=>{
         try {
-            const ok = sb.analyzePortalSkeleton(70);
+            const ok = sb.analyzePortalSkeleton(SKELETON_GRID_SIZE);
             if (ok) {
                 const colors = new Float32Array(sb.getLiverSegmentColors());
                 gl.bindBuffer(gl.ARRAY_BUFFER, bSegCol);
@@ -2710,7 +2720,7 @@ function initApp() {
         if (sb.getNumChildren() > 0) {
             try {
                 console.log('[APP] Auto-analyzing skeleton...');
-                const skelOk = sb.analyzePortalSkeleton(70);
+                const skelOk = sb.analyzePortalSkeleton(SKELETON_GRID_SIZE);
                 if (skelOk) {
                     const colors = new Float32Array(sb.getLiverSegmentColors());
                     gl.bindBuffer(gl.ARRAY_BUFFER, bSegCol);
@@ -2917,6 +2927,8 @@ async function runTetrahedralization(classified) {
             smoothFactorHigh:     parseFloat(document.getElementById('gd-smooth-factor-high').value),
             smoothIterationsHigh: +document.getElementById('gd-smooth-iter-high').value,
         };
+        // スケルトン解析グリッドサイズをスライダーから取得
+        SKELETON_GRID_SIZE = +document.getElementById('gs-skeleton').value;
         const texts={};
         for (const n of ['liver','portal','vein','gb','tumor']) {
             if (classified[n]) { msg.textContent='Reading: '+n+'...'; texts[n]=await readFileAsText(classified[n]); }
@@ -2990,7 +3002,7 @@ async function runTetrahedralization(classified) {
         // スケルトン解析 + OBJバインド + ボリュームキャプチャ（ドロップモデル）
         if (sb.getNumChildren() > 0) {
             try {
-                const skelOk = sb.analyzePortalSkeleton(70);
+                const skelOk = sb.analyzePortalSkeleton(SKELETON_GRID_SIZE);
                 if (skelOk) {
                     const colors = new Float32Array(sb.getLiverSegmentColors());
                     gl.bindBuffer(gl.ARRAY_BUFFER, bSegCol);
