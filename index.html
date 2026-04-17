@@ -330,7 +330,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v156</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v157</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -401,6 +401,11 @@
             Size: <span id="cut-scale-v">1.0</span>
             <input type="range" id="cut-scale" min="0.1" max="5.0" step="0.1" value="1.0"
                    style="width:100%;vertical-align:middle;margin-top:4px;accent-color:#e67e00;">
+        </div>
+        <div style="margin-top:4px;color:#888;font-size:12px;">
+            Thickness: <span id="cut-thick-v">0.40</span>
+            <input type="range" id="cut-thick" min="0.05" max="0.5" step="0.05" value="0.4"
+                   style="width:100%;vertical-align:middle;margin-top:4px;accent-color:#cc6666;">
         </div>
         <button id="btn-preview-cut" style="display:none;">Preview</button>
         <button id="btn-exec-cut" style="display:none;">Execute Cut</button>
@@ -504,7 +509,7 @@ window.Module = {
     locateFile: function(path) { return path; }
 };
 </script>
-<script src="softbody.js?v=152"></script>
+<script src="softbody.js?v=157"></script>
 <script>
 'use strict';
 
@@ -1297,6 +1302,11 @@ document.getElementById('cut-scale').addEventListener('input', function(){
         if (cutTargetMeshIdx >= 0 && cutTargetMeshIdx <= 1) cutterTargetScales.vessel = val;
         else cutterTargetScales.liver = val;
     }
+});
+document.getElementById('cut-thick').addEventListener('input', function(){
+    const val = parseFloat(this.value);
+    document.getElementById('cut-thick-v').textContent = val.toFixed(2);
+    if (sb) sb.setCutterThickness(val);
 });
 
 //-- Input (pointer events, mouse+touch統一) ---------------------------
