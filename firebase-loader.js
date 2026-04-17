@@ -225,26 +225,26 @@ window.expandFirebasePanel = function() {
     // トグルボタンを隠してパネルを表示
     if (toggle) toggle.style.display = 'none';
     area.style.display = 'block';
-    area.style.minWidth = '220px';
-    area.style.padding = '12px 16px';
+    area.style.width = '180px';
+    area.style.padding = '8px 12px';
     area.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-            <span style="color:#00d4ff;font-weight:bold;font-size:12px;">Firebase から読み込む</span>
-            <span onclick="collapseFirebasePanel()" style="color:#666;cursor:pointer;font-size:16px;padding:0 4px;">&times;</span>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Firebase</span>
+            <span onclick="collapseFirebasePanel()" style="color:#666;cursor:pointer;font-size:14px;padding:0 2px;">&times;</span>
         </div>
         <select id="fb-folder-select"
-            style="width:100%;padding:6px 8px;background:#0d1220;border:1px solid #2a3a55;
-                   border-radius:5px;color:#ccc;font-size:12px;margin-bottom:8px;">
-            <option value="models">models（デフォルト）</option>
+            style="width:100%;padding:4px 6px;background:#0d1220;border:1px solid #2a3a55;
+                   border-radius:5px;color:#ccc;font-size:11px;margin-bottom:6px;">
+            <option value="models">models</option>
         </select>
         <button onclick="loadOBJsFromFirebase(document.getElementById('fb-folder-select').value)"
-            style="width:100%;padding:7px;background:#0a3a5a;color:#00d4ff;
+            style="width:100%;padding:5px;background:#0a3a5a;color:#00d4ff;
                    border:1px solid #00d4ff44;border-radius:5px;
-                   cursor:pointer;font-size:12px;font-weight:bold;">
-            &#9654; Firebase Load
+                   cursor:pointer;font-size:11px;font-weight:bold;">
+            &#9654; Load
         </button>
         <div id="fb-load-status"
-            style="font-size:11px;color:#888;margin-top:5px;min-height:16px;"></div>`;
+            style="font-size:10px;color:#888;margin-top:4px;min-height:14px;"></div>`;
 };
 
 window.collapseFirebasePanel = function() {
