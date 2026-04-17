@@ -153,20 +153,13 @@ async function loadOBJsFromFirebase(folderPath = 'models') {
         // 既存パイプラインへ（ドロップと同じ処理）
         handleFiles(files);
 
-        // 2秒後にパネルを小さく畳む
+        // 2秒後にボタンに戻す（ロード済み表示付き）
         setTimeout(() => {
-            const area = document.getElementById('firebase-load-area');
-            if (area) {
-                area.style.minWidth = '160px';
-                area.style.padding = '8px 12px';
-                area.innerHTML = `
-                    <div style="color:#7dff7d;font-size:11px;margin-bottom:6px;">Firebase &#10003; ロード済み</div>
-                    <button onclick="expandFirebasePanel()"
-                        style="width:100%;padding:5px;background:#0a3a5a;color:#00d4ff;
-                               border:1px solid #00d4ff44;border-radius:5px;
-                               cursor:pointer;font-size:11px;">
-                        再読み込み
-                    </button>`;
+            collapseFirebasePanel();
+            const toggle = document.getElementById('firebase-toggle-btn');
+            if (toggle) {
+                toggle.textContent = 'Firebase \u2713';
+                toggle.style.color = '#7dff7d';
             }
         }, 2000);
 
@@ -177,35 +170,32 @@ async function loadOBJsFromFirebase(folderPath = 'models') {
 }
 
 // ============================================================
-// Firebase ロードUI を folder-drop-area の隣に挿入
+// Firebase ロードUI を folder-drop-area の隣に挿入（トグル式）
 // ============================================================
 function injectFirebaseUI() {
     const dropArea = document.getElementById('folder-drop-area');
     if (!dropArea || document.getElementById('firebase-load-area')) return;
+
+    // 小さいトグルボタン
+    const toggle = document.createElement('div');
+    toggle.className = 'overlay';
+    toggle.id = 'firebase-toggle-btn';
+    toggle.style.cssText = 'bottom:12px;left:250px;display:block;' +
+        'border:1px solid #1a4a7a;border-radius:8px;' +
+        'padding:8px 14px;cursor:pointer;font-size:12px;color:#00d4ff;' +
+        'font-weight:bold;user-select:none;transition:all 0.15s;';
+    toggle.textContent = 'Firebase';
+    toggle.addEventListener('click', () => window.expandFirebasePanel());
+    dropArea.insertAdjacentElement('afterend', toggle);
+
+    // 展開パネル（初期非表示）
     const ui = document.createElement('div');
     ui.className = 'overlay';
     ui.id = 'firebase-load-area';
-    ui.style.cssText = 'bottom:12px;left:250px;display:block;' +
+    ui.style.cssText = 'bottom:12px;left:250px;display:none;' +
         'border:2px dashed #1a4a7a;border-radius:10px;' +
         'padding:12px 16px;font-size:13px;color:#aaa;min-width:220px;';
-    ui.innerHTML = `
-        <div style="color:#00d4ff;font-weight:bold;margin-bottom:8px;font-size:12px;">
-            Firebase から読み込む
-        </div>
-        <select id="fb-folder-select"
-            style="width:100%;padding:6px 8px;background:#0d1220;border:1px solid #2a3a55;
-                   border-radius:5px;color:#ccc;font-size:12px;margin-bottom:8px;">
-            <option value="models">models（デフォルト）</option>
-        </select>
-        <button onclick="loadOBJsFromFirebase(document.getElementById('fb-folder-select').value)"
-            style="width:100%;padding:7px;background:#0a3a5a;color:#00d4ff;
-                   border:1px solid #00d4ff44;border-radius:5px;
-                   cursor:pointer;font-size:12px;font-weight:bold;">
-            ▶ Firebase Load
-        </button>
-        <div id="fb-load-status"
-            style="font-size:11px;color:#888;margin-top:5px;min-height:16px;"></div>`;
-    dropArea.insertAdjacentElement('afterend', ui);
+    toggle.insertAdjacentElement('afterend', ui);
 }
 
 if (document.readyState === 'loading') {
@@ -218,12 +208,17 @@ window.loadOBJsFromFirebase = loadOBJsFromFirebase;
 
 window.expandFirebasePanel = function() {
     const area = document.getElementById('firebase-load-area');
+    const toggle = document.getElementById('firebase-toggle-btn');
     if (!area) return;
+    // トグルボタンを隠してパネルを表示
+    if (toggle) toggle.style.display = 'none';
+    area.style.display = 'block';
     area.style.minWidth = '220px';
     area.style.padding = '12px 16px';
     area.innerHTML = `
-        <div style="color:#00d4ff;font-weight:bold;margin-bottom:8px;font-size:12px;">
-            Firebase から読み込む
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <span style="color:#00d4ff;font-weight:bold;font-size:12px;">Firebase から読み込む</span>
+            <span onclick="collapseFirebasePanel()" style="color:#666;cursor:pointer;font-size:16px;padding:0 4px;">&times;</span>
         </div>
         <select id="fb-folder-select"
             style="width:100%;padding:6px 8px;background:#0d1220;border:1px solid #2a3a55;
@@ -234,8 +229,15 @@ window.expandFirebasePanel = function() {
             style="width:100%;padding:7px;background:#0a3a5a;color:#00d4ff;
                    border:1px solid #00d4ff44;border-radius:5px;
                    cursor:pointer;font-size:12px;font-weight:bold;">
-            ▶ Firebase Load
+            &#9654; Firebase Load
         </button>
         <div id="fb-load-status"
             style="font-size:11px;color:#888;margin-top:5px;min-height:16px;"></div>`;
+};
+
+window.collapseFirebasePanel = function() {
+    const area = document.getElementById('firebase-load-area');
+    const toggle = document.getElementById('firebase-toggle-btn');
+    if (area) area.style.display = 'none';
+    if (toggle) toggle.style.display = 'block';
 };
