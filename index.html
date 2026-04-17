@@ -330,7 +330,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v158</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v159</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -3084,8 +3084,8 @@ let vrHandJoints = { left: {}, right: {} };  // jointName → {x,y,z}
 let vrFps = 0;  // VR FPS表示用
 
 // ===== サイドパネル（メインパネル左側固定、FPS/パラメータ表示）=====
-const SIDE_W = 256, SIDE_H = 320;
-const SIDE_HW = 0.08, SIDE_HH = 0.10;  // 0.16m x 0.20m
+const SIDE_W = 320, SIDE_H = 400;
+const SIDE_HW = 0.10, SIDE_HH = 0.125;  // 0.20m x 0.25m
 let sideCanvas = null, sideCtx = null, sideTex = null;
 let bSideVtx = null, bSideUV = null;
 let sidePanelCenter = null;    // [x,y,z]
@@ -3645,10 +3645,8 @@ function drawSidePanel(V, P) {
     const cx = panelWorldCenter[0] - prx * offsetDist;
     const cy = panelWorldCenter[1] - pry * offsetDist;
     const cz = panelWorldCenter[2] - prz * offsetDist;
-    // サイドパネルの上端をメインパネルの上端に揃える
-    const mainTopY = panelHH;
-    const sideTopY = SIDE_HH;
-    const vertOffset = mainTopY - sideTopY;
+    // サイドパネルの下端をメインパネルの下端に揃える
+    const vertOffset = -(panelHH - SIDE_HH);
     const scx = cx + pux * vertOffset;
     const scy = cy + puy * vertOffset;
     const scz = cz + puz * vertOffset;
