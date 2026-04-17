@@ -176,14 +176,13 @@ function injectFirebaseUI() {
     const dropArea = document.getElementById('folder-drop-area');
     if (!dropArea || document.getElementById('firebase-load-area')) return;
 
-    // 小さいトグルボタン
+    // 小さいトグルボタン（最小限サイズ）
     const toggle = document.createElement('div');
-    toggle.className = 'overlay';
     toggle.id = 'firebase-toggle-btn';
-    toggle.style.cssText = 'bottom:12px;left:250px;display:block;' +
-        'border:1px solid #1a4a7a;border-radius:8px;' +
-        'padding:8px 14px;cursor:pointer;font-size:12px;color:#00d4ff;' +
-        'font-weight:bold;user-select:none;transition:all 0.15s;';
+    toggle.style.cssText = 'position:absolute;bottom:16px;left:250px;z-index:5;' +
+        'padding:4px 10px;background:rgba(10,30,50,0.7);border:1px solid #1a4a7a;' +
+        'border-radius:5px;cursor:pointer;font-size:11px;color:#4488aa;' +
+        'user-select:none;';
     toggle.textContent = 'Firebase';
     toggle.addEventListener('click', () => window.expandFirebasePanel());
     dropArea.insertAdjacentElement('afterend', toggle);
