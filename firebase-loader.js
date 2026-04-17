@@ -153,6 +153,23 @@ async function loadOBJsFromFirebase(folderPath = 'models') {
         // 既存パイプラインへ（ドロップと同じ処理）
         handleFiles(files);
 
+        // 2秒後にパネルを小さく畳む
+        setTimeout(() => {
+            const area = document.getElementById('firebase-load-area');
+            if (area) {
+                area.style.minWidth = '160px';
+                area.style.padding = '8px 12px';
+                area.innerHTML = `
+                    <div style="color:#7dff7d;font-size:11px;margin-bottom:6px;">Firebase &#10003; ロード済み</div>
+                    <button onclick="expandFirebasePanel()"
+                        style="width:100%;padding:5px;background:#0a3a5a;color:#00d4ff;
+                               border:1px solid #00d4ff44;border-radius:5px;
+                               cursor:pointer;font-size:11px;">
+                        再読み込み
+                    </button>`;
+            }
+        }, 2000);
+
     } catch (e) {
         setStatus(e.message, '#ff6b6b');
         console.error('[Firebase Load]', e);
@@ -198,3 +215,27 @@ if (document.readyState === 'loading') {
 }
 
 window.loadOBJsFromFirebase = loadOBJsFromFirebase;
+
+window.expandFirebasePanel = function() {
+    const area = document.getElementById('firebase-load-area');
+    if (!area) return;
+    area.style.minWidth = '220px';
+    area.style.padding = '12px 16px';
+    area.innerHTML = `
+        <div style="color:#00d4ff;font-weight:bold;margin-bottom:8px;font-size:12px;">
+            Firebase から読み込む
+        </div>
+        <select id="fb-folder-select"
+            style="width:100%;padding:6px 8px;background:#0d1220;border:1px solid #2a3a55;
+                   border-radius:5px;color:#ccc;font-size:12px;margin-bottom:8px;">
+            <option value="models">models（デフォルト）</option>
+        </select>
+        <button onclick="loadOBJsFromFirebase(document.getElementById('fb-folder-select').value)"
+            style="width:100%;padding:7px;background:#0a3a5a;color:#00d4ff;
+                   border:1px solid #00d4ff44;border-radius:5px;
+                   cursor:pointer;font-size:12px;font-weight:bold;">
+            ▶ Firebase Load
+        </button>
+        <div id="fb-load-status"
+            style="font-size:11px;color:#888;margin-top:5px;min-height:16px;"></div>`;
+};
