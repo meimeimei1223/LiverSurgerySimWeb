@@ -330,7 +330,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v159</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v160</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -3381,6 +3381,9 @@ function renderXR(time, frame) {
         // サイドパネル描画（メインパネル左側固定）
         drawSidePanel(V, P);
 
+        // フラグメント選択ポップアップ（肝臓の上）
+        if (vrFragmentPending) drawFragPopPanel(V, P);
+
         // レーザー描画（Handle Place モード時）
         drawVRLaser(V, P);
     }
@@ -3455,6 +3458,19 @@ function initSidePanelGL() {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
     console.log('[SidePanel] initSidePanelGL OK');
+
+    // フラグメントポップアップ初期化
+    fragPopCanvas = document.createElement('canvas');
+    fragPopCanvas.width = FRAG_POP_W;
+    fragPopCanvas.height = FRAG_POP_H;
+    fragPopCtx = fragPopCanvas.getContext('2d');
+    fragPopTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, fragPopTex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    console.log('[FragPop] init OK');
 }
 
 function drawSidePanelCanvas() {
@@ -3697,6 +3713,153 @@ function drawSidePanel(V, P) {
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
     gl.bindBuffer(gl.ARRAY_BUFFER, bSideUV);
+    gl.enableVertexAttribArray(1);
+    gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
+
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    gl.disableVertexAttribArray(0);
+    gl.disableVertexAttribArray(1);
+
+    gl.enable(gl.DEPTH_TEST);
+    gl.enable(gl.CULL_FACE);
+    gl.disable(gl.BLEND);
+}
+
+// ===== フラグメント選択3Dポップアップ（肝臓の上に表示）=====
+function drawFragPopCanvas() {
+    if (!fragPopCtx || !vrFragmentPending) return;
+    const c = fragPopCtx;
+    const W = FRAG_POP_W, H = FRAG_POP_H;
+    fragPopBtns = [];
+
+    c.fillStyle = 'rgba(15, 18, 28, 0.95)';
+    c.fillRect(0, 0, W, H);
+    c.strokeStyle = 'rgba(255, 200, 50, 0.8)';
+    c.lineWidth = 3;
+    c.strokeRect(2, 2, W - 4, H - 4);
+
+    let y = 12;
+    c.fillStyle = '#ffcc33';
+    c.font = 'bold 16px Arial';
+    c.fillText('Fragment Selection', 14, y + 14);
+    y += 28;
+
+    const fragColors = ['#3399ff','#ff6633','#33ff66','#ffff33','#cc33ff'];
+    for (let fi = 0; fi < vrFragmentCount; fi++) {
+        const pct = sb.getPendingFragmentPercent(fi).toFixed(1);
+        const sz = sb.getPendingFragmentSize(fi);
+        const fc = fragColors[fi % 5];
+        const isHov = (vrFragmentHovered === fi);
+        c.fillStyle = isHov ? fc : 'rgba(255,255,255,0.06)';
+        c.globalAlpha = isHov ? 0.35 : 1.0;
+        c.fillRect(10, y, W - 20, 36);
+        c.globalAlpha = 1.0;
+        c.strokeStyle = isHov ? '#fff' : fc;
+        c.lineWidth = isHov ? 3 : 2;
+        c.strokeRect(10, y, W - 20, 36);
+        c.fillStyle = isHov ? '#fff' : fc;
+        c.font = 'bold 15px Arial';
+        c.fillText('Keep #' + (fi+1) + '  ' + sz + ' tets  ' + pct + '%', 20, y + 24);
+        fragPopBtns.push({ y, h: 36, action: 'fragment', idx: fi });
+        y += 42;
+    }
+    // Cancel
+    const cancelHov = (vrFragmentHovered === -2);
+    c.fillStyle = cancelHov ? 'rgba(200,60,60,0.3)' : 'rgba(255,255,255,0.04)';
+    c.fillRect(10, y, W - 20, 32);
+    c.strokeStyle = cancelHov ? '#ff6666' : 'rgba(200,60,60,0.4)';
+    c.lineWidth = cancelHov ? 3 : 1;
+    c.strokeRect(10, y, W - 20, 32);
+    c.fillStyle = cancelHov ? '#ff8888' : '#cc6666';
+    c.font = 'bold 14px Arial';
+    c.fillText('Cancel Cut', 20, y + 22);
+    fragPopBtns.push({ y, h: 32, action: 'fragmentCancel', idx: -1 });
+
+    gl.bindTexture(gl.TEXTURE_2D, fragPopTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, fragPopCanvas);
+}
+
+function fragPopHitTest(fingerX, fingerY, fingerZ) {
+    if (!fragPopCenter || !fragPopRight || !fragPopUp) return null;
+    const dx = fingerX - fragPopCenter[0];
+    const dy = fingerY - fragPopCenter[1];
+    const dz = fingerZ - fragPopCenter[2];
+    const localX = dx*fragPopRight[0] + dy*fragPopRight[1] + dz*fragPopRight[2];
+    const localY = dx*fragPopUp[0] + dy*fragPopUp[1] + dz*fragPopUp[2];
+    const nx = fragPopRight[1]*fragPopUp[2] - fragPopRight[2]*fragPopUp[1];
+    const ny = fragPopRight[2]*fragPopUp[0] - fragPopRight[0]*fragPopUp[2];
+    const nz = fragPopRight[0]*fragPopUp[1] - fragPopRight[1]*fragPopUp[0];
+    const depth = Math.abs(dx*nx + dy*ny + dz*nz);
+    if (depth > 0.06) return null;
+    if (Math.abs(localX) > FRAG_POP_HW * 1.1 || Math.abs(localY) > FRAG_POP_HH * 1.1) return null;
+    const canvasX = (localX / FRAG_POP_HW * 0.5 + 0.5) * FRAG_POP_W;
+    const canvasY = (-localY / FRAG_POP_HH * 0.5 + 0.5) * FRAG_POP_H;
+    return { x: canvasX, y: canvasY };
+}
+
+function drawFragPopPanel(V, P) {
+    if (!fragPopTex || !pPanel || !LPanel || !vrFragmentPending || !vrHeadPos || !sb) return;
+
+    // 肝臓重心のVR空間座標の上に配置
+    const lcx = sb.getMeshCentroidX(), lcy = sb.getMeshCentroidY(), lcz = sb.getMeshCentroidZ();
+    const vrPos = simToVR(lcx, lcy, lcz);
+    const popY = vrPos[1] + 0.15;  // 重心の15cm上
+
+    // 頭の方を向く
+    let tx = vrHeadPos[0] - vrPos[0];
+    let ty = vrHeadPos[1] - popY;
+    let tz = vrHeadPos[2] - vrPos[2];
+    const tLen = Math.sqrt(tx*tx + ty*ty + tz*tz) || 1;
+    tx /= tLen; ty /= tLen; tz /= tLen;
+    let rx = tz, ry = 0, rz = -tx;
+    const rLen = Math.sqrt(rx*rx + rz*rz) || 1;
+    rx /= rLen; rz /= rLen;
+    const ux = ty*rz - tz*ry, uy = tz*rx - tx*rz, uz = tx*ry - ty*rx;
+
+    fragPopCenter = [vrPos[0], popY, vrPos[2]];
+    fragPopRight = [rx, ry, rz];
+    fragPopUp = [ux, uy, uz];
+
+    drawFragPopCanvas();
+
+    const hw = FRAG_POP_HW, hh = FRAG_POP_HH;
+    const cx = fragPopCenter[0], cy = fragPopCenter[1], cz = fragPopCenter[2];
+    const v = new Float32Array([
+        cx-rx*hw+ux*hh, cy-ry*hw+uy*hh, cz-rz*hw+uz*hh,
+        cx+rx*hw+ux*hh, cy+ry*hw+uy*hh, cz+rz*hw+uz*hh,
+        cx+rx*hw-ux*hh, cy+ry*hw-uy*hh, cz+rz*hw-uz*hh,
+        cx-rx*hw+ux*hh, cy-ry*hw+uy*hh, cz-rz*hw+uz*hh,
+        cx+rx*hw-ux*hh, cy+ry*hw-uy*hh, cz+rz*hw-uz*hh,
+        cx-rx*hw-ux*hh, cy-ry*hw-uy*hh, cz-rz*hw-uz*hh,
+    ]);
+    const uv = new Float32Array([0,0, 1,0, 1,1, 0,0, 1,1, 0,1]);
+
+    if (!bFragPopVtx) bFragPopVtx = gl.createBuffer();
+    if (!bFragPopUV) bFragPopUV = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, bFragPopVtx);
+    gl.bufferData(gl.ARRAY_BUFFER, v, gl.DYNAMIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, bFragPopUV);
+    gl.bufferData(gl.ARRAY_BUFFER, uv, gl.STATIC_DRAW);
+
+    const I = new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
+    gl.disable(gl.DEPTH_TEST);
+    gl.disable(gl.CULL_FACE);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+    gl.useProgram(pPanel);
+    gl.uniformMatrix4fv(LPanel.uM, false, I);
+    gl.uniformMatrix4fv(LPanel.uV, false, V);
+    gl.uniformMatrix4fv(LPanel.uP, false, P);
+    gl.uniform1f(LPanel.uAlpha, 0.95);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, fragPopTex);
+    gl.uniform1i(LPanel.uTex, 0);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, bFragPopVtx);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, bFragPopUV);
     gl.enableVertexAttribArray(1);
     gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
 
@@ -4056,46 +4219,6 @@ function drawPanelCanvas() {
                     y += 34;
                 }
             }
-            // フラグメント選択ボタン（Free Cut展開中 + pending時のみ）
-            if (ai === 1 && vrFragmentPending && vrFragmentCount > 0) {
-                y += 4;
-                c.fillStyle = '#ffcc33';
-                c.font = 'bold 13px Arial';
-                c.fillText('Choose Fragment:', 34, y + 14);
-                y += 20;
-                const fragColors = ['#3399ff','#ff6633','#33ff66','#ffff33','#cc33ff'];
-                for (let fi = 0; fi < vrFragmentCount; fi++) {
-                    const fHovered = panelHoveredBtn >= 0 && panelBtnWorldPos[panelHoveredBtn]
-                        && panelBtnWorldPos[panelHoveredBtn].action === 'fragment'
-                        && panelBtnWorldPos[panelHoveredBtn].idx === fi;
-                    const fc = fragColors[fi % 5];
-                    const pct = sb.getPendingFragmentPercent(fi).toFixed(1);
-                    const sz = sb.getPendingFragmentSize(fi);
-                    c.fillStyle = fHovered ? fc : 'rgba(255,255,255,0.06)';
-                    c.globalAlpha = fHovered ? 0.4 : 1.0;
-                    c.fillRect(30, y, W - 60, 34);
-                    c.globalAlpha = 1.0;
-                    c.strokeStyle = fHovered ? '#fff' : fc;
-                    c.lineWidth = fHovered ? 3 : 2;
-                    c.strokeRect(30, y, W - 60, 34);
-                    c.fillStyle = fHovered ? '#fff' : fc;
-                    c.font = 'bold 14px Arial';
-                    c.fillText('Keep #' + (fi+1) + '  ' + sz + ' tets  ' + pct + '%', 44, y + 22);
-                    y += 38;
-                }
-                // Cancel ボタン
-                const cancelHovered = panelHoveredBtn >= 0 && panelBtnWorldPos[panelHoveredBtn]
-                    && panelBtnWorldPos[panelHoveredBtn].action === 'fragmentCancel';
-                c.fillStyle = cancelHovered ? 'rgba(200,60,60,0.3)' : 'rgba(255,255,255,0.04)';
-                c.fillRect(30, y, W - 60, 30);
-                c.strokeStyle = cancelHovered ? '#ff6666' : 'rgba(200,60,60,0.4)';
-                c.lineWidth = cancelHovered ? 3 : 1;
-                c.strokeRect(30, y, W - 60, 30);
-                c.fillStyle = cancelHovered ? '#ff8888' : '#cc6666';
-                c.font = 'bold 14px Arial';
-                c.fillText('Cancel Cut', 44, y + 20);
-                y += 34;
-            }
         }
     }
 
@@ -4260,6 +4383,15 @@ let vrDeformSub = 'none';  // 'none'|'place'|'deform' — VR版 Deform サブモ
 let vrFragmentPending = false;   // フラグメント選択待ち
 let vrFragmentCount = 0;         // フラグメント数
 let vrFragmentHovered = -1;      // ホバー中のフラグメントindex
+// フラグメント3Dポップアップ
+const FRAG_POP_W = 300, FRAG_POP_H = 256;
+const FRAG_POP_HW = 0.12, FRAG_POP_HH = 0.10;  // 0.24m x 0.20m
+let fragPopCanvas = null, fragPopCtx = null, fragPopTex = null;
+let bFragPopVtx = null, bFragPopUV = null;
+let fragPopCenter = null;   // [x,y,z] VR空間座標
+let fragPopRight = null;    // [x,y,z]
+let fragPopUp = null;       // [x,y,z]
+let fragPopBtns = [];       // {y, h, action, idx} — ヒットテスト用
 // VR Free Cut 状態
 let vrCutterDragging = false;
 let vrCutterPlaced = false;
@@ -4339,16 +4471,6 @@ function getPanelButtons() {
                 btns.push({ cx: PANEL_W / 2, cy: ay + 15, action: 'sub', mode: actionDefs[i].subs[si], idx: si });
                 ay += 34;
             }
-        }
-        // フラグメント選択ボタン（Free Cut展開中 + pending時）
-        if (i === 1 && vrActiveAction === 'freecut' && vrFragmentPending && vrFragmentCount > 0) {
-            ay += 24;  // "Choose Fragment:" ラベル分
-            for (let fi = 0; fi < vrFragmentCount; fi++) {
-                btns.push({ cx: PANEL_W / 2, cy: ay + 17, action: 'fragment', idx: fi });
-                ay += 38;
-            }
-            btns.push({ cx: PANEL_W / 2, cy: ay + 15, action: 'fragmentCancel', idx: -1 });
-            ay += 34;
         }
     }
     // Volume トグルボタン（DISPLAYセクション内）
@@ -5234,6 +5356,31 @@ function processHandTracking(frame, src, hand) {
         processSidePanelInput(ip.x, ip.y, ip.z, isPinching);
     }
 
+    // === 右手: フラグメントポップアップ操作 ===
+    if (hand === 'right' && vrFragmentPending && fragPopCenter) {
+        const fHit = fragPopHitTest(ip.x, ip.y, ip.z);
+        let newHover = -1;
+        if (fHit) {
+            for (let i = 0; i < fragPopBtns.length; i++) {
+                const b = fragPopBtns[i];
+                if (fHit.y >= b.y && fHit.y < b.y + b.h) {
+                    newHover = (b.action === 'fragmentCancel') ? -2 : b.idx;
+                    break;
+                }
+            }
+        }
+        if (newHover !== vrFragmentHovered) {
+            vrFragmentHovered = newHover;
+            if (newHover >= 0) hoverFragment(newHover);
+            else if (newHover === -1) hoverFragment(-1);
+        }
+        if (isPinching && panelPinchReleased && newHover !== -1) {
+            if (newHover === -2) vrCancelFragment();
+            else vrCompleteFragment(newHover);
+            panelPinchReleased = false;
+        }
+    }
+
     // === 右手: パネル操作 ===
     if (hand === 'right' && panelBtnWorldPos.length > 0) {
         if (!isPinching) { panelPinchReleased = true; panelSliderDragging = false; panelActiveSlider = null; }
@@ -5326,17 +5473,6 @@ function processHandTracking(frame, src, hand) {
                 }
             }
             panelPrePinchBtn = panelHoveredBtn;
-            // フラグメントホバープレビュー更新
-            if (vrFragmentPending && panelHoveredBtn >= 0 && panelBtnWorldPos[panelHoveredBtn]) {
-                const hb = panelBtnWorldPos[panelHoveredBtn];
-                if (hb.action === 'fragment') {
-                    if (vrFragmentHovered !== hb.idx) { vrFragmentHovered = hb.idx; hoverFragment(hb.idx); }
-                } else if (vrFragmentHovered !== -1) {
-                    vrFragmentHovered = -1; hoverFragment(-1);
-                }
-            } else if (vrFragmentPending && vrFragmentHovered !== -1) {
-                vrFragmentHovered = -1; hoverFragment(-1);
-            }
         }
         // else: isPinching → panelHoveredBtn は前フレームの値を維持
 
@@ -5404,10 +5540,6 @@ function processHandTracking(frame, src, hand) {
                     }
                 } else if (nearest.action === 'exit') {
                     if (xrSession) xrSession.end();
-                } else if (nearest.action === 'fragment') {
-                    vrCompleteFragment(nearest.idx);
-                } else if (nearest.action === 'fragmentCancel') {
-                    vrCancelFragment();
                 }
                 panelPinchReleased = false;
                 if (vrGrabs.right.active) { sb.endGrabVR(); vrGrabs.right.active = false; vrGrabOwner = null; }
@@ -5649,6 +5781,13 @@ function vrCancelCut() {
 
 function vrUndoCut() {
     if (!sb || !sb.canUndo()) return;
+    // フラグメント保留中の場合はキャンセルしてからUndo
+    if (vrFragmentPending) {
+        if (sb.hasPendingFragment()) sb.cancelPendingCut();
+        vrFragmentPending = false;
+        vrFragmentCount = 0;
+        vrFragmentHovered = -1;
+    }
     sb.undoCut();
     initIdxBuffer();
     updateMesh();
