@@ -28,48 +28,59 @@ const app     = initializeApp(firebaseConfig);
 const auth    = getAuth(app);
 const storage = getStorage(app);
 
+// ===== 開発用フラグ（本番前に false に変える）=====
+const DEV_AUTO_LOGIN = true;
+const DEV_EMAIL      = 'meidai1223@gmail.com';
+const DEV_PASSWORD   = '12345678';
+// =================================================
+
 // ============================================================
-// ログイン画面を body に挿入
+// 開発用: 画面なし自動ログイン / 本番: ログイン画面表示
 // ============================================================
-document.body.insertAdjacentHTML('beforeend', `
-<div id="fb-login-overlay" style="
-    position:fixed; inset:0; z-index:9999;
-    background:rgba(10,12,20,0.97);
-    display:flex; align-items:center; justify-content:center;
-    font-family:Arial,Helvetica,sans-serif;">
-  <div style="background:#151c2c; border:1px solid #2a3a55; border-radius:14px;
-              padding:36px 40px; min-width:320px; max-width:380px; width:90%;">
-    <div style="text-align:center; margin-bottom:28px;">
-      <div style="font-size:22px; font-weight:bold; color:#00d4ff; letter-spacing:0.04em;">
-        LiverSurgery Sim
+if (DEV_AUTO_LOGIN) {
+    signInWithEmailAndPassword(auth, DEV_EMAIL, DEV_PASSWORD)
+        .catch(err => console.warn('[Dev Auto Login]', err.code));
+} else {
+    document.body.insertAdjacentHTML('beforeend', `
+    <div id="fb-login-overlay" style="
+        position:fixed; inset:0; z-index:9999;
+        background:rgba(10,12,20,0.97);
+        display:flex; align-items:center; justify-content:center;
+        font-family:Arial,Helvetica,sans-serif;">
+      <div style="background:#151c2c; border:1px solid #2a3a55; border-radius:14px;
+                  padding:36px 40px; min-width:320px; max-width:380px; width:90%;">
+        <div style="text-align:center; margin-bottom:28px;">
+          <div style="font-size:22px; font-weight:bold; color:#00d4ff; letter-spacing:0.04em;">
+            LiverSurgery Sim
+          </div>
+          <div style="font-size:12px; color:#556; margin-top:6px;">ログインして続行</div>
+        </div>
+        <div style="margin-bottom:14px;">
+          <label style="display:block; font-size:12px; color:#888; margin-bottom:5px;">メールアドレス</label>
+          <input id="fb-email" type="email" autocomplete="email"
+            style="width:100%; padding:10px 12px; background:#0d1220; border:1px solid #2a3a55;
+                   border-radius:7px; color:#fff; font-size:14px; box-sizing:border-box;"
+            placeholder="doctor@hospital.com">
+        </div>
+        <div style="margin-bottom:22px;">
+          <label style="display:block; font-size:12px; color:#888; margin-bottom:5px;">パスワード</label>
+          <input id="fb-password" type="password" autocomplete="current-password"
+            style="width:100%; padding:10px 12px; background:#0d1220; border:1px solid #2a3a55;
+                   border-radius:7px; color:#fff; font-size:14px; box-sizing:border-box;"
+            placeholder="••••••••">
+        </div>
+        <button id="fb-login-btn"
+          style="width:100%; padding:12px; background:#0a4a7a; border:1px solid #00d4ff55;
+                 border-radius:8px; color:#00d4ff; font-size:15px; font-weight:bold;
+                 cursor:pointer;">
+          ログイン
+        </button>
+        <div id="fb-login-error"
+          style="margin-top:12px; font-size:12px; color:#ff6b6b; text-align:center; min-height:18px;">
+        </div>
       </div>
-      <div style="font-size:12px; color:#556; margin-top:6px;">ログインして続行</div>
-    </div>
-    <div style="margin-bottom:14px;">
-      <label style="display:block; font-size:12px; color:#888; margin-bottom:5px;">メールアドレス</label>
-      <input id="fb-email" type="email" autocomplete="email"
-        style="width:100%; padding:10px 12px; background:#0d1220; border:1px solid #2a3a55;
-               border-radius:7px; color:#fff; font-size:14px; box-sizing:border-box;"
-        placeholder="doctor@hospital.com">
-    </div>
-    <div style="margin-bottom:22px;">
-      <label style="display:block; font-size:12px; color:#888; margin-bottom:5px;">パスワード</label>
-      <input id="fb-password" type="password" autocomplete="current-password"
-        style="width:100%; padding:10px 12px; background:#0d1220; border:1px solid #2a3a55;
-               border-radius:7px; color:#fff; font-size:14px; box-sizing:border-box;"
-        placeholder="••••••••">
-    </div>
-    <button id="fb-login-btn"
-      style="width:100%; padding:12px; background:#0a4a7a; border:1px solid #00d4ff55;
-             border-radius:8px; color:#00d4ff; font-size:15px; font-weight:bold;
-             cursor:pointer;">
-      ログイン
-    </button>
-    <div id="fb-login-error"
-      style="margin-top:12px; font-size:12px; color:#ff6b6b; text-align:center; min-height:18px;">
-    </div>
-  </div>
-</div>`);
+    </div>`);
+}
 
 // ============================================================
 // ログイン処理
@@ -96,8 +107,10 @@ function doLogin() {
         errEl.textContent = msgs[err.code] || 'ログイン失敗: ' + err.code;
     });
 }
-document.getElementById('fb-login-btn').addEventListener('click', doLogin);
-document.getElementById('fb-password').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+if (!DEV_AUTO_LOGIN) {
+    document.getElementById('fb-login-btn').addEventListener('click', doLogin);
+    document.getElementById('fb-password').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+}
 
 // ============================================================
 // 認証状態の監視
