@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v150</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v151</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -5077,21 +5077,22 @@ function processHandTracking(frame, src, hand) {
                 panelWorldCenter[0] = midX - panelGrabOffset[0];
                 panelWorldCenter[1] = midY - panelGrabOffset[1];
                 panelWorldCenter[2] = midZ - panelGrabOffset[2];
-                // パネルを頭の方に向ける（forward = head→panel、right/upを再計算）
+                // パネルを頭の方に向ける（toHead = panel→head、right/upを再計算）
                 if (vrHeadPos) {
-                    let fx = panelWorldCenter[0] - vrHeadPos[0];
-                    let fy = panelWorldCenter[1] - vrHeadPos[1];
-                    let fz = panelWorldCenter[2] - vrHeadPos[2];
-                    const fLen = Math.sqrt(fx*fx + fy*fy + fz*fz) || 1;
-                    fx /= fLen; fy /= fLen; fz /= fLen;
-                    // right = cross(worldUp(0,1,0), forward)
-                    let rx = -fz, ry = 0, rz = fx;
-                    const rLen = Math.sqrt(rx*rx + ry*ry + rz*rz) || 1;
-                    rx /= rLen; ry /= rLen; rz /= rLen;
-                    // up = cross(forward, right)
-                    const ux = fy*rz - fz*ry;
-                    const uy = fz*rx - fx*rz;
-                    const uz = fx*ry - fy*rx;
+                    // toHead: パネルから頭への方向（パネル法線の向き）
+                    let tx = vrHeadPos[0] - panelWorldCenter[0];
+                    let ty = vrHeadPos[1] - panelWorldCenter[1];
+                    let tz = vrHeadPos[2] - panelWorldCenter[2];
+                    const tLen = Math.sqrt(tx*tx + ty*ty + tz*tz) || 1;
+                    tx /= tLen; ty /= tLen; tz /= tLen;
+                    // right = cross(worldUp(0,1,0), toHead) = (tz, 0, -tx)
+                    let rx = tz, ry = 0, rz = -tx;
+                    const rLen = Math.sqrt(rx*rx + rz*rz) || 1;
+                    rx /= rLen; rz /= rLen;
+                    // up = cross(toHead, right)
+                    const ux = ty*rz - tz*ry;
+                    const uy = tz*rx - tx*rz;
+                    const uz = tx*ry - ty*rx;
                     panelWorldRight = [rx, ry, rz];
                     panelWorldUp = [ux, uy, uz];
                 }
