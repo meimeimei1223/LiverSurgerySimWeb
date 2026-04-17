@@ -330,7 +330,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v160</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v161</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -5099,7 +5099,7 @@ function processHandTracking(frame, src, hand) {
         // 中指が開いた（8cm以上）→ ロック解除
         if (middleDist > 0.08) vrMiddlePinchDone = false;
 
-        if (actionMode === 'freeCut' && !nearPanel) {
+        if (actionMode === 'freeCut' && !nearPanel && !vrFragmentPending) {
             // ピンチなし → カッターを人差指先端に追従（プレビュー）
             if (!isPinching && !vrCutterDragging) {
                 const simPos = vrToSim(ip.x, ip.y, ip.z);
