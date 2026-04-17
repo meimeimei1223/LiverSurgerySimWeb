@@ -330,7 +330,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v161</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v162</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -382,6 +382,17 @@
     <div class="action-sub" id="deform-sub">
         <div style="color:#666;font-size:11px;margin-bottom:6px;">Click mesh to place handle sphere</div>
         <button class="sub-btn" id="btn-handle-mode">Handle Place <span style="color:#555;font-size:11px;font-weight:normal;">D</span></button>
+        <div id="sphere-size-row" style="padding:4px 10px 2px;">
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:#888;margin-bottom:2px;">
+            <span>Sphere Size</span>
+            <span id="sphere-size-val" style="color:#ffff66;">0.40</span>
+          </div>
+          <input type="range" id="sphere-size-slider" min="0.1" max="1.0" step="0.05" value="0.4"
+            style="width:100%;">
+          <div id="sphere-size-hint" style="font-size:10px;color:#666;display:none;">
+            (Clear handles to resize)
+          </div>
+        </div>
         <button class="sub-btn" id="btn-deform-mode">Deform</button>
         <button class="sub-btn" id="btn-undo-handle">Undo Handle</button>
         <button class="sub-btn danger" id="btn-clear-handles">Clear All</button>
@@ -926,6 +937,7 @@ function updateMesh() {
 
 //-- Handle mode -------------------------------------------------------
 let handleMode = false;
+let handleSphereRadius = 0.4; // ハンドルスフィア半径（C++ DEFAULT_HANDLE_RADIUS = 0.4）
 // (旧アコーディオン toggle は action-btn onclick に置き換え済み)
 
 // Deform サブモード (C++ DeformSubMode 準拠)
@@ -949,6 +961,7 @@ document.getElementById('btn-undo-handle').addEventListener('click', ()=>{
     }
     const n = sb ? sb.getNumHandleSpheres() : 0;
     document.getElementById('handle-count').textContent = n > 0 ? n+' handles' : '';
+    updateSphereSizeSlider();
 });
 document.getElementById('btn-clear-handles').addEventListener('click', ()=>{
     if (sb) sb.clearHandleSpheres();
@@ -956,7 +969,24 @@ document.getElementById('btn-clear-handles').addEventListener('click', ()=>{
     deformSub = 'none';
     handleMode = false;
     updateDeformBtns();
+    updateSphereSizeSlider();
 });
+document.getElementById('sphere-size-slider').addEventListener('input', e => {
+    if (sb && sb.getNumHandleSpheres() === 0) {
+        handleSphereRadius = parseFloat(e.target.value);
+        document.getElementById('sphere-size-val').textContent = handleSphereRadius.toFixed(2);
+    }
+});
+function updateSphereSizeSlider() {
+    const canEdit = !sb || sb.getNumHandleSpheres() === 0;
+    const slider = document.getElementById('sphere-size-slider');
+    const hint = document.getElementById('sphere-size-hint');
+    const row = document.getElementById('sphere-size-row');
+    if (!slider) return;
+    slider.disabled = !canEdit;
+    row.style.opacity = canEdit ? '1.0' : '0.35';
+    hint.style.display = canEdit ? 'none' : 'block';
+}
 function updateDeformBtns() {
     document.getElementById('btn-handle-mode').style.background =
         deformSub === 'place' ? '#8f45ad' : '#555';
@@ -1344,10 +1374,11 @@ canvas.addEventListener('pointerdown', e=>{
         const rect = canvas.getBoundingClientRect();
         sendMatricesToCpp();
         const ok = sb.addHandleSphereAtScreen(
-            e.clientX - rect.left, e.clientY - rect.top, 0.5);
+            e.clientX - rect.left, e.clientY - rect.top, handleSphereRadius);
         if (ok) {
             const n = sb.getNumHandleSpheres();
             document.getElementById('handle-count').textContent = n > 0 ? n+' handles' : '';
+            updateSphereSizeSlider();
             return;
         }
         // メッシュ外 → カメラ操作にフォールスルー
