@@ -323,7 +323,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v152</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v153</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -5417,8 +5417,14 @@ function handlePanelTouch(canvasX, canvasY) {
 // index 0-4: 3段階 (OFF→50%→ON)、index 5: 2段階 (OFF→ON)
 function vrToggleOrgan(idx) {
     if (typeof organAlphaStates === 'undefined' || typeof ORGAN_NUM_STATES === 'undefined') return;
-    const numStates = ORGAN_NUM_STATES[idx];
-    organAlphaStates[idx] = (organAlphaStates[idx] + 1) % numStates;
+    // VR: Liver(idx=0)は3状態(OFF/50%/ON)、それ以外は2状態(OFF/ON) — 半透明は重いため
+    const numStates = (idx === 0) ? ORGAN_NUM_STATES[idx] : 2;
+    if (numStates === 2) {
+        // OFF(0) ↔ ON(2) — state=1(50%)をスキップ
+        organAlphaStates[idx] = organAlphaStates[idx] === 0 ? 2 : 0;
+    } else {
+        organAlphaStates[idx] = (organAlphaStates[idx] + 1) % numStates;
+    }
     if (typeof onAlphaChanged === 'function') onAlphaChanged(idx, organAlphaStates[idx]);
     // デスクトップカードのスタイルも同期
     const card = document.getElementById('organ-card-' + idx);
@@ -5426,7 +5432,7 @@ function vrToggleOrgan(idx) {
         const s = organAlphaStates[idx];
         card.className = `vis-card ${s===0?'state-off':s===1?'state-half':'state-on'}`;
         const statusEl = card.querySelector('.vis-card-status');
-        if (statusEl) statusEl.textContent = numStates===2 ? (s===0?'OFF':'ON') : ['OFF','50%','ON'][s];
+        if (statusEl) statusEl.textContent = s===0 ? 'OFF' : s===1 ? '50%' : 'ON';
     }
 }
 
