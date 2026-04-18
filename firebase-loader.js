@@ -120,14 +120,14 @@ onAuthStateChanged(auth, user => {
     if (user) {
         if (overlay) overlay.remove();
         console.log('[Firebase] ログイン:', user.email);
-        // ログアウトボタンを右上に表示
-        if (!document.getElementById('fb-logout-btn')) {
+        // ログアウトボタン（DEV自動ログイン時は非表示）
+        if (!DEV_AUTO_LOGIN && !document.getElementById('fb-logout-btn')) {
             const btn = document.createElement('button');
             btn.id = 'fb-logout-btn';
-            btn.textContent = user.email + '  ログアウト';
+            btn.textContent = 'Logout';
             btn.style.cssText = 'position:fixed;top:8px;right:8px;z-index:1000;' +
-                'padding:5px 12px;background:rgba(10,20,40,0.85);border:1px solid #2a3a55;' +
-                'border-radius:6px;color:#556;font-size:11px;cursor:pointer;';
+                'padding:4px 10px;background:rgba(10,20,40,0.85);border:1px solid #2a3a55;' +
+                'border-radius:6px;color:#556;font-size:10px;cursor:pointer;';
             btn.addEventListener('click', () => signOut(auth));
             document.body.appendChild(btn);
         }
