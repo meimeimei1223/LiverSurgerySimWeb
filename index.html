@@ -331,7 +331,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v188</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v189</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2760,6 +2760,14 @@ function initMobileUI() {
     });
     document.body.appendChild(bar);
 
+    // サブメニューパネル（バーの上にスライド表示）
+    const subPanel = document.createElement('div');
+    subPanel.id = 'mobile-sub-panel';
+    subPanel.style.cssText = 'position:fixed;bottom:44px;left:0;right:0;z-index:49;' +
+        'display:none;padding:6px 8px;' +
+        'background:rgba(10,12,18,0.95);border-top:1px solid rgba(255,255,255,0.1);';
+    document.body.appendChild(subPanel);
+
     // info パネルを統合型に改造（FPSのみ常時表示、他は折りたたみ）
     const info = document.getElementById('info');
     if (info) {
@@ -2775,7 +2783,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v188</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v189</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -2867,14 +2875,98 @@ function initMobileUI() {
 
 function updateMobileBar() {
     const btns = document.querySelectorAll('.mobile-action-btn');
-    const modes = { deform:'#cc8833', freeCut:'#cc3333', segCut:'#3388cc', transform:'#4dc0e6' };
+    const modeColors = { deform:'#cc8833', freeCut:'#cc3333', segCut:'#3388cc', transform:'#4dc0e6' };
     btns.forEach(btn => {
         const m = btn.dataset.mode;
         const active = actionMode === m;
-        btn.style.background = active ? modes[m] + '33' : 'rgba(255,255,255,0.04)';
-        btn.style.borderColor = active ? modes[m] : 'rgba(255,255,255,0.1)';
-        btn.style.color = active ? modes[m] : '#888';
+        btn.style.background = active ? modeColors[m] + '33' : 'rgba(255,255,255,0.04)';
+        btn.style.borderColor = active ? modeColors[m] : 'rgba(255,255,255,0.1)';
+        btn.style.color = active ? modeColors[m] : '#888';
     });
+    updateMobileSubPanel();
+}
+
+function updateMobileSubPanel() {
+    const panel = document.getElementById('mobile-sub-panel');
+    if (!panel) return;
+
+    if (actionMode === 'none' || actionMode === 'transform') {
+        panel.style.display = 'none';
+        return;
+    }
+    panel.style.display = 'flex';
+    panel.style.gap = '4px';
+    panel.style.flexWrap = 'wrap';
+    panel.innerHTML = '';
+
+    const btnStyle = 'padding:7px 10px;border-radius:5px;border:1px solid rgba(255,255,255,0.12);' +
+        'background:rgba(255,255,255,0.06);color:#bbb;font-size:11px;font-weight:bold;cursor:pointer;';
+    const activeStyle = 'padding:7px 10px;border-radius:5px;border:1px solid #8f45ad;' +
+        'background:rgba(143,69,173,0.25);color:#c080e0;font-size:11px;font-weight:bold;cursor:pointer;';
+    const dangerStyle = 'padding:7px 10px;border-radius:5px;border:1px solid rgba(200,60,60,0.4);' +
+        'background:rgba(255,255,255,0.04);color:#ff8888;font-size:11px;font-weight:bold;cursor:pointer;';
+
+    function addBtn(label, style, onclick) {
+        const b = document.createElement('button');
+        b.textContent = label;
+        b.style.cssText = style;
+        b.addEventListener('click', onclick);
+        panel.appendChild(b);
+        return b;
+    }
+
+    if (actionMode === 'deform') {
+        addBtn('Place', deformSub === 'place' ? activeStyle : btnStyle, () => {
+            document.getElementById('btn-handle-mode').click();
+            updateMobileSubPanel();
+        });
+        addBtn('Deform', deformSub === 'deform' ? activeStyle : btnStyle, () => {
+            document.getElementById('btn-deform-mode').click();
+            updateMobileSubPanel();
+        });
+        addBtn('Undo', btnStyle, () => {
+            document.getElementById('btn-undo-handle').click();
+        });
+        addBtn('Clear', dangerStyle, () => {
+            document.getElementById('btn-clear-handles').click();
+        });
+    } else if (actionMode === 'freeCut') {
+        addBtn('Seg Overlay', segOverlayMode ? activeStyle : btnStyle, () => {
+            if (typeof toggleSegOverlay === 'function') toggleSegOverlay();
+            updateMobileSubPanel();
+        });
+        addBtn('Undo Cut', dangerStyle, () => {
+            document.getElementById('btn-undo-cut').click();
+        });
+        // CUT ボタン（カッター配置済みのみ）
+        if (cutterPlaced) {
+            addBtn('CUT', 'padding:7px 14px;border-radius:5px;border:none;' +
+                'background:#c0392b;color:white;font-size:12px;font-weight:bold;cursor:pointer;', () => {
+                document.getElementById('cut-popup-btn').click();
+            });
+        }
+    } else if (actionMode === 'segCut') {
+        const lSel = typeof segSelectMode !== 'undefined' && segSelectMode === 'liver';
+        const pSel = typeof segSelectMode !== 'undefined' && segSelectMode === 'portal';
+        addBtn('Liver Sel', lSel ? activeStyle : btnStyle, () => {
+            if (typeof toggleSegSelect === 'function') toggleSegSelect('liver');
+            updateMobileSubPanel();
+        });
+        addBtn('Portal Sel', pSel ? activeStyle : btnStyle, () => {
+            if (typeof toggleSegSelect === 'function') toggleSegSelect('portal');
+            updateMobileSubPanel();
+        });
+        addBtn('Seg Cut', dangerStyle, () => {
+            if (typeof doSegCut === 'function') doSegCut();
+        });
+        addBtn('Undo', btnStyle, () => {
+            if (typeof doSegUndo === 'function') doSegUndo();
+        });
+        addBtn('Clear', btnStyle, () => {
+            if (typeof doClearSelection === 'function') doClearSelection();
+            updateMobileSubPanel();
+        });
+    }
 }
 
 function toggleFullscreen() {
