@@ -331,7 +331,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v181</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v182</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -3007,7 +3007,6 @@ function initApp() {
             console.log('[Cutter] initialized, tris=', sb.getCutterTriangleCount());
         }
 
-        updateMeshInfo();
         ['loading'].forEach(id=>document.getElementById(id).style.display='none');
         if (isMobile) {
             // スマホ: 右パネル・パラメータ非表示、info + モバイルUI表示
@@ -3018,6 +3017,7 @@ function initApp() {
         } else {
             ['info','ctrl','params'].forEach(id=>document.getElementById(id).style.display='block');
         }
+        updateMeshInfo();  // initMobileUI後に呼ぶ（DOM再構築後に値をセット）
 
         // 子メッシュ登録
         const childDefs = [
