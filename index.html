@@ -329,7 +329,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v171</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v172</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -1756,6 +1756,12 @@ function resize() {
     const ov = document.getElementById('handle-overlay');
     ov.width=canvas.width; ov.height=canvas.height;
     if (gl) gl.viewport(0,0,canvas.width,canvas.height);
+    // モバイル: 回転時にドロワーを閉じてUIを安定させる
+    if (isMobile) {
+        const ctrl = document.getElementById('ctrl');
+        if (ctrl) ctrl.style.display = 'none';
+        if (typeof updateMobileBar === 'function') updateMobileBar();
+    }
 }
 resize(); window.addEventListener('resize',resize);
 
@@ -2786,12 +2792,15 @@ function initMobileUI() {
 function updateMobileBar() {
     const btns = document.querySelectorAll('.mobile-action-btn');
     const modes = { deform:'#cc8833', freeCut:'#cc3333', segCut:'#3388cc', transform:'#4dc0e6' };
+    const portrait = window.innerHeight > window.innerWidth;
     btns.forEach(btn => {
         const m = btn.dataset.mode;
         const active = actionMode === m;
         btn.style.background = active ? modes[m] + '33' : 'rgba(255,255,255,0.04)';
         btn.style.borderColor = active ? modes[m] : 'rgba(255,255,255,0.1)';
         btn.style.color = active ? modes[m] : '#888';
+        btn.style.padding = portrait ? '8px 2px' : '10px 4px';
+        btn.style.fontSize = portrait ? '11px' : '12px';
     });
 }
 
@@ -2811,13 +2820,16 @@ function toggleMobileDrawer() {
     const ctrl = document.getElementById('ctrl');
     if (!ctrl) return;
     const visible = ctrl.style.display !== 'none';
-    ctrl.style.display = visible ? 'none' : 'block';
-    // ドロワー表示時はcanvasの幅を縮小しない（overlay扱い）
-    if (!visible) {
+    if (visible) {
+        ctrl.style.display = 'none';
+    } else {
+        ctrl.style.display = 'block';
         ctrl.style.position = 'fixed';
         ctrl.style.zIndex = '60';
         ctrl.style.top = '0';
+        ctrl.style.right = '0';
         ctrl.style.bottom = '48px';
+        ctrl.style.width = Math.min(310, window.innerWidth * 0.75) + 'px';
     }
 }
 
