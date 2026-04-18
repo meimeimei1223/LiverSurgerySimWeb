@@ -329,7 +329,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v168</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v169</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -1353,6 +1353,71 @@ let rightBtnDown = false;  // 右ボタン状態トラッキング
 canvas.addEventListener('contextmenu', e=>e.preventDefault());
 canvas.addEventListener('touchstart', e=>e.preventDefault(), {passive:false});
 canvas.addEventListener('touchmove', e=>e.preventDefault(), {passive:false});
+
+// ===== マルチタッチ（スマホ: ピンチズーム + 2本指Pan）=====
+let touchState = { active: false, count: 0, prevDist: 0, prevMidX: 0, prevMidY: 0 };
+
+canvas.addEventListener('touchstart', e => {
+    if (!isMobile || e.touches.length < 2) return;
+    // 2本指タッチ開始 → 1本指の操作をキャンセル
+    if (activePointerId >= 0) {
+        if (grab && sb) { sb.endGrab(); grab = false; }
+        if (drag) drag = false;
+        if (transformDragging) transformDragging = false;
+        activePointerId = -1;
+        canvas.style.cursor = 'default';
+    }
+    const t0 = e.touches[0], t1 = e.touches[1];
+    const dx = t1.clientX - t0.clientX, dy = t1.clientY - t0.clientY;
+    touchState.active = true;
+    touchState.count = e.touches.length;
+    touchState.prevDist = Math.sqrt(dx*dx + dy*dy);
+    touchState.prevMidX = (t0.clientX + t1.clientX) / 2;
+    touchState.prevMidY = (t0.clientY + t1.clientY) / 2;
+});
+
+canvas.addEventListener('touchmove', e => {
+    if (!isMobile || !touchState.active || e.touches.length < 2) return;
+    const t0 = e.touches[0], t1 = e.touches[1];
+    const dx = t1.clientX - t0.clientX, dy = t1.clientY - t0.clientY;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    const midX = (t0.clientX + t1.clientX) / 2;
+    const midY = (t0.clientY + t1.clientY) / 2;
+
+    // ピンチズーム
+    if (touchState.prevDist > 0) {
+        const scale = dist / touchState.prevDist;
+        cam.zoom((scale - 1) * 3);
+    }
+
+    // 2本指Pan
+    const panDx = midX - touchState.prevMidX;
+    const panDy = midY - touchState.prevMidY;
+    if (Math.abs(panDx) > 0.5 || Math.abs(panDy) > 0.5) {
+        if (transformMode && sb) {
+            const sens = 0.005;
+            const right = cam._right, up = cam._up;
+            sb.translateModel(
+                right[0]*panDx*sens + up[0]*(-panDy)*sens,
+                right[1]*panDx*sens + up[1]*(-panDy)*sens,
+                right[2]*panDx*sens + up[2]*(-panDy)*sens);
+        } else {
+            cam.pan(panDx, panDy);
+        }
+    }
+
+    touchState.prevDist = dist;
+    touchState.prevMidX = midX;
+    touchState.prevMidY = midY;
+});
+
+canvas.addEventListener('touchend', e => {
+    if (!isMobile) return;
+    if (e.touches.length < 2) {
+        touchState.active = false;
+        touchState.count = 0;
+    }
+});
 
 canvas.addEventListener('pointerdown', e=>{
     if (!sb || activePointerId >= 0) return;
