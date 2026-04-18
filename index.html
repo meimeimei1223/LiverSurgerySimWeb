@@ -331,7 +331,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v184</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v185</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2789,7 +2789,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v184</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v185</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -2847,9 +2847,35 @@ function initMobileUI() {
 
     updateMobileBar();
 
-    // XRボタンを新しいDOMに再配置（initXRは先に実行済みで古いDOMに挿入されている）
-    setTimeout(() => {
-        if (typeof initXR === 'function') initXR();
+    // XRボタンを新しいDOMに直接作成（initXRが先に実行されてボタンが消えているため）
+    setTimeout(async () => {
+        if (!navigator.xr) return;
+        const container = document.getElementById('xr-buttons-inline');
+        if (!container) return;
+        const vrOk = await navigator.xr.isSessionSupported('immersive-vr').catch(() => false);
+        const arOk = await navigator.xr.isSessionSupported('immersive-ar').catch(() => false);
+        if (!vrOk && !arOk) return;
+        container.style.display = 'flex';
+        container.style.gap = '6px';
+        if (vrOk) {
+            const btn = document.createElement('button');
+            btn.className = 'xr-btn'; btn.id = 'btn-vr';
+            btn.textContent = 'VR';
+            btn.style.cssText = 'padding:4px 12px;border-radius:5px;border:1px solid #4dc0e6;' +
+                'background:transparent;color:#4dc0e6;font-size:11px;font-weight:bold;cursor:pointer;';
+            btn.onclick = () => startXR('immersive-vr');
+            container.appendChild(btn);
+        }
+        if (arOk) {
+            const btn = document.createElement('button');
+            btn.className = 'xr-btn'; btn.id = 'btn-ar';
+            btn.textContent = 'AR';
+            btn.style.cssText = 'padding:4px 12px;border-radius:5px;border:1px solid #7dff7d;' +
+                'background:transparent;color:#7dff7d;font-size:11px;font-weight:bold;cursor:pointer;';
+            btn.onclick = () => startXR('immersive-ar');
+            container.appendChild(btn);
+        }
+        console.log('[Mobile XR] VR:', vrOk, 'AR:', arOk);
     }, 600);
 }
 
