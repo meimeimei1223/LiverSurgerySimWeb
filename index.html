@@ -329,7 +329,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v170</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v171</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2689,35 +2689,30 @@ function initMobileUI() {
         if (i !== 5) ORGAN_NUM_STATES[i] = 2;  // Sphere は元々2
     }
 
-    // 横向き: フルスクリーン+ロック試行 + 縦向き警告オーバーレイ
+    // 縦向き: 一時トースト表示（タップで消せる、操作はブロックしない）
     const rotateMsg = document.createElement('div');
     rotateMsg.id = 'rotate-msg';
-    rotateMsg.style.cssText = 'position:fixed;inset:0;z-index:9000;' +
-        'background:rgba(10,12,20,0.95);display:none;' +
-        'align-items:center;justify-content:center;flex-direction:column;' +
-        'color:#00d4ff;font-size:18px;font-weight:bold;font-family:Arial,sans-serif;';
-    rotateMsg.innerHTML = '<div style="font-size:48px;margin-bottom:16px;">&#x1F504;</div>' +
-        'Please rotate to landscape';
+    rotateMsg.style.cssText = 'position:fixed;top:50%;left:50%;z-index:9000;' +
+        'transform:translate(-50%,-50%);background:rgba(10,12,20,0.9);' +
+        'padding:20px 30px;border-radius:12px;border:1px solid #00d4ff44;' +
+        'display:none;text-align:center;' +
+        'color:#00d4ff;font-size:15px;font-weight:bold;font-family:Arial,sans-serif;';
+    rotateMsg.innerHTML = '<div style="font-size:36px;margin-bottom:10px;">&#x1F504;</div>' +
+        'Landscape recommended<br>' +
+        '<span style="font-size:11px;color:#666;font-weight:normal;">Tap to dismiss</span>';
+    rotateMsg.addEventListener('click', () => { rotateMsg.style.display = 'none'; });
     document.body.appendChild(rotateMsg);
 
+    let rotateMsgDismissed = false;
     function checkOrientation() {
+        if (rotateMsgDismissed) return;
         const portrait = window.innerHeight > window.innerWidth;
-        rotateMsg.style.display = portrait ? 'flex' : 'none';
+        rotateMsg.style.display = portrait ? 'block' : 'none';
+        if (!portrait) rotateMsgDismissed = true;  // 横向きになったら以後表示しない
     }
     window.addEventListener('resize', checkOrientation);
     window.addEventListener('orientationchange', checkOrientation);
     checkOrientation();
-
-    // タップでフルスクリーン → orientation lock
-    canvas.addEventListener('click', () => {
-        if (!document.fullscreenElement && canvas.requestFullscreen) {
-            canvas.requestFullscreen().then(() => {
-                if (screen.orientation && screen.orientation.lock) {
-                    screen.orientation.lock('landscape').catch(() => {});
-                }
-            }).catch(() => {});
-        }
-    }, { once: true });
 
     // 下部アクションバーを挿入
     const bar = document.createElement('div');
@@ -2740,6 +2735,16 @@ function initMobileUI() {
         'font-size:18px;cursor:pointer;flex-shrink:0;';
     menuBtn.addEventListener('click', toggleMobileDrawer);
     bar.appendChild(menuBtn);
+
+    // フルスクリーンボタン
+    const fsBtn = document.createElement('button');
+    fsBtn.id = 'mobile-fs-btn';
+    fsBtn.textContent = '\u26F6';
+    fsBtn.style.cssText = 'padding:8px 10px;background:rgba(255,255,255,0.08);' +
+        'border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:#aaa;' +
+        'font-size:16px;cursor:pointer;flex-shrink:0;';
+    fsBtn.addEventListener('click', toggleFullscreen);
+    bar.appendChild(fsBtn);
 
     modes.forEach(m => {
         const btn = document.createElement('button');
@@ -2788,6 +2793,18 @@ function updateMobileBar() {
         btn.style.borderColor = active ? modes[m] : 'rgba(255,255,255,0.1)';
         btn.style.color = active ? modes[m] : '#888';
     });
+}
+
+function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().then(() => {
+            if (screen.orientation && screen.orientation.lock) {
+                screen.orientation.lock('landscape').catch(() => {});
+            }
+        }).catch(() => {});
+    } else {
+        document.exitFullscreen().catch(() => {});
+    }
 }
 
 function toggleMobileDrawer() {
