@@ -331,7 +331,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v185</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v186</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2789,7 +2789,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v185</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v186</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -5961,13 +5961,14 @@ function panelGrabHitTest(fingerX, fingerY, fingerZ) {
 
 // パネルタッチで何を実行するか判定
 function handlePanelTouch(canvasX, canvasY) {
-    // VISIBILITY カード領域 (drawPanelCanvas の座標に合わせる)
+    // VISIBILITY カード領域 (drawPanelCanvas と同じ計算式)
     const cardStartY = 50;
-    const cardSize = 80, cardGap = 8, cardCols = 3;
+    const cardCols = 3, cardGap = 12;
+    const cardSize = Math.floor((PANEL_W - 32 - cardGap * (cardCols - 1)) / cardCols);
     const cardRows = 2;
     if (canvasY >= cardStartY && canvasY < cardStartY + cardRows * (cardSize + cardGap)) {
         const row = Math.floor((canvasY - cardStartY) / (cardSize + cardGap));
-        const col = Math.floor(canvasX / (PANEL_W / cardCols));
+        const col = Math.floor((canvasX - 16) / (cardSize + cardGap));
         const organIdx = row * cardCols + col;
         if (organIdx >= 0 && organIdx < 6) {
             vrToggleOrgan(organIdx);
