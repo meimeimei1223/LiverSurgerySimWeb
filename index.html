@@ -329,7 +329,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v167</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v168</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -618,6 +618,13 @@ void main() {
     vec4 c = texture(uTex, vUV);
     fragColor = vec4(c.rgb, c.a * uAlpha);
 }`;
+
+//-- Device Detection --------------------------------------------------
+const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+const isSmallScreen = window.innerWidth <= 900 || window.innerHeight <= 500;
+const isMobile = isTouchDevice && isSmallScreen;
+console.log('[Device]', isMobile ? 'MOBILE' : 'DESKTOP',
+    '| touch:', isTouchDevice, '| screen:', window.innerWidth + 'x' + window.innerHeight);
 
 //-- Globals -----------------------------------------------------------
 const canvas = document.getElementById('canvas');
@@ -2608,6 +2615,105 @@ function drawHandleSpheres3D(M, V, P, cp) {
     gl.disable(gl.BLEND);
 }
 
+//-- Mobile UI ---------------------------------------------------------
+function initMobileUI() {
+    console.log('[Mobile] Initializing mobile UI');
+
+    // Liver以外は ON/OFF のみ（半透明はスマホで重い）
+    for (let i = 1; i < ORGAN_NUM_STATES.length; i++) {
+        if (i !== 5) ORGAN_NUM_STATES[i] = 2;  // Sphere は元々2
+    }
+
+    // 横向き推奨
+    if (screen.orientation && screen.orientation.lock) {
+        screen.orientation.lock('landscape').catch(() => {});
+    }
+
+    // 下部アクションバーを挿入
+    const bar = document.createElement('div');
+    bar.id = 'mobile-bar';
+    bar.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:50;' +
+        'display:flex;align-items:center;gap:2px;padding:4px 6px;' +
+        'background:rgba(10,12,18,0.92);border-top:1px solid rgba(255,255,255,0.08);';
+    const modes = [
+        { mode:'deform',   label:'Deform',    key:'D', color:'#cc8833' },
+        { mode:'freeCut',  label:'Cut',        key:'X', color:'#cc3333' },
+        { mode:'segCut',   label:'Seg',        key:'Q', color:'#3388cc' },
+        { mode:'transform',label:'Transform',  key:'T', color:'#4dc0e6' },
+    ];
+    // メニューボタン（右パネル展開用）
+    const menuBtn = document.createElement('button');
+    menuBtn.id = 'mobile-menu-btn';
+    menuBtn.textContent = '\u2630';
+    menuBtn.style.cssText = 'padding:8px 10px;background:rgba(255,255,255,0.08);' +
+        'border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:#aaa;' +
+        'font-size:18px;cursor:pointer;flex-shrink:0;';
+    menuBtn.addEventListener('click', toggleMobileDrawer);
+    bar.appendChild(menuBtn);
+
+    modes.forEach(m => {
+        const btn = document.createElement('button');
+        btn.className = 'mobile-action-btn';
+        btn.dataset.mode = m.mode;
+        btn.textContent = m.label;
+        btn.style.cssText = 'flex:1;padding:10px 4px;border:1px solid rgba(255,255,255,0.1);' +
+            'border-radius:6px;background:rgba(255,255,255,0.04);color:#888;' +
+            'font-size:12px;font-weight:bold;cursor:pointer;text-align:center;';
+        btn.addEventListener('click', () => {
+            setActionMode(actionMode === m.mode ? 'none' : m.mode);
+            updateMobileBar();
+        });
+        bar.appendChild(btn);
+    });
+    document.body.appendChild(bar);
+
+    // info パネルをコンパクトに
+    const info = document.getElementById('info');
+    if (info) {
+        info.style.top = '6px';
+        info.style.left = '6px';
+        info.style.padding = '8px 10px';
+        info.style.fontSize = '11px';
+    }
+
+    // OBJ Drop / Firebase を小さく
+    const drop = document.getElementById('folder-drop-area');
+    if (drop) {
+        drop.style.bottom = '52px';
+        drop.style.fontSize = '11px';
+        drop.style.padding = '6px 12px';
+        drop.style.minWidth = '120px';
+    }
+
+    updateMobileBar();
+}
+
+function updateMobileBar() {
+    const btns = document.querySelectorAll('.mobile-action-btn');
+    const modes = { deform:'#cc8833', freeCut:'#cc3333', segCut:'#3388cc', transform:'#4dc0e6' };
+    btns.forEach(btn => {
+        const m = btn.dataset.mode;
+        const active = actionMode === m;
+        btn.style.background = active ? modes[m] + '33' : 'rgba(255,255,255,0.04)';
+        btn.style.borderColor = active ? modes[m] : 'rgba(255,255,255,0.1)';
+        btn.style.color = active ? modes[m] : '#888';
+    });
+}
+
+function toggleMobileDrawer() {
+    const ctrl = document.getElementById('ctrl');
+    if (!ctrl) return;
+    const visible = ctrl.style.display !== 'none';
+    ctrl.style.display = visible ? 'none' : 'block';
+    // ドロワー表示時はcanvasの幅を縮小しない（overlay扱い）
+    if (!visible) {
+        ctrl.style.position = 'fixed';
+        ctrl.style.zIndex = '60';
+        ctrl.style.top = '0';
+        ctrl.style.bottom = '48px';
+    }
+}
+
 //-- initApp: called when WASM runtime is ready ------------------------
 function initApp() {
     try {
@@ -2728,7 +2834,15 @@ function initApp() {
 
         updateMeshInfo();
         ['loading'].forEach(id=>document.getElementById(id).style.display='none');
-        ['info','ctrl','params'].forEach(id=>document.getElementById(id).style.display='block');
+        if (isMobile) {
+            // スマホ: 右パネル・パラメータ非表示、info + モバイルUI表示
+            document.getElementById('info').style.display = 'block';
+            document.getElementById('ctrl').style.display = 'none';
+            document.getElementById('params').style.display = 'none';
+            initMobileUI();
+        } else {
+            ['info','ctrl','params'].forEach(id=>document.getElementById(id).style.display='block');
+        }
 
         // 子メッシュ登録
         const childDefs = [
