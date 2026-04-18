@@ -331,7 +331,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v187</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v188</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -521,7 +521,7 @@ window.Module = {
     locateFile: function(path) { return path; }
 };
 </script>
-<script src="softbody.js?v=157"></script>
+<script src="softbody.js?v=188"></script>
 <script>
 'use strict';
 
@@ -1613,43 +1613,29 @@ canvas.addEventListener('pointermove', e=>{
             sb.translateModel(fwd[0]*dy*sens, fwd[1]*dy*sens, fwd[2]*dy*sens);
         }
     } else if (cutterDragging || cutterRotating) {
-        // C++ glfw_onMouseMoveOrbit cutMode + isDragging 準拠
+        // C++ CutterMeshState::updateRotation / updateTranslation 準拠
         const leftBtn = (e.buttons & 1) !== 0;
         const rBtn = rightBtnDown || (e.buttons & 2) !== 0;
         const r = cam._right, u = cam._up, f = cam._fwd;
-        const sens = 0.005;
+        const MOUSE_SENS = 0.005;
+        const LIGHT_MOUSE_SENS = 0.01;
 
         if (leftBtn && !rBtn) {
-            // 左のみ = カッター回転
-            cutterYaw += dx * 0.02;
-            cutterPitch += dy * 0.02;
-            sb.setCutterRotation(cutterYaw, cutterPitch);
+            // 左のみ = カッター回転 (C++: cameraRight軸 + cameraUp軸 でデルタ回転行列)
+            sb.cutterDeltaRotate(dy * 0.01, dx * 0.01,
+                r[0], r[1], r[2], u[0], u[1], u[2]);
         } else if (rBtn && !leftBtn) {
-            // 右のみ = カッター平行移動 (cameraRight * dx + cameraUp * -dy)
-            const v = sb.getCutterVertices();
-            if (v && v.length >= 3) {
-                const nv = v.length/3;
-                let cx=0,cy=0,cz=0;
-                for(let i=0;i<v.length;i+=3){cx+=v[i];cy+=v[i+1];cz+=v[i+2];}
-                cx/=nv; cy/=nv; cz/=nv;
-                sb.setCutterPosition(
-                    cx + r[0]*dx*sens + u[0]*(-dy)*sens,
-                    cy + r[1]*dx*sens + u[1]*(-dy)*sens,
-                    cz + r[2]*dx*sens + u[2]*(-dy)*sens);
-            }
+            // 右のみ = カッター平行移動 (C++: cameraRight * dx + cameraUp * -dy)
+            sb.cutterDeltaTranslate(
+                r[0]*dx*MOUSE_SENS + u[0]*(-dy)*MOUSE_SENS,
+                r[1]*dx*MOUSE_SENS + u[1]*(-dy)*MOUSE_SENS,
+                r[2]*dx*MOUSE_SENS + u[2]*(-dy)*MOUSE_SENS);
         } else if (leftBtn && rBtn) {
-            // 両方 = 前後移動 (cameraDirection * dy)
-            const v = sb.getCutterVertices();
-            if (v && v.length >= 3) {
-                const nv = v.length/3;
-                let cx=0,cy=0,cz=0;
-                for(let i=0;i<v.length;i+=3){cx+=v[i];cy+=v[i+1];cz+=v[i+2];}
-                cx/=nv; cy/=nv; cz/=nv;
-                sb.setCutterPosition(
-                    cx + f[0]*dy*sens,
-                    cy + f[1]*dy*sens,
-                    cz + f[2]*dy*sens);
-            }
+            // 両方 = 前後移動 (C++: cameraDirection * dy * LIGHT_MOUSE_SENSITIVITY)
+            sb.cutterDeltaTranslate(
+                f[0]*dy*LIGHT_MOUSE_SENS,
+                f[1]*dy*LIGHT_MOUSE_SENS,
+                f[2]*dy*LIGHT_MOUSE_SENS);
         }
     } else if (grab) {
         const rect = canvas.getBoundingClientRect();
@@ -2789,7 +2775,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v187</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v188</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
