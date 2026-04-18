@@ -331,7 +331,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v190</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v191</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -1427,6 +1427,49 @@ canvas.addEventListener('touchend', e => {
     }
 });
 
+// カッター配置処理（PC即時 / モバイル遅延後に呼ばれる）
+function executeCutterPlace(pointerId, clientX, clientY) {
+    activePointerId = pointerId;
+    canvas.setPointerCapture(pointerId);
+    last = {x: clientX, y: clientY};
+
+    const rect = canvas.getBoundingClientRect();
+    const sx = clientX - rect.left;
+    const sy = clientY - rect.top;
+    const ray = screenToWorldRay(sx, sy);
+    const hit = raycastMesh(ray);
+    if (hit) {
+        cutTargetMeshIdx = hit.meshIdx;
+        sb.setCutterPosition(hit.point[0], hit.point[1], hit.point[2]);
+        const isVessel = (cutTargetMeshIdx >= 0 && cutTargetMeshIdx <= 1);
+        const targetScale = isVessel ? cutterTargetScales.vessel : cutterTargetScales.liver;
+        sb.setCutterScale(targetScale);
+        const slider = document.getElementById('cut-scale');
+        if (slider) { slider.value = targetScale; }
+        const scaleV = document.getElementById('cut-scale-v');
+        if (scaleV) scaleV.textContent = targetScale.toFixed(2);
+        cutterPlaced = true;
+        cutterDragging = true;
+        numHighlightIdx = 0;
+        const targetLabel = cutTargetMeshIdx < 0 ? 'Liver' : childBuffers[cutTargetMeshIdx].label;
+        const statusEl = document.getElementById('cut-status');
+        if (statusEl) statusEl.textContent = targetLabel + ': placed';
+        if (segOverlayMode && sb.isSkeletonAnalyzed()) {
+            updateSegOverlayColors(hit.point[0], hit.point[1], hit.point[2], cutTargetMeshIdx);
+        }
+        if (isMobile && typeof updateMobileSubPanel === 'function') updateMobileSubPanel();
+    } else {
+        if (cutterPlaced) {
+            cutterPlaced = false;
+            numHighlightIdx = 0;
+            document.getElementById('cut-popup').style.display = 'none';
+            const statusEl = document.getElementById('cut-status');
+            if (statusEl) statusEl.textContent = 'Tap mesh to place cutter';
+        }
+        drag = true;
+    }
+}
+
 canvas.addEventListener('pointerdown', e=>{
     if (!sb || activePointerId >= 0) return;
     // 右ボタン状態トラッキング
@@ -1529,49 +1572,6 @@ canvas.addEventListener('pointerdown', e=>{
         last = {x: e.clientX, y: e.clientY};
         transformDragging = true;
         return;
-    }
-
-    // カッター配置処理（PC即時 / モバイル遅延後に呼ばれる）
-    function executeCutterPlace(pointerId, clientX, clientY) {
-        activePointerId = pointerId;
-        canvas.setPointerCapture(pointerId);
-        last = {x: clientX, y: clientY};
-
-        const rect = canvas.getBoundingClientRect();
-        const sx = clientX - rect.left;
-        const sy = clientY - rect.top;
-        const ray = screenToWorldRay(sx, sy);
-        const hit = raycastMesh(ray);
-        if (hit) {
-            cutTargetMeshIdx = hit.meshIdx;
-            sb.setCutterPosition(hit.point[0], hit.point[1], hit.point[2]);
-            const isVessel = (cutTargetMeshIdx >= 0 && cutTargetMeshIdx <= 1);
-            const targetScale = isVessel ? cutterTargetScales.vessel : cutterTargetScales.liver;
-            sb.setCutterScale(targetScale);
-            const slider = document.getElementById('cut-scale');
-            if (slider) { slider.value = targetScale; }
-            const scaleV = document.getElementById('cut-scale-v');
-            if (scaleV) scaleV.textContent = targetScale.toFixed(2);
-            cutterPlaced = true;
-            cutterDragging = true;
-            numHighlightIdx = 0;
-            const targetLabel = cutTargetMeshIdx < 0 ? 'Liver' : childBuffers[cutTargetMeshIdx].label;
-            const statusEl = document.getElementById('cut-status');
-            if (statusEl) statusEl.textContent = targetLabel + ': placed';
-            if (segOverlayMode && sb.isSkeletonAnalyzed()) {
-                updateSegOverlayColors(hit.point[0], hit.point[1], hit.point[2], cutTargetMeshIdx);
-            }
-            if (isMobile) updateMobileSubPanel();
-        } else {
-            if (cutterPlaced) {
-                cutterPlaced = false;
-                numHighlightIdx = 0;
-                document.getElementById('cut-popup').style.display = 'none';
-                const statusEl = document.getElementById('cut-status');
-                if (statusEl) statusEl.textContent = 'Tap mesh to place cutter';
-            }
-            drag = true;
-        }
     }
 
     // カットモード（C++準拠: クリック=配置、ドラッグ=回転、スクロール=サイズ）
@@ -2828,7 +2828,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v190</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v191</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
