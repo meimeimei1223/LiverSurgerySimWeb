@@ -329,7 +329,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v169</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v170</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2689,10 +2689,35 @@ function initMobileUI() {
         if (i !== 5) ORGAN_NUM_STATES[i] = 2;  // Sphere は元々2
     }
 
-    // 横向き推奨
-    if (screen.orientation && screen.orientation.lock) {
-        screen.orientation.lock('landscape').catch(() => {});
+    // 横向き: フルスクリーン+ロック試行 + 縦向き警告オーバーレイ
+    const rotateMsg = document.createElement('div');
+    rotateMsg.id = 'rotate-msg';
+    rotateMsg.style.cssText = 'position:fixed;inset:0;z-index:9000;' +
+        'background:rgba(10,12,20,0.95);display:none;' +
+        'align-items:center;justify-content:center;flex-direction:column;' +
+        'color:#00d4ff;font-size:18px;font-weight:bold;font-family:Arial,sans-serif;';
+    rotateMsg.innerHTML = '<div style="font-size:48px;margin-bottom:16px;">&#x1F504;</div>' +
+        'Please rotate to landscape';
+    document.body.appendChild(rotateMsg);
+
+    function checkOrientation() {
+        const portrait = window.innerHeight > window.innerWidth;
+        rotateMsg.style.display = portrait ? 'flex' : 'none';
     }
+    window.addEventListener('resize', checkOrientation);
+    window.addEventListener('orientationchange', checkOrientation);
+    checkOrientation();
+
+    // タップでフルスクリーン → orientation lock
+    canvas.addEventListener('click', () => {
+        if (!document.fullscreenElement && canvas.requestFullscreen) {
+            canvas.requestFullscreen().then(() => {
+                if (screen.orientation && screen.orientation.lock) {
+                    screen.orientation.lock('landscape').catch(() => {});
+                }
+            }).catch(() => {});
+        }
+    }, { once: true });
 
     // 下部アクションバーを挿入
     const bar = document.createElement('div');
