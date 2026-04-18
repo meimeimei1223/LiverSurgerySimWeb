@@ -331,7 +331,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v176</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v177</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2783,21 +2783,46 @@ function initMobileUI() {
         info.style.fontSize = '11px';
     }
 
-    // OBJ Drop / Firebase を下部バーの上に配置
+    // OBJ Drop を info パネルの右横に移動（上部）
     const drop = document.getElementById('folder-drop-area');
     if (drop) {
-        drop.style.bottom = '52px';
+        drop.style.bottom = 'auto';
+        drop.style.top = '12px';
+        drop.style.left = 'auto';
+        drop.style.right = '12px';
         drop.style.fontSize = '11px';
         drop.style.padding = '6px 12px';
-        drop.style.minWidth = '120px';
+        drop.style.minWidth = 'auto';
     }
-    // Firebase ボタンも下部バーの上（DOMロード後に位置調整）
+    // Firebase ボタンも右上（OBJ Dropの下）
     setTimeout(() => {
         const fbToggle = document.getElementById('firebase-toggle-btn');
-        if (fbToggle) fbToggle.style.bottom = '52px';
+        if (fbToggle) {
+            fbToggle.style.bottom = 'auto';
+            fbToggle.style.top = '50px';
+            fbToggle.style.left = 'auto';
+            fbToggle.style.right = '12px';
+        }
         const fbArea = document.getElementById('firebase-load-area');
-        if (fbArea) fbArea.style.bottom = '52px';
+        if (fbArea) {
+            fbArea.style.bottom = 'auto';
+            fbArea.style.top = '50px';
+            fbArea.style.left = 'auto';
+            fbArea.style.right = '12px';
+        }
     }, 500);
+
+    // ログアウトボタンをコンパクトに（スマホ）
+    setTimeout(() => {
+        const logout = document.getElementById('fb-logout-btn');
+        if (logout) {
+            logout.textContent = 'Logout';
+            logout.style.fontSize = '10px';
+            logout.style.padding = '3px 8px';
+            logout.style.top = '80px';
+            logout.style.right = '12px';
+        }
+    }, 1000);
 
     updateMobileBar();
 }
