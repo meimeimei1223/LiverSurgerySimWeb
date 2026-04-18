@@ -331,7 +331,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v179</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v180</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2774,49 +2774,75 @@ function initMobileUI() {
     });
     document.body.appendChild(bar);
 
-    // info パネルをコンパクトに
+    // info パネルを統合型に改造（FPSのみ常時表示、他は折りたたみ）
     const info = document.getElementById('info');
     if (info) {
         info.style.top = '6px';
         info.style.left = '6px';
-        info.style.padding = '8px 10px';
+        info.style.padding = '6px 10px';
         info.style.fontSize = '11px';
-    }
+        info.style.minWidth = 'auto';
 
-    // OBJ Drop を info パネルの右横に配置
-    const infoEl = document.getElementById('info');
-    const infoW = infoEl ? infoEl.offsetWidth : 180;
-    const dropLeft = 12 + infoW + 8;  // info左端 + info幅 + gap
-    const drop = document.getElementById('folder-drop-area');
-    if (drop) {
-        drop.style.bottom = 'auto';
-        drop.style.top = '12px';
-        drop.style.left = dropLeft + 'px';
-        drop.style.right = 'auto';
-        drop.style.fontSize = '11px';
-        drop.style.padding = '5px 10px';
-        drop.style.minWidth = 'auto';
-        drop.style.borderRadius = '6px';
+        // 元の中身を保存して再構築
+        const verSpan = info.querySelector('div');
+        const verText = verSpan ? verSpan.innerHTML : 'Liver Sim';
+
+        info.innerHTML = `
+            <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
+                <span style="color:#00d4ff;font-weight:bold;font-size:12px;">Liver Sim</span>
+                <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
+                <span style="color:#888;font-size:10px;">FPS</span>
+                <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
+            </div>
+            <div id="mobile-info-detail" style="display:none;margin-top:6px;border-top:1px solid rgba(255,255,255,0.08);padding-top:6px;">
+                <div style="color:#888;font-size:10px;margin-bottom:4px;">
+                    <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> v, <span class="v" id="lo-t">-</span> t<br>
+                    <span style="color:#aaa;">HighRes:</span> <span class="v" id="hi-v">-</span> v, <span class="v" id="hi-t">-</span> t<br>
+                    <span style="color:#aaa;">Smooth:</span> <span class="v" id="sm-t">-</span> tris
+                </div>
+                <div id="mobile-data-btns" style="display:flex;gap:4px;margin-top:6px;"></div>
+            </div>`;
+
+        // タップで展開/折りたたみ
+        document.getElementById('mobile-info-header').addEventListener('click', () => {
+            const detail = document.getElementById('mobile-info-detail');
+            const arrow = document.getElementById('mobile-info-arrow');
+            const show = detail.style.display === 'none';
+            detail.style.display = show ? 'block' : 'none';
+            arrow.innerHTML = show ? '&#9660;' : '&#9654;';
+        });
+
+        // OBJ Drop と Firebase を展開エリア内に移動
+        const dataBtns = document.getElementById('mobile-data-btns');
+        const drop = document.getElementById('folder-drop-area');
+        if (drop && dataBtns) {
+            drop.style.cssText = 'position:static;display:inline-block;' +
+                'border:1px dashed #555;border-radius:5px;' +
+                'padding:4px 8px;font-size:10px;color:#aaa;cursor:pointer;';
+            drop.innerHTML = 'OBJ <span style="font-size:9px;color:#666;">drop/click</span>';
+            dataBtns.appendChild(drop);
+        }
+        // Firebase ボタンも展開エリア内に移動
+        setTimeout(() => {
+            const fbToggle = document.getElementById('firebase-toggle-btn');
+            if (fbToggle && dataBtns) {
+                fbToggle.style.cssText = 'position:static;display:inline-block;' +
+                    'padding:4px 8px;background:rgba(10,30,50,0.7);' +
+                    'border:1px solid #1a4a7a;border-radius:5px;' +
+                    'cursor:pointer;font-size:10px;color:#4488aa;';
+                dataBtns.appendChild(fbToggle);
+            }
+            // Firebase展開パネルも再配置
+            const fbArea = document.getElementById('firebase-load-area');
+            if (fbArea) {
+                fbArea.style.position = 'fixed';
+                fbArea.style.top = '80px';
+                fbArea.style.left = '6px';
+                fbArea.style.bottom = 'auto';
+                fbArea.style.right = 'auto';
+            }
+        }, 500);
     }
-    // Firebase ボタンを OBJ Drop の直下に揃える
-    setTimeout(() => {
-        const fbToggle = document.getElementById('firebase-toggle-btn');
-        if (fbToggle) {
-            fbToggle.style.bottom = 'auto';
-            fbToggle.style.top = '42px';
-            fbToggle.style.left = dropLeft + 'px';
-            fbToggle.style.right = 'auto';
-            fbToggle.style.padding = '4px 10px';
-            fbToggle.style.minWidth = 'auto';
-        }
-        const fbArea = document.getElementById('firebase-load-area');
-        if (fbArea) {
-            fbArea.style.bottom = 'auto';
-            fbArea.style.top = '42px';
-            fbArea.style.left = dropLeft + 'px';
-            fbArea.style.right = 'auto';
-        }
-    }, 500);
 
     updateMobileBar();
 }
