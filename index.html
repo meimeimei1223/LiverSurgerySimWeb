@@ -331,7 +331,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v189</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v190</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -684,6 +684,9 @@ const cutterTargetScales = { liver: 1.0, vessel: 0.5 };
 let cutterDragging = false;  // right drag = move
 let cutterRotating = false;  // left drag = rotate
 let cutterYaw = 0, cutterPitch = 0;
+// モバイル: タップ遅延判定（ピンチとの誤爆防止）
+let mobileTapTimer = null;
+let mobileTapPending = null;  // { pointerId, clientX, clientY }
 let segOverlayMode = false;  // Seg Overlay (Q key)
 // 臓器別カッターカラー: C++のCutterMeshManager準拠
 const CUTTER_COLORS = {
@@ -1369,6 +1372,9 @@ canvas.addEventListener('touchstart', e => {
         activePointerId = -1;
         canvas.style.cursor = 'default';
     }
+    // モバイルタップ遅延キャンセル（2本指来た → カッター配置しない）
+    if (mobileTapTimer) { clearTimeout(mobileTapTimer); mobileTapTimer = null; mobileTapPending = null; }
+
     const t0 = e.touches[0], t1 = e.touches[1];
     const dx = t1.clientX - t0.clientX, dy = t1.clientY - t0.clientY;
     touchState.active = true;
@@ -1525,47 +1531,66 @@ canvas.addEventListener('pointerdown', e=>{
         return;
     }
 
-    // カットモード（C++準拠: クリック=配置、ドラッグ=回転、スクロール=サイズ）
-    if (cutMode) {
-        activePointerId = e.pointerId;
-        canvas.setPointerCapture(e.pointerId);
-        last = {x: e.clientX, y: e.clientY};
+    // カッター配置処理（PC即時 / モバイル遅延後に呼ばれる）
+    function executeCutterPlace(pointerId, clientX, clientY) {
+        activePointerId = pointerId;
+        canvas.setPointerCapture(pointerId);
+        last = {x: clientX, y: clientY};
 
         const rect = canvas.getBoundingClientRect();
-        const sx = e.clientX - rect.left;
-        const sy = e.clientY - rect.top;
+        const sx = clientX - rect.left;
+        const sy = clientY - rect.top;
         const ray = screenToWorldRay(sx, sy);
         const hit = raycastMesh(ray);
         if (hit) {
             cutTargetMeshIdx = hit.meshIdx;
             sb.setCutterPosition(hit.point[0], hit.point[1], hit.point[2]);
-            // C++ TargetScales 準拠: 臓器別保持スケールを適用
             const isVessel = (cutTargetMeshIdx >= 0 && cutTargetMeshIdx <= 1);
             const targetScale = isVessel ? cutterTargetScales.vessel : cutterTargetScales.liver;
             sb.setCutterScale(targetScale);
             const slider = document.getElementById('cut-scale');
-            slider.value = targetScale;
-            document.getElementById('cut-scale-v').textContent = targetScale.toFixed(2);
+            if (slider) { slider.value = targetScale; }
+            const scaleV = document.getElementById('cut-scale-v');
+            if (scaleV) scaleV.textContent = targetScale.toFixed(2);
             cutterPlaced = true;
             cutterDragging = true;
             numHighlightIdx = 0;
             const targetLabel = cutTargetMeshIdx < 0 ? 'Liver' : childBuffers[cutTargetMeshIdx].label;
-            document.getElementById('cut-status').textContent =
-                targetLabel + ': placed (drag:rotate, scroll:size)';
+            const statusEl = document.getElementById('cut-status');
+            if (statusEl) statusEl.textContent = targetLabel + ': placed';
             if (segOverlayMode && sb.isSkeletonAnalyzed()) {
                 updateSegOverlayColors(hit.point[0], hit.point[1], hit.point[2], cutTargetMeshIdx);
             }
+            if (isMobile) updateMobileSubPanel();
         } else {
-            // メッシュ外クリック → カッターリセット + カメラ操作
             if (cutterPlaced) {
                 cutterPlaced = false;
                 numHighlightIdx = 0;
                 document.getElementById('cut-popup').style.display = 'none';
-                document.getElementById('cut-status').textContent = 'Click mesh to place cutter';
+                const statusEl = document.getElementById('cut-status');
+                if (statusEl) statusEl.textContent = 'Tap mesh to place cutter';
             }
             drag = true;
-            canvas.style.cursor = 'move';
         }
+    }
+
+    // カットモード（C++準拠: クリック=配置、ドラッグ=回転、スクロール=サイズ）
+    if (cutMode) {
+        if (isMobile) {
+            // モバイル: 100ms 遅延でタップ判定（ピンチとの誤爆防止）
+            last = {x: e.clientX, y: e.clientY};
+            mobileTapPending = { pointerId: e.pointerId, clientX: e.clientX, clientY: e.clientY };
+            mobileTapTimer = setTimeout(() => {
+                mobileTapTimer = null;
+                if (!mobileTapPending) return;
+                const pe = mobileTapPending;
+                mobileTapPending = null;
+                executeCutterPlace(pe.pointerId, pe.clientX, pe.clientY);
+            }, 100);
+            return;
+        }
+        // PC: 即時配置
+        executeCutterPlace(e.pointerId, e.clientX, e.clientY);
         return;
     }
 
@@ -1620,18 +1645,22 @@ canvas.addEventListener('pointermove', e=>{
         const MOUSE_SENS = 0.005;
         const LIGHT_MOUSE_SENS = 0.01;
 
-        if (leftBtn && !rBtn) {
-            // 左のみ = カッター回転 (C++: cameraRight軸 + cameraUp軸 でデルタ回転行列)
+        if (isMobile) {
+            // モバイル: 1本指ドラッグ = カッター回転のみ（平行移動はタップで再配置）
+            sb.cutterDeltaRotate(dy * 0.01, dx * 0.01,
+                r[0], r[1], r[2], u[0], u[1], u[2]);
+        } else if (leftBtn && !rBtn) {
+            // PC左のみ = カッター回転
             sb.cutterDeltaRotate(dy * 0.01, dx * 0.01,
                 r[0], r[1], r[2], u[0], u[1], u[2]);
         } else if (rBtn && !leftBtn) {
-            // 右のみ = カッター平行移動 (C++: cameraRight * dx + cameraUp * -dy)
+            // PC右のみ = カッター平行移動
             sb.cutterDeltaTranslate(
                 r[0]*dx*MOUSE_SENS + u[0]*(-dy)*MOUSE_SENS,
                 r[1]*dx*MOUSE_SENS + u[1]*(-dy)*MOUSE_SENS,
                 r[2]*dx*MOUSE_SENS + u[2]*(-dy)*MOUSE_SENS);
         } else if (leftBtn && rBtn) {
-            // 両方 = 前後移動 (C++: cameraDirection * dy * LIGHT_MOUSE_SENSITIVITY)
+            // PC両方 = 前後移動
             sb.cutterDeltaTranslate(
                 f[0]*dy*LIGHT_MOUSE_SENS,
                 f[1]*dy*LIGHT_MOUSE_SENS,
@@ -1651,13 +1680,29 @@ canvas.addEventListener('pointermove', e=>{
 });
 
 function handlePointerEnd(e) {
+    // モバイルタップ遅延のクリーンアップ
+    if (mobileTapPending && mobileTapPending.pointerId === e.pointerId) {
+        // タイマー実行前にリリース → 短いタップ → 配置実行
+        if (mobileTapTimer) {
+            clearTimeout(mobileTapTimer);
+            mobileTapTimer = null;
+            const pe = mobileTapPending;
+            mobileTapPending = null;
+            executeCutterPlace(pe.pointerId, pe.clientX, pe.clientY);
+            // 即座に cutterDragging 解除（タップなのでドラッグなし）
+            cutterDragging = false;
+            if (cutMode && cutterPlaced && isMobile) updateMobileSubPanel();
+            return;
+        }
+    }
     if (e.pointerId !== activePointerId) return;
     activePointerId = -1;
     if (e.button === 2) rightBtnDown = false;
     if (transformDragging) { transformDragging = false; return; }
     if (cutterDragging) {
         cutterDragging = false;
-        if (cutMode && cutterPlaced) showCutPopup();
+        if (cutMode && cutterPlaced && !isMobile) showCutPopup();
+        if (cutMode && cutterPlaced && isMobile) updateMobileSubPanel();
         return;
     }
     if (cutterRotating) { cutterRotating = false; return; }
@@ -2783,7 +2828,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v189</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v190</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
