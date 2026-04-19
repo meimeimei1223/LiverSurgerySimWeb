@@ -1,6 +1,6 @@
 {
   "name": "Liver Surgery Simulator",
-  "short_name": "LiverSim",
+  "short_name": "Liver Surgery Simulator",
   "description": "Real-time liver surgery simulation with WebAssembly",
   "start_url": "./",
   "display": "standalone",

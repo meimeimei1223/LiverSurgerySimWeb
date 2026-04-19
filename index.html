@@ -336,7 +336,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v196</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v197</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -1443,6 +1443,17 @@ function executeMobileTap() {
 
     if (pe.action === 'handlePlace') {
         sendMatricesToCpp();
+        // スマホ: ハンドルが既にあればまずグラブを試す（Place+Deform統合）
+        if (sb.getNumHandleSpheres() > 0) {
+            activePointerId = pe.pointerId;
+            canvas.setPointerCapture(pe.pointerId);
+            last = {x: pe.clientX, y: pe.clientY};
+            grabScreenX = sx; grabScreenY = sy;
+            sb.startGrab(sx, sy);
+            if (sb.isGrabbing()) { grab = true; return; }
+            activePointerId = -1;
+        }
+        // グラブできなかった → 配置を試す
         const ok = sb.addHandleSphereAtScreen(sx, sy, handleSphereRadius);
         if (ok) {
             const n = sb.getNumHandleSpheres();
@@ -2892,7 +2903,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v196</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v197</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -3023,7 +3034,7 @@ function updateMobileSubPanel() {
     }
     function addSlider(parent, label, id, min, max, step, value, color, oninput) {
         const wrap = document.createElement('div');
-        wrap.style.cssText = 'display:flex;align-items:center;gap:4px;flex:1;min-width:100px;';
+        wrap.style.cssText = 'display:flex;align-items:center;gap:4px;width:150px;flex-shrink:0;';
         wrap.innerHTML = `<span style="font-size:9px;color:#888;white-space:nowrap;">${label}</span>
             <input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${value}"
                 style="flex:1;height:16px;accent-color:${color};">
@@ -3080,7 +3091,7 @@ function updateMobileSubPanel() {
         // Liver Alpha スライダー
         if (meshAlphaValues[0] > 0) {
             const alphaRow = document.createElement('div');
-            alphaRow.style.cssText = 'display:flex;align-items:center;gap:4px;margin-bottom:3px;';
+            alphaRow.style.cssText = 'display:flex;align-items:center;gap:4px;margin-bottom:3px;width:180px;';
             alphaRow.innerHTML = `<span style="font-size:9px;color:#888;">Liver&alpha;</span>
                 <input type="range" min="0" max="100" step="5" value="${Math.round(meshAlphaValues[0]*100)}"
                     style="flex:1;height:16px;accent-color:#cc3333;">
