@@ -337,7 +337,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v225</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v212</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -392,9 +392,9 @@
         <div id="sphere-size-row" style="padding:4px 10px 2px;">
           <div style="display:flex;justify-content:space-between;font-size:11px;color:#888;margin-bottom:2px;">
             <span>Sphere Size</span>
-            <span id="sphere-size-val" style="color:#ffff66;">0.30</span>
+            <span id="sphere-size-val" style="color:#ffff66;">0.40</span>
           </div>
-          <input type="range" id="sphere-size-slider" min="0.1" max="1.0" step="0.05" value="0.3"
+          <input type="range" id="sphere-size-slider" min="0.1" max="1.0" step="0.05" value="0.4"
             style="width:100%;">
           <div id="sphere-size-hint" style="font-size:10px;color:#666;display:none;">
             (Clear handles to resize)
@@ -527,7 +527,7 @@ window.Module = {
     locateFile: function(path) { return path; }
 };
 </script>
-<script src="softbody.js?v=224"></script>
+<script src="softbody.js?v=188"></script>
 <script>
 'use strict';
 
@@ -655,8 +655,6 @@ const childBuffers = [];
 let liverVisible = true;
 // ActionMode 排他制御 (C++ ActionMode enum 準拠)
 let actionMode = 'none'; // 'none'|'deform'|'freeCut'|'segCut'|'transform'
-let mobileVisExpanded = false;
-let mobileVolExpanded = false;
 let transformMode = false;
 let transformDragging = false;
 
@@ -956,7 +954,7 @@ function updateMesh() {
 
 //-- Handle mode -------------------------------------------------------
 let handleMode = false;
-let handleSphereRadius = 0.3; // ハンドルスフィア半径
+let handleSphereRadius = 0.4; // ハンドルスフィア半径（C++ DEFAULT_HANDLE_RADIUS = 0.4）
 // (旧アコーディオン toggle は action-btn onclick に置き換え済み)
 
 // Deform サブモード (C++ DeformSubMode 準拠)
@@ -1101,8 +1099,6 @@ function doReset() {
     sb.clearHighlight();
     // 形状リセット
     sb.applyShapeRestoration(1.0);
-    // カメラリセット
-    sb.cameraResetToInitial();
     // バッファ更新
     initIdxBuffer(); updateMesh();
     for (let ci = 0; ci < childBuffers.length; ci++) {
@@ -1489,12 +1485,6 @@ function executeMobileTap() {
                 const pc = new Float32Array(sb.getPortalHighlightColors());
                 if (pc.length > 0) { gl.bindBuffer(gl.ARRAY_BUFFER, bPortalHL); gl.bufferData(gl.ARRAY_BUFFER, pc, gl.DYNAMIC_DRAW); }
             }
-        } else {
-            // メッシュ外 → カメラ操作にフォールスルー（ブラウザ版と同じ）
-            activePointerId = pe.pointerId;
-            canvas.setPointerCapture(pe.pointerId);
-            last = {x: pe.clientX, y: pe.clientY};
-            drag = true;
         }
     } else if (pe.action === 'cutPlace') {
         executeCutterPlace(pe.pointerId, pe.clientX, pe.clientY);
@@ -2808,49 +2798,62 @@ function initMobileUI() {
         if (i !== 5) ORGAN_NUM_STATES[i] = 2;  // Sphere は元々2
     }
 
-    // 縦向きメッセージ廃止（縦でも使いやすいUIに改善済み）
+    // 縦向き: 一時トースト表示（タップで消せる、操作はブロックしない）
+    const rotateMsg = document.createElement('div');
+    rotateMsg.id = 'rotate-msg';
+    rotateMsg.style.cssText = 'position:fixed;top:50%;left:50%;z-index:9000;' +
+        'transform:translate(-50%,-50%);background:rgba(10,12,20,0.9);' +
+        'padding:20px 30px;border-radius:12px;border:1px solid #00d4ff44;' +
+        'display:none;text-align:center;' +
+        'color:#00d4ff;font-size:15px;font-weight:bold;font-family:Arial,sans-serif;';
+    rotateMsg.innerHTML = '<div style="font-size:36px;margin-bottom:10px;">&#x1F504;</div>' +
+        'Landscape recommended<br>' +
+        '<span style="font-size:11px;color:#666;font-weight:normal;">Tap to dismiss</span>';
+    rotateMsg.addEventListener('click', () => { rotateMsg.style.display = 'none'; });
+    document.body.appendChild(rotateMsg);
 
-    // 下部バー: barWrap > topRow(縦のみ) + mainRow(常時)
-    const barWrap = document.createElement('div');
-    barWrap.id = 'mobile-bar';
-    barWrap.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:50;' +
+    let rotateMsgDismissed = false;
+    function checkOrientation() {
+        if (rotateMsgDismissed) return;
+        const portrait = window.innerHeight > window.innerWidth;
+        rotateMsg.style.display = portrait ? 'block' : 'none';
+        if (!portrait) rotateMsgDismissed = true;  // 横向きになったら以後表示しない
+    }
+    window.addEventListener('resize', checkOrientation);
+    window.addEventListener('orientationchange', checkOrientation);
+    checkOrientation();
+
+    // 下部バー: 1段統合 [Vis][Deform][Cut][Seg][Trns][Vol][Reset]
+    const bar = document.createElement('div');
+    bar.id = 'mobile-bar';
+    bar.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:50;' +
+        'display:flex;align-items:center;gap:2px;padding:3px 4px;' +
         'background:rgba(10,12,18,0.92);border-top:1px solid rgba(255,255,255,0.08);';
 
-    const barBtnStyle = 'flex:1;padding:10px 2px;border:1px solid rgba(255,255,255,0.1);' +
+    const barBtnStyle = 'flex:1;padding:8px 2px;border:1px solid rgba(255,255,255,0.1);' +
         'border-radius:5px;background:rgba(255,255,255,0.04);color:#888;' +
-        'font-size:11px;font-weight:bold;cursor:pointer;text-align:center;min-width:0;';
+        'font-size:10px;font-weight:bold;cursor:pointer;text-align:center;min-width:0;';
 
-    function visClick() { mobileVisExpanded = !mobileVisExpanded; mobileVolExpanded = false;
-        if (mobileVisExpanded) setActionMode('none'); updateMobileBar(); }
-    function volClick() { mobileVolExpanded = !mobileVolExpanded; mobileVisExpanded = false;
-        if (mobileVolExpanded) setActionMode('none'); updateMobileBar(); }
-    function resetClick() { if(confirm('Reset?')) doReset(); }
-
-    // === 上段（縦のみ）: [Visibility][Volume][Reset][⛶] ===
-    const topRow = document.createElement('div');
-    topRow.id = 'mobile-top-row';
-    topRow.style.cssText = 'display:flex;align-items:center;gap:2px;padding:3px 4px;';
-    [{text:'Visibility',click:visClick,cls:'mobile-vis-top'},{text:'Volume',click:volClick,cls:'mobile-vol-top'},
-     {text:'Reset',click:resetClick,style:'border-color:rgba(200,60,60,0.3);color:#cc6666;'},
-     {text:'\u26F6',click:toggleFullscreen,style:'font-size:20px;flex:none;padding:10px 12px;'}
-    ].forEach(d => {
-        const b = document.createElement('button');
-        b.textContent = d.text;
-        b.style.cssText = barBtnStyle + (d.style||'');
-        if (d.cls) b.className = d.cls;
-        b.addEventListener('click', d.click);
-        topRow.appendChild(b);
+    // Visibility トグル
+    const visBtn = document.createElement('button');
+    visBtn.id = 'mobile-vis-btn';
+    visBtn.dataset.labelShort = 'Vis';
+    visBtn.dataset.labelFull = 'Visibility';
+    visBtn.style.cssText = barBtnStyle;
+    visBtn.addEventListener('click', () => {
+        mobileVisExpanded = !mobileVisExpanded;
+        mobileVolExpanded = false;
+        if (mobileVisExpanded) setActionMode('none');
+        updateMobileBar();
     });
+    bar.appendChild(visBtn);
 
-    // === 下段（常時）: モードボタン + 横のみ [Vis][Vol][Reset][⛶] ===
-    const mainRow = document.createElement('div');
-    mainRow.style.cssText = 'display:flex;align-items:center;gap:2px;padding:3px 4px;';
-
+    // モードボタン
     const modes = [
-        { mode:'deform',   labelShort:'Deform',  labelFull:'Deform' },
-        { mode:'freeCut',  labelShort:'Cut',      labelFull:'Free Cut' },
-        { mode:'segCut',   labelShort:'Seg',      labelFull:'Seg Cut' },
-        { mode:'transform',labelShort:'Trns',     labelFull:'Transform' },
+        { mode:'deform',   labelShort:'Deform',  labelFull:'Deform',     color:'#cc8833' },
+        { mode:'freeCut',  labelShort:'Cut',      labelFull:'Free Cut',   color:'#cc3333' },
+        { mode:'segCut',   labelShort:'Seg',      labelFull:'Seg Cut',    color:'#3388cc' },
+        { mode:'transform',labelShort:'Trns',     labelFull:'Transform',  color:'#4dc0e6' },
     ];
     modes.forEach(m => {
         const btn = document.createElement('button');
@@ -2860,35 +2863,52 @@ function initMobileUI() {
         btn.dataset.labelFull = m.labelFull;
         btn.style.cssText = barBtnStyle;
         btn.addEventListener('click', () => {
-            mobileVisExpanded = false; mobileVolExpanded = false;
+            mobileVisExpanded = false;
+            mobileVolExpanded = false;
             setActionMode(actionMode === m.mode ? 'none' : m.mode);
             updateMobileBar();
         });
-        mainRow.appendChild(btn);
-    });
-    // 横専用: Vis/Vol をモードボタンの前に挿入、Reset/FS は末尾
-    [{text:'Volume',click:volClick,cls:'mobile-land-btn mobile-vol-land',pos:'before'},
-     {text:'Visibility',click:visClick,cls:'mobile-land-btn mobile-vis-land',pos:'before'},
-     {text:'Reset',click:resetClick,cls:'mobile-land-btn',style:'border-color:rgba(200,60,60,0.3);color:#cc6666;'},
-     {text:'\u26F6',click:toggleFullscreen,cls:'mobile-land-btn',style:'font-size:20px;flex:none;padding:10px 12px;'}
-    ].forEach(d => {
-        const b = document.createElement('button');
-        b.textContent = d.text;
-        b.style.cssText = barBtnStyle + (d.style||'');
-        b.className = d.cls||'';
-        b.addEventListener('click', d.click);
-        if (d.pos === 'before') mainRow.insertBefore(b, mainRow.firstChild);
-        else mainRow.appendChild(b);
+        bar.appendChild(btn);
     });
 
-    barWrap.appendChild(topRow);
-    barWrap.appendChild(mainRow);
-    document.body.appendChild(barWrap);
+    // Volume トグル
+    const volBtn = document.createElement('button');
+    volBtn.id = 'mobile-vol-btn';
+    volBtn.dataset.labelShort = 'Vol';
+    volBtn.dataset.labelFull = 'Volume';
+    volBtn.style.cssText = barBtnStyle;
+    volBtn.addEventListener('click', () => {
+        mobileVolExpanded = !mobileVolExpanded;
+        mobileVisExpanded = false;
+        if (mobileVolExpanded) setActionMode('none');
+        updateMobileBar();
+    });
+    bar.appendChild(volBtn);
+
+    // Reset
+    const resetBtn = document.createElement('button');
+    resetBtn.textContent = 'Reset';
+    resetBtn.style.cssText = 'padding:8px 4px;background:rgba(255,255,255,0.04);' +
+        'border:1px solid rgba(200,60,60,0.3);border-radius:5px;color:#cc6666;' +
+        'font-size:9px;cursor:pointer;flex-shrink:0;';
+    resetBtn.addEventListener('click', () => { if(confirm('Reset?')) doReset(); });
+    bar.appendChild(resetBtn);
+
+    // フルスクリーンボタン
+    const fsBtn = document.createElement('button');
+    fsBtn.textContent = '\u26F6';
+    fsBtn.style.cssText = 'padding:8px 12px;background:rgba(255,255,255,0.04);' +
+        'border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:#888;' +
+        'font-size:20px;cursor:pointer;flex-shrink:0;';
+    fsBtn.addEventListener('click', toggleFullscreen);
+    bar.appendChild(fsBtn);
+
+    document.body.appendChild(bar);
 
     // サブパネル（バーの上にポップアップ、選択時のみ表示）
     const subPanel = document.createElement('div');
     subPanel.id = 'mobile-sub-panel';
-    subPanel.style.cssText = 'position:fixed;bottom:44px;left:0;right:0;z-index:49;' +
+    subPanel.style.cssText = 'position:fixed;bottom:38px;left:0;right:0;z-index:49;' +
         'display:none;padding:4px 6px;' +
         'background:rgba(10,12,18,0.95);border-top:1px solid rgba(255,255,255,0.1);';
     document.body.appendChild(subPanel);
@@ -2908,7 +2928,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v225</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v212</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -3000,15 +3020,6 @@ function initMobileUI() {
 
 function updateMobileBar() {
     const landscape = window.innerWidth > window.innerHeight;
-
-    // 縦=上段表示+横専用非表示、横=上段非表示+横専用表示
-    const topRow = document.getElementById('mobile-top-row');
-    if (topRow) topRow.style.display = landscape ? 'none' : 'flex';
-    document.querySelectorAll('.mobile-land-btn').forEach(b => {
-        b.style.display = landscape ? '' : 'none';
-    });
-
-    // モードボタンのラベル + ハイライト
     const btns = document.querySelectorAll('.mobile-action-btn');
     const modeColors = { deform:'#cc8833', freeCut:'#cc3333', segCut:'#3388cc', transform:'#4dc0e6' };
     btns.forEach(btn => {
@@ -3017,33 +3028,32 @@ function updateMobileBar() {
         btn.style.background = active ? modeColors[m] + '33' : 'rgba(255,255,255,0.04)';
         btn.style.borderColor = active ? modeColors[m] : 'rgba(255,255,255,0.1)';
         btn.style.color = active ? modeColors[m] : '#888';
-        btn.textContent = btn.dataset.labelFull;
+        btn.textContent = landscape ? btn.dataset.labelFull : btn.dataset.labelShort;
     });
-
-    // Vis/Vol ハイライト（上段+横専用の両セット）
-    const visH = mobileVisExpanded ? 'rgba(0,200,150,0.2)' : 'rgba(255,255,255,0.04)';
-    const visB = mobileVisExpanded ? '#00ccaa' : 'rgba(255,255,255,0.1)';
-    const visC = mobileVisExpanded ? '#00ffdd' : '#888';
-    const volH = mobileVolExpanded ? 'rgba(0,200,150,0.2)' : 'rgba(255,255,255,0.04)';
-    const volB = mobileVolExpanded ? '#00ccaa' : 'rgba(255,255,255,0.1)';
-    const volC = mobileVolExpanded ? '#00ffdd' : '#888';
-    document.querySelectorAll('.mobile-vis-top,.mobile-vis-land').forEach(b => {
-        b.style.background = visH; b.style.borderColor = visB; b.style.color = visC;
-    });
-    document.querySelectorAll('.mobile-vol-top,.mobile-vol-land').forEach(b => {
-        b.style.background = volH; b.style.borderColor = volB; b.style.color = volC;
-    });
-
+    // Vis/Vol ラベル切替 + ハイライト
+    const vb = document.getElementById('mobile-vis-btn');
+    if (vb) {
+        vb.textContent = landscape ? vb.dataset.labelFull : vb.dataset.labelShort;
+        vb.style.background = mobileVisExpanded ? 'rgba(0,200,150,0.2)' : 'rgba(255,255,255,0.04)';
+        vb.style.borderColor = mobileVisExpanded ? '#00ccaa' : 'rgba(255,255,255,0.1)';
+        vb.style.color = mobileVisExpanded ? '#00ffdd' : '#888';
+    }
+    const vlb = document.getElementById('mobile-vol-btn');
+    if (vlb) {
+        vlb.textContent = landscape ? vlb.dataset.labelFull : vlb.dataset.labelShort;
+        vlb.style.background = mobileVolExpanded ? 'rgba(0,200,150,0.2)' : 'rgba(255,255,255,0.04)';
+        vlb.style.borderColor = mobileVolExpanded ? '#00ccaa' : 'rgba(255,255,255,0.1)';
+        vlb.style.color = mobileVolExpanded ? '#00ffdd' : '#888';
+    }
     updateMobileSubPanel();
 }
+
+let mobileVisExpanded = false;
+let mobileVolExpanded = false;
 
 function updateMobileSubPanel() {
     const panel = document.getElementById('mobile-sub-panel');
     if (!panel) return;
-
-    // サブパネルの位置をバー実測高さに合わせる（重なり防止）
-    const bar = document.getElementById('mobile-bar');
-    if (bar) panel.style.bottom = bar.offsetHeight + 'px';
 
     // 何も選択されていなければ非表示
     const hasMode = actionMode !== 'none' && actionMode !== 'transform';
@@ -3127,55 +3137,23 @@ function updateMobileSubPanel() {
             });
             panel.appendChild(alphaRow);
         }
-        // Display モード切替 (Normal / Auto Seg / Preset)
-        const dispRow = document.createElement('div');
-        dispRow.style.cssText = 'display:flex;gap:3px;margin-bottom:3px;';
-        const dispModes = [
-            { label:'Normal', mode:false },
-            { label:'Auto Seg', mode:'skeleton' },
-            { label:'Preset', mode:'obj' },
-        ];
-        const curDisp = typeof segmentColorMode !== 'undefined' ? segmentColorMode : false;
-        dispModes.forEach(d => {
-            const active = curDisp === d.mode;
-            const b = document.createElement('button');
-            b.textContent = d.label;
-            b.style.cssText = `flex:1;padding:4px 2px;border-radius:4px;font-size:9px;font-weight:bold;
-                cursor:pointer;text-align:center;min-width:0;
-                border:1px solid ${active ? '#00ccaa' : 'rgba(255,255,255,0.1)'};
-                background:${active ? 'rgba(0,200,150,0.2)' : 'rgba(255,255,255,0.04)'};
-                color:${active ? '#00ffdd' : '#888'};`;
-            b.addEventListener('click', () => {
-                if (typeof setVisualMode === 'function') setVisualMode(d.mode);
-                updateMobileSubPanel();
-            });
-            dispRow.appendChild(b);
-        });
-        panel.appendChild(dispRow);
     }
 
     // ===== Volume 展開 =====
     if (mobileVolExpanded && sb && typeof sb.areVolumesCaptured === 'function' && sb.areVolumesCaptured()) {
         const volDiv = document.createElement('div');
-        volDiv.style.cssText = 'font-size:10px;color:#aaa;margin-bottom:3px;line-height:1.6;';
+        volDiv.style.cssText = 'font-size:10px;color:#aaa;margin-bottom:3px;line-height:1.5;';
         const totalOrig = sb.getOriginalTotalVolume();
         const totalCur = sb.calculateTotalVolume();
         const pct = totalOrig > 0 ? (totalCur/totalOrig*100) : 100;
-        const pctCol = (pct >= 80 && pct <= 120) ? '#7dff7d' : '#ffcc33';
-        let html = `<span style="color:${pctCol};font-weight:bold;">${totalCur.toFixed(1)} ml</span>`;
-        html += ` <span style="color:#556;">/ ${totalOrig.toFixed(1)} ml</span> (${pct.toFixed(1)}%)<br>`;
+        let html = `<span style="color:#7dff7d;font-weight:bold;">${totalCur.toFixed(1)} ml</span> / ${totalOrig.toFixed(1)} ml (${pct.toFixed(1)}%)<br>`;
         const useOBJ = typeof sb.isOBJSegmentsBound === 'function' && sb.isOBJSegmentsBound();
         const hasSkel = typeof sb.isSkeletonAnalyzed === 'function' && sb.isSkeletonAnalyzed();
         if (useOBJ || hasSkel) {
             for (let id=1;id<=8;id++) {
-                const origV = sb.getOriginalSegmentVolume(id, useOBJ);
                 const cv = sb.calculateSegmentVolume(id, useOBJ);
                 const sp = totalOrig > 0 ? (cv/totalOrig*100) : 0;
-                const ratio = origV > 0.01 ? (cv/origV*100) : 100;
-                const rCol = (ratio >= 80 && ratio <= 120) ? '#7dff7d' : ratio >= 60 ? '#ffcc33' : '#ff5555';
-                html += `<span style="color:#4dc0e6;">S${id}</span>:${cv.toFixed(0)}ml(${sp.toFixed(1)}%)`;
-                if (origV > 0.01 && Math.abs(ratio-100) > 0.5) html += `<span style="color:${rCol};">[${ratio.toFixed(0)}%]</span>`;
-                html += ' ';
+                html += `<span style="color:#4dc0e6;">S${id}</span>:${cv.toFixed(0)}ml(${sp.toFixed(1)}%) `;
                 if (id === 4) html += '<br>';
             }
         }
@@ -5909,7 +5887,7 @@ function processHandTracking(frame, src, hand) {
                 const simO = vrToSim(ip.x, ip.y, ip.z);
                 const fdx = fingerDirX/fingerDirLen, fdy = fingerDirY/fingerDirLen, fdz = fingerDirZ/fingerDirLen;
                 const simD = [fdx, fdy, fdz];
-                const placed = sb.addHandleSphereVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2], handleSphereRadius);
+                const placed = sb.addHandleSphereVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2], 0.5);
                 if (!placed && sb.getNumHandleSpheres() > 0 && vrGrabOwner === null) {
                     // 配置失敗 → 既存ハンドル球のグラブを試行
                     const simPos = vrToSim(midX, midY, midZ);
