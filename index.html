@@ -337,7 +337,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v205</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v206</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2916,7 +2916,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v205</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v206</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -3173,8 +3173,11 @@ function updateMobileSubPanel() {
                     'background:#c0392b;color:white;font-size:11px;font-weight:bold;cursor:pointer;', () => {
                     document.getElementById('cut-popup-btn').click(); });
             }
-            addSlider(modeRow, 'Size', 'mob-cut-size', '0.1', '5.0', '0.1',
-                (sb ? sb.getCutterCenterX() !== undefined ? document.getElementById('cut-scale')?.value || '1.0' : '1.0' : '1.0'),
+            // Size + Thickness スライダーを1行に
+            const sliderRow = document.createElement('div');
+            sliderRow.style.cssText = 'display:flex;gap:4px;align-items:center;width:100%;margin-top:2px;';
+            addSlider(sliderRow, 'Size', 'mob-cut-size', '0.1', '5.0', '0.1',
+                document.getElementById('cut-scale')?.value || '1.0',
                 '#e67e00', function() {
                     const v = parseFloat(this.value);
                     document.getElementById('mob-cut-size-v').textContent = v.toFixed(2);
@@ -3182,13 +3185,14 @@ function updateMobileSubPanel() {
                         if(cutTargetMeshIdx>=0&&cutTargetMeshIdx<=1)cutterTargetScales.vessel=v;
                         else cutterTargetScales.liver=v; }
                 });
-            addSlider(modeRow, 'Thick', 'mob-cut-thick', '0.05', '0.5', '0.05',
+            addSlider(sliderRow, 'Thick', 'mob-cut-thick', '0.05', '0.5', '0.05',
                 document.getElementById('cut-thick')?.value || '0.4',
                 '#cc6666', function() {
                     const v = parseFloat(this.value);
                     document.getElementById('mob-cut-thick-v').textContent = v.toFixed(2);
                     if (sb) sb.setCutterThickness(v);
                 });
+            modeRow.appendChild(sliderRow);
         } else if (actionMode === 'segCut') {
             const lSel = typeof segSelectMode!=='undefined' && segSelectMode==='liver';
             const pSel = typeof segSelectMode!=='undefined' && segSelectMode==='portal';
