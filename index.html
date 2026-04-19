@@ -348,7 +348,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v230</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v231</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2919,7 +2919,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v230</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v231</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -3949,10 +3949,11 @@ async function startXR(mode) {
     // requiredFeatures を空にして、local-floor は optional に（非対応時もセッション起動可能）
     let opts;
     if (mode === 'immersive-ar') {
+        // dom-overlay root = body  → 既存モバイル UI (mobile-bar, info, ar-panel 等) を AR 中もそのまま表示
         opts = {
             requiredFeatures: [],
             optionalFeatures: ['local-floor', 'hand-tracking', 'dom-overlay'],
-            domOverlay: { root: document.getElementById('ar-panel') }
+            domOverlay: { root: document.body }
         };
     } else {
         opts = {
@@ -3994,7 +3995,7 @@ async function startXR(mode) {
             vrSyncActionMode();
             vrUpdateVolume();
 
-            // モバイル AR: Phase 1 A (screen-locked) セットアップ
+            // モバイル AR: Phase 1.5 screen-locked + 既存モバイル UI 流用
             if (isMobile) {
                 arMode = 'screen';
                 arPrevVRState = { scale: VR_SCALE, offset: { ...VR_OFFSET } };
@@ -4003,15 +4004,36 @@ async function startXR(mode) {
                 xrSession.addEventListener('selectstart', onARSelectStart);
                 xrSession.addEventListener('select', onARSelect);
                 xrSession.addEventListener('selectend', onARSelectEnd);
-                // AR 専用 DOM Overlay パネル表示 (vr-panel は使わない)
+
+                // 既存モバイル UI を AR 中もそのまま使う:
+                //  - info (Liver Simulation ヘッダ + FPS) は表示維持
+                //  - vr-panel は 3D 世界空間描画用なので非表示
+                //  - OBJ ドロップ / Firebase / Canvas 直接タップは AR 不適のため無効化
+                document.getElementById('info').style.display = '';  // 上の共通 hide を打ち消す
                 document.getElementById('vr-panel').style.display = 'none';
+                // canvas DOM ポインタイベントを無効化 (XR select に流す)
+                const cv = document.getElementById('canvas');
+                if (cv) { cv.dataset.arPrevPE = cv.style.pointerEvents || ''; cv.style.pointerEvents = 'none'; }
+                const hov = document.getElementById('handle-overlay');
+                if (hov) { hov.dataset.arPrevPE = hov.style.pointerEvents || ''; hov.style.pointerEvents = 'none'; }
+                // AR 不要の UI を隠す
+                ['folder-drop-area', 'firebase-toggle-btn', 'firebase-load-area'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) { el.dataset.arPrevDisplay = el.style.display || ''; el.style.display = 'none'; }
+                });
+                // AR 専用補助パネル (Exit / Reset Pose / Clear Handles)
                 const arPanel = document.getElementById('ar-panel');
-                arPanel.style.display = 'block';
-                // ボタン配線
-                document.getElementById('ar-exit-btn').onclick = () => { if (xrSession) xrSession.end(); };
-                document.getElementById('ar-btn-reset').onclick = () => { arInitialPlacePending = true; };
-                document.getElementById('ar-btn-clear-handles').onclick = () => { if (sb) sb.clearHandleSpheres(); };
-                console.log('[AR] phone AR screen-locked mode armed');
+                if (arPanel) {
+                    arPanel.style.display = 'block';
+                    document.getElementById('ar-exit-btn').onclick = () => { if (xrSession) xrSession.end(); };
+                    document.getElementById('ar-btn-reset').onclick = () => { arInitialPlacePending = true; };
+                    document.getElementById('ar-btn-clear-handles').onclick = () => { if (sb) sb.clearHandleSpheres(); };
+                }
+                // 未設定なら Deform + Place を自動選択 (タップ即配置ができる初期状態)
+                if (typeof setActionMode === 'function' && actionMode === 'none') {
+                    setActionMode('deform');
+                }
+                console.log('[AR] phone AR armed. actionMode=', actionMode, 'deformSub=', deformSub);
             }
         }
 
@@ -4057,16 +4079,18 @@ function arPoseToSimRay(pose) {
     return { simO, simD, worldPos: p, worldOri: o };
 }
 
-// selectstart: 指が触れた瞬間 → まず既存ハンドルのグラブを試す
+// selectstart: 指が触れた瞬間
+// - Deform + Deform (Grab): ray でメッシュ/ハンドルをグラブ開始 → per-frame で追従
+// - それ以外: 何もしない (select で配置判定)
 function onARSelectStart(ev) {
     const src = ev.inputSource;
     if (!src || src.targetRayMode !== 'screen') return;
     if (!sb || !xrRefSpace) return;
+    if (!(actionMode === 'deform' && deformSub === 'deform')) return;  // Grab モード時のみ
+
     const pose = ev.frame.getPose(src.targetRaySpace, xrRefSpace);
     if (!pose) return;
-
     const { simO, simD } = arPoseToSimRay(pose);
-    // Ray ベースのグラブ試行（既存ハンドルに当たった場合のみ成功）
     sb.startGrabVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2]);
     if (sb.isGrabbingVR()) {
         arActiveTouchSource = src;
@@ -4074,12 +4098,11 @@ function onARSelectStart(ev) {
     }
 }
 
-// select (完全なタップ): グラブしてないなら新規ハンドル配置
+// select (完全なタップ): モードに応じて配置 or 何もしない
 function onARSelect(ev) {
     if (!sb || !xrRefSpace) return;
-    // ドラッグが発生していたら配置しない (selectend で endGrabVR)
+    // Deform + Deform 中 (ドラッグ中) なら配置しない
     if (arActiveTouchSource) return;
-    // グラブ中でもない → 新規配置を試す
     if (sb.isGrabbingVR()) return;
 
     const src = ev.inputSource;
@@ -4087,9 +4110,13 @@ function onARSelect(ev) {
     const pose = ev.frame.getPose(src.targetRaySpace, xrRefSpace);
     if (!pose) return;
 
+    // 配置を許可するモード: Deform + Place (または Deform で sub 未設定)
+    const allowPlace = (actionMode === 'deform') && (deformSub === 'place' || deformSub === 'none');
+    if (!allowPlace) return;
+
     const { simO, simD } = arPoseToSimRay(pose);
     const placed = sb.addHandleSphereVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2], handleSphereRadius);
-    console.log('[AR Tap] handle placed:', placed);
+    console.log('[AR Tap] handle placed:', placed, 'mode=', actionMode, deformSub);
 }
 
 // selectend: 指が離れた → グラブ終了
@@ -4139,6 +4166,15 @@ function onXREnd() {
     // AR 専用パネルを隠す
     const arPanel = document.getElementById('ar-panel');
     if (arPanel) arPanel.style.display = 'none';
+    // AR で一時無効化した DOM ポインタイベントと display を復元
+    ['canvas', 'handle-overlay'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el && 'arPrevPE' in el.dataset) { el.style.pointerEvents = el.dataset.arPrevPE; delete el.dataset.arPrevPE; }
+    });
+    ['folder-drop-area', 'firebase-toggle-btn', 'firebase-load-area'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el && 'arPrevDisplay' in el.dataset) { el.style.display = el.dataset.arPrevDisplay; delete el.dataset.arPrevDisplay; }
+    });
 
     // UI 復帰（VR→通常）
     document.getElementById('vr-panel').style.display = 'none';
@@ -6954,7 +6990,7 @@ function vrExitVR() { if (xrSession) xrSession.end(); }
 if ('serviceWorker' in navigator) {
     // updateViaCache:'none' で sw.js 自体の HTTP キャッシュを無効化
     // ?v=228 でキャッシュバスト（バージョン毎に更新、不一致で強制 install 発火）
-    const SW_URL = 'sw.js?v=230';
+    const SW_URL = 'sw.js?v=231';
     let __swReloaded = false;
 
     // 新 SW が activate して controllerchange が発火したら1回だけ自動リロード
