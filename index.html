@@ -337,7 +337,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v212</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v213</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2823,22 +2823,32 @@ function initMobileUI() {
     window.addEventListener('orientationchange', checkOrientation);
     checkOrientation();
 
-    // 下部バー: 1段統合 [Vis][Deform][Cut][Seg][Trns][Vol][Reset]
-    const bar = document.createElement('div');
-    bar.id = 'mobile-bar';
-    bar.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:50;' +
-        'display:flex;align-items:center;gap:2px;padding:3px 4px;' +
+    // 下部バー: 縦=2段、横=1段（動的切替）
+    const barWrap = document.createElement('div');
+    barWrap.id = 'mobile-bar-wrap';
+    barWrap.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:50;' +
         'background:rgba(10,12,18,0.92);border-top:1px solid rgba(255,255,255,0.08);';
 
-    const barBtnStyle = 'flex:1;padding:8px 2px;border:1px solid rgba(255,255,255,0.1);' +
-        'border-radius:5px;background:rgba(255,255,255,0.04);color:#888;' +
-        'font-size:10px;font-weight:bold;cursor:pointer;text-align:center;min-width:0;';
+    // 上段（縦のみ表示）: [Visibility] [Volume] [Reset] [⛶]
+    const topBar = document.createElement('div');
+    topBar.id = 'mobile-top-bar';
+    topBar.style.cssText = 'display:flex;align-items:center;gap:2px;padding:3px 4px;';
 
-    // Visibility トグル
+    // 下段（常時表示）: [Deform][Cut][Seg][Transform] + 横のみ [Vis][Vol][Reset][⛶]
+    const bar = document.createElement('div');
+    bar.id = 'mobile-bar';
+    bar.style.cssText = 'display:flex;align-items:center;gap:2px;padding:3px 4px;';
+
+    const barBtnStyle = 'flex:1;padding:10px 2px;border:1px solid rgba(255,255,255,0.1);' +
+        'border-radius:5px;background:rgba(255,255,255,0.04);color:#888;' +
+        'font-size:11px;font-weight:bold;cursor:pointer;text-align:center;min-width:0;';
+
+    // Vis/Vol/Reset/FS ボタン（縦=上段、横=下段末尾に移動）
     const visBtn = document.createElement('button');
     visBtn.id = 'mobile-vis-btn';
-    visBtn.dataset.labelShort = 'Vis';
+    visBtn.dataset.labelShort = 'Visibility';
     visBtn.dataset.labelFull = 'Visibility';
+    visBtn.textContent = 'Visibility';
     visBtn.style.cssText = barBtnStyle;
     visBtn.addEventListener('click', () => {
         mobileVisExpanded = !mobileVisExpanded;
@@ -2846,7 +2856,35 @@ function initMobileUI() {
         if (mobileVisExpanded) setActionMode('none');
         updateMobileBar();
     });
-    bar.appendChild(visBtn);
+
+    const volBtn = document.createElement('button');
+    volBtn.id = 'mobile-vol-btn';
+    volBtn.dataset.labelShort = 'Volume';
+    volBtn.dataset.labelFull = 'Volume';
+    volBtn.textContent = 'Volume';
+    volBtn.style.cssText = barBtnStyle;
+    volBtn.addEventListener('click', () => {
+        mobileVolExpanded = !mobileVolExpanded;
+        mobileVisExpanded = false;
+        if (mobileVolExpanded) setActionMode('none');
+        updateMobileBar();
+    });
+
+    const resetBtn = document.createElement('button');
+    resetBtn.id = 'mobile-reset-btn';
+    resetBtn.textContent = 'Reset';
+    resetBtn.style.cssText = 'padding:10px 6px;background:rgba(255,255,255,0.04);' +
+        'border:1px solid rgba(200,60,60,0.3);border-radius:5px;color:#cc6666;' +
+        'font-size:10px;font-weight:bold;cursor:pointer;flex-shrink:0;';
+    resetBtn.addEventListener('click', () => { if(confirm('Reset?')) doReset(); });
+
+    const fsBtn = document.createElement('button');
+    fsBtn.id = 'mobile-fs-btn';
+    fsBtn.textContent = '\u26F6';
+    fsBtn.style.cssText = 'padding:10px 12px;background:rgba(255,255,255,0.04);' +
+        'border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:#888;' +
+        'font-size:20px;cursor:pointer;flex-shrink:0;';
+    fsBtn.addEventListener('click', toggleFullscreen);
 
     // モードボタン
     const modes = [
@@ -2871,44 +2909,14 @@ function initMobileUI() {
         bar.appendChild(btn);
     });
 
-    // Volume トグル
-    const volBtn = document.createElement('button');
-    volBtn.id = 'mobile-vol-btn';
-    volBtn.dataset.labelShort = 'Vol';
-    volBtn.dataset.labelFull = 'Volume';
-    volBtn.style.cssText = barBtnStyle;
-    volBtn.addEventListener('click', () => {
-        mobileVolExpanded = !mobileVolExpanded;
-        mobileVisExpanded = false;
-        if (mobileVolExpanded) setActionMode('none');
-        updateMobileBar();
-    });
-    bar.appendChild(volBtn);
+    barWrap.appendChild(topBar);
+    barWrap.appendChild(bar);
+    document.body.appendChild(barWrap);
 
-    // Reset
-    const resetBtn = document.createElement('button');
-    resetBtn.textContent = 'Reset';
-    resetBtn.style.cssText = 'padding:8px 4px;background:rgba(255,255,255,0.04);' +
-        'border:1px solid rgba(200,60,60,0.3);border-radius:5px;color:#cc6666;' +
-        'font-size:9px;cursor:pointer;flex-shrink:0;';
-    resetBtn.addEventListener('click', () => { if(confirm('Reset?')) doReset(); });
-    bar.appendChild(resetBtn);
-
-    // フルスクリーンボタン
-    const fsBtn = document.createElement('button');
-    fsBtn.textContent = '\u26F6';
-    fsBtn.style.cssText = 'padding:8px 12px;background:rgba(255,255,255,0.04);' +
-        'border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:#888;' +
-        'font-size:20px;cursor:pointer;flex-shrink:0;';
-    fsBtn.addEventListener('click', toggleFullscreen);
-    bar.appendChild(fsBtn);
-
-    document.body.appendChild(bar);
-
-    // サブパネル（バーの上にポップアップ、選択時のみ表示）
+    // サブパネル（バーの上にポップアップ）
     const subPanel = document.createElement('div');
     subPanel.id = 'mobile-sub-panel';
-    subPanel.style.cssText = 'position:fixed;bottom:38px;left:0;right:0;z-index:49;' +
+    subPanel.style.cssText = 'position:fixed;left:0;right:0;z-index:49;' +
         'display:none;padding:4px 6px;' +
         'background:rgba(10,12,18,0.95);border-top:1px solid rgba(255,255,255,0.1);';
     document.body.appendChild(subPanel);
@@ -2928,7 +2936,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v212</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v213</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -3020,6 +3028,32 @@ function initMobileUI() {
 
 function updateMobileBar() {
     const landscape = window.innerWidth > window.innerHeight;
+    const topBar = document.getElementById('mobile-top-bar');
+    const mainBar = document.getElementById('mobile-bar');
+    const vb = document.getElementById('mobile-vis-btn');
+    const vlb = document.getElementById('mobile-vol-btn');
+    const rb = document.getElementById('mobile-reset-btn');
+    const fb = document.getElementById('mobile-fs-btn');
+    const subPanel = document.getElementById('mobile-sub-panel');
+
+    // ボタンを縦/横に応じて移動
+    if (landscape) {
+        // 横: 1段 — モードボタンの後に Vis/Vol/Reset/FS を追加
+        topBar.style.display = 'none';
+        if (vb && vb.parentElement !== mainBar) mainBar.appendChild(vb);
+        if (vlb && vlb.parentElement !== mainBar) mainBar.appendChild(vlb);
+        if (rb && rb.parentElement !== mainBar) mainBar.appendChild(rb);
+        if (fb && fb.parentElement !== mainBar) mainBar.appendChild(fb);
+    } else {
+        // 縦: 2段 — 上段に Vis/Vol/Reset/FS
+        topBar.style.display = 'flex';
+        if (vb && vb.parentElement !== topBar) topBar.appendChild(vb);
+        if (vlb && vlb.parentElement !== topBar) topBar.appendChild(vlb);
+        if (rb && rb.parentElement !== topBar) topBar.appendChild(rb);
+        if (fb && fb.parentElement !== topBar) topBar.appendChild(fb);
+    }
+
+    // モードボタンのラベル + ハイライト
     const btns = document.querySelectorAll('.mobile-action-btn');
     const modeColors = { deform:'#cc8833', freeCut:'#cc3333', segCut:'#3388cc', transform:'#4dc0e6' };
     btns.forEach(btn => {
@@ -3030,21 +3064,26 @@ function updateMobileBar() {
         btn.style.color = active ? modeColors[m] : '#888';
         btn.textContent = landscape ? btn.dataset.labelFull : btn.dataset.labelShort;
     });
-    // Vis/Vol ラベル切替 + ハイライト
-    const vb = document.getElementById('mobile-vis-btn');
+
+    // Vis/Vol ハイライト
     if (vb) {
-        vb.textContent = landscape ? vb.dataset.labelFull : vb.dataset.labelShort;
         vb.style.background = mobileVisExpanded ? 'rgba(0,200,150,0.2)' : 'rgba(255,255,255,0.04)';
         vb.style.borderColor = mobileVisExpanded ? '#00ccaa' : 'rgba(255,255,255,0.1)';
         vb.style.color = mobileVisExpanded ? '#00ffdd' : '#888';
     }
-    const vlb = document.getElementById('mobile-vol-btn');
     if (vlb) {
-        vlb.textContent = landscape ? vlb.dataset.labelFull : vlb.dataset.labelShort;
         vlb.style.background = mobileVolExpanded ? 'rgba(0,200,150,0.2)' : 'rgba(255,255,255,0.04)';
         vlb.style.borderColor = mobileVolExpanded ? '#00ccaa' : 'rgba(255,255,255,0.1)';
         vlb.style.color = mobileVolExpanded ? '#00ffdd' : '#888';
     }
+
+    // サブパネルの位置をバー高さに合わせる
+    if (subPanel) {
+        const barWrap = document.getElementById('mobile-bar-wrap');
+        const barH = barWrap ? barWrap.offsetHeight : 44;
+        subPanel.style.bottom = barH + 'px';
+    }
+
     updateMobileSubPanel();
 }
 
