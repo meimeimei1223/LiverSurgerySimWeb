@@ -337,7 +337,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v221</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v222</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2864,9 +2864,9 @@ function initMobileUI() {
         });
         mainRow.appendChild(btn);
     });
-    // 横専用ボタン（縦では非表示）
-    [{text:'Visibility',click:visClick,cls:'mobile-land-btn mobile-vis-land'},
-     {text:'Volume',click:volClick,cls:'mobile-land-btn mobile-vol-land'},
+    // 横専用: Vis/Vol をモードボタンの前に挿入、Reset/FS は末尾
+    [{text:'Volume',click:volClick,cls:'mobile-land-btn mobile-vol-land',pos:'before'},
+     {text:'Visibility',click:visClick,cls:'mobile-land-btn mobile-vis-land',pos:'before'},
      {text:'Reset',click:resetClick,cls:'mobile-land-btn',style:'border-color:rgba(200,60,60,0.3);color:#cc6666;'},
      {text:'\u26F6',click:toggleFullscreen,cls:'mobile-land-btn',style:'font-size:20px;flex:none;padding:10px 12px;'}
     ].forEach(d => {
@@ -2875,7 +2875,8 @@ function initMobileUI() {
         b.style.cssText = barBtnStyle + (d.style||'');
         b.className = d.cls||'';
         b.addEventListener('click', d.click);
-        mainRow.appendChild(b);
+        if (d.pos === 'before') mainRow.insertBefore(b, mainRow.firstChild);
+        else mainRow.appendChild(b);
     });
 
     barWrap.appendChild(topRow);
@@ -2905,7 +2906,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v221</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v222</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
