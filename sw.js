@@ -1,5 +1,6 @@
 // Service Worker for Liver Surgery Simulator PWA
-const CACHE_NAME = 'liver-sim-v201';
+// プリキャッシュのみ（fetch 介入なし = FPS 影響ゼロ）
+const CACHE_NAME = 'liver-sim-v202';
 const ASSETS = [
   './',
   './index.html',
@@ -19,11 +20,11 @@ const ASSETS = [
   './data/reset_icon.png',
 ];
 
-// インストール: アセットをキャッシュ
+// インストール: アセットをプリキャッシュ
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => {
-      console.log('[SW] Caching assets');
+      console.log('[SW] Pre-caching assets');
       return cache.addAll(ASSETS).catch(err => {
         console.warn('[SW] Some assets failed to cache:', err);
       });
@@ -42,30 +43,5 @@ self.addEventListener('activate', event => {
   self.clients.claim();
 });
 
-// フェッチ: キャッシュ優先、なければネットワーク
-self.addEventListener('fetch', event => {
-  // Firebase や外部APIはキャッシュしない
-  if (event.request.url.includes('firebase') ||
-      event.request.url.includes('googleapis') ||
-      event.request.url.includes('gstatic')) {
-    return;
-  }
-  event.respondWith(
-    caches.match(event.request).then(cached => {
-      if (cached) return cached;
-      return fetch(event.request).then(response => {
-        // 成功したレスポンスをキャッシュに追加
-        if (response.ok) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-        }
-        return response;
-      });
-    }).catch(() => {
-      // オフライン時のフォールバック
-      if (event.request.destination === 'document') {
-        return caches.match('./index.html');
-      }
-    })
-  );
-});
+// fetch イベントなし = ブラウザのデフォルト動作（FPS影響ゼロ）
+// オフライン時はブラウザのHTTPキャッシュに依存
