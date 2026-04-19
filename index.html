@@ -337,7 +337,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v208</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v209</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2891,6 +2891,15 @@ function initMobileUI() {
     resetBtn.addEventListener('click', () => { if(confirm('Reset?')) doReset(); });
     bar.appendChild(resetBtn);
 
+    // フルスクリーンボタン
+    const fsBtn = document.createElement('button');
+    fsBtn.textContent = '\u26F6';
+    fsBtn.style.cssText = 'padding:8px 6px;background:rgba(255,255,255,0.04);' +
+        'border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:#888;' +
+        'font-size:14px;cursor:pointer;flex-shrink:0;';
+    fsBtn.addEventListener('click', toggleFullscreen);
+    bar.appendChild(fsBtn);
+
     document.body.appendChild(bar);
 
     // サブパネル（バーの上にポップアップ、選択時のみ表示）
@@ -2916,7 +2925,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v208</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v209</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
