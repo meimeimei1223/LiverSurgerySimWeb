@@ -334,7 +334,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v228</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v229</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2905,7 +2905,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v228</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v229</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -3754,6 +3754,11 @@ let xrSession = null;
 let xrRefSpace = null;
 let xrGLLayer = null;
 let xrMode = null;  // 'vr' or 'ar'
+// ===== AR (mobile) 状態 =====
+// arMode: 'screen' (肝臓がユーザーの前に浮かぶ／世界座標固定) | 'anchored' (Phase 2 hit-test で机に固定) | null
+let arMode = null;
+let arInitialPlacePending = false;   // AR 起動後、最初のフレームで配置するフラグ
+let arPrevVRState = null;            // AR 終了時に VR_OFFSET/VR_SCALE を復元
 
 // VR 空間パラメータ（実行時調整可能）
 let VR_SCALE = 0.05;        // シミュレーション空間 → VR空間のスケール（モデル3単位→15cm）
@@ -3971,6 +3976,16 @@ async function startXR(mode) {
             vrBuildVisibilityCards();
             vrSyncActionMode();
             vrUpdateVolume();
+
+            // モバイル AR: Phase 1 A (screen-locked) セットアップ
+            if (isMobile) {
+                arMode = 'screen';
+                arPrevVRState = { scale: VR_SCALE, offset: { ...VR_OFFSET } };
+                arInitialPlacePending = true;  // 最初のフレームで配置
+                // 画面タップ (targetRayMode === 'screen') を受信
+                xrSession.addEventListener('select', onARSelect);
+                console.log('[AR] phone AR screen-locked mode armed');
+            }
         }
 
         // DOM Overlay の有効確認
@@ -4000,6 +4015,34 @@ async function startXR(mode) {
     }
 }
 
+// ===== AR モバイル: 画面タップハンドラ =====
+// WebXR 'select' イベント: inputSource.targetRayMode === 'screen' が来る
+// targetRaySpace の pose から world-space ray を取得 → sim-space に変換 → 既存 addHandleSphereVR に投入
+function onARSelect(ev) {
+    const src = ev.inputSource;
+    if (!src || src.targetRayMode !== 'screen') return;
+    if (!sb || !xrRefSpace) return;
+    const pose = ev.frame.getPose(src.targetRaySpace, xrRefSpace);
+    if (!pose) return;
+
+    const p = pose.transform.position;
+    const o = pose.transform.orientation;
+    const qx = o.x, qy = o.y, qz = o.z, qw = o.w;
+    // forward = -(local +Z) in world  （既存 processController と同じ）
+    const dirX = 2 * (qx * qz + qy * qw);
+    const dirY = 2 * (qy * qz - qx * qw);
+    const dirZ = 1 - 2 * (qx * qx + qy * qy);
+
+    const simO = vrToSim(p.x, p.y, p.z);
+    const simD = [-dirX / VR_SCALE, -dirY / VR_SCALE, -dirZ / VR_SCALE];
+    console.log('[AR Tap] simO=', simO, 'simD=', simD);
+
+    // Phase 1 疎通: 既存の VR 用 Handle Place をそのまま使う
+    // (Deform モード/モード外を問わず、ray が肝臓に当たれば球配置、外れれば何も起きない)
+    const placed = sb.addHandleSphereVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2], handleSphereRadius);
+    console.log('[AR Tap] handle placed:', placed);
+}
+
 function onXREnd() {
     console.log('[XR] Session ended');
     xrSession = null;
@@ -4025,6 +4068,15 @@ function onXREnd() {
     sideActiveSlider = null;
     sideHoveredSlider = -1;
     if (sb) sb.endGrabVR();
+
+    // AR 状態復元
+    if (arPrevVRState) {
+        VR_SCALE = arPrevVRState.scale;
+        VR_OFFSET = arPrevVRState.offset;
+        arPrevVRState = null;
+    }
+    arMode = null;
+    arInitialPlacePending = false;
 
     // UI 復帰（VR→通常）
     document.getElementById('vr-panel').style.display = 'none';
@@ -4057,8 +4109,37 @@ function renderXR(time, frame) {
     const hp = pose.views[0].transform.position;
     vrHeadPos = [hp.x, hp.y, hp.z];
 
-    // 入力処理（コントローラー + ハンドトラッキング）
-    processXRInput(frame);
+    // モバイル AR: 初回フレームでユーザーの正面に肝臓を配置 (screen-locked の初期位置)
+    const isPhoneAR = (xrMode === 'ar' && isMobile);
+    if (arInitialPlacePending && xrMode === 'ar') {
+        const vp = pose.views[0].transform.position;
+        const ori = pose.views[0].transform.orientation;
+        const qx = ori.x, qy = ori.y, qz = ori.z, qw = ori.w;
+        // forward = -(local +Z in world)  （既存 processController と同じ変換）
+        const fwdX = -(2 * (qx * qz + qy * qw));
+        const fwdY = -(2 * (qy * qz - qx * qw));
+        const fwdZ = -(1 - 2 * (qx * qx + qy * qy));
+        const dist = 0.4;  // 40cm 前方
+        let ox = vp.x + fwdX * dist;
+        let oy = vp.y - 0.1;  // 視線の 10cm 下（机の上に置いた風）
+        let oz = vp.z + fwdZ * dist;
+        // モデル重心を VR_OFFSET の位置に合わせる
+        if (sb) {
+            const cx = sb.getMeshCentroidX(), cy = sb.getMeshCentroidY(), cz = sb.getMeshCentroidZ();
+            ox -= cx * VR_SCALE;
+            oy -= cy * VR_SCALE;
+            oz -= cz * VR_SCALE;
+        }
+        VR_OFFSET = { x: ox, y: oy, z: oz };
+        arInitialPlacePending = false;
+        console.log('[AR] Initial placement:', VR_OFFSET, 'scale=', VR_SCALE);
+    }
+
+    // 入力処理: モバイル AR は hand/gamepad がないので processXRInput をバイパス
+    // (AR のタップは xrSession 'select' イベントで別途処理)
+    if (!isPhoneAR) {
+        processXRInput(frame);
+    }
 
     // 物理ステップ
     sb.step(1/72, gravX, gravY, gravZ);
@@ -4110,22 +4191,22 @@ function renderXR(time, frame) {
         const cp = [viewerPos.x, viewerPos.y, viewerPos.z];
 
         // パネル描画（シーンより先に描画、深度テスト無効）
-        drawTestCube(V, P, pose);
+        if (!isPhoneAR) drawTestCube(V, P, pose);
 
         // メインメッシュ + 子メッシュ描画
         drawSceneXR(M, V, P, cp);
 
-        // ハンドジョイント描画
-        drawVRHands(V, P);
+        // ハンドジョイント描画 (モバイル AR ではスキップ: hand/controller が無い)
+        if (!isPhoneAR) drawVRHands(V, P);
 
         // サイドパネル描画（メインパネル左側固定）
-        drawSidePanel(V, P);
+        if (!isPhoneAR) drawSidePanel(V, P);
 
         // フラグメント選択ポップアップ（肝臓の上）
         if (vrFragmentPending) drawFragPopPanel(V, P);
 
         // レーザー描画（Handle Place モード時）
-        drawVRLaser(V, P);
+        if (!isPhoneAR) drawVRLaser(V, P);
     }
 
     // VR パネルのボリューム自動更新
