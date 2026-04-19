@@ -1,6 +1,6 @@
 // Service Worker for Liver Surgery Simulator PWA
 // プリキャッシュのみ（fetch 介入なし = FPS 影響ゼロ）
-const CACHE_NAME = 'liver-sim-v203';
+const CACHE_NAME = 'liver-sim-v204';
 const ASSETS = [
   './',
   './index.html',
