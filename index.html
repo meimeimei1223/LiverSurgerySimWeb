@@ -331,7 +331,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v193</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v194</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2852,6 +2852,29 @@ function initMobileUI() {
         });
         bar.appendChild(btn);
     });
+
+    // Undo / Reset ボタン（Transform の横）
+    const undoBtn = document.createElement('button');
+    undoBtn.textContent = 'Undo';
+    undoBtn.style.cssText = 'padding:8px 6px;background:rgba(255,255,255,0.08);' +
+        'border:1px solid rgba(255,255,255,0.15);border-radius:6px;color:#aaa;' +
+        'font-size:10px;cursor:pointer;flex-shrink:0;';
+    undoBtn.addEventListener('click', () => {
+        if (sb && sb.canUndo()) { sb.undoCut(); initIdxBuffer(); updateMesh();
+            for(let ci=0;ci<childBuffers.length;ci++){const cidx=new Int32Array(sb.getChildHighResSurfaceTriIds(ci));const c=childBuffers[ci];c.numIdx=cidx.length;gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,c.bIdx);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,extUint?new Uint32Array(cidx):new Uint16Array(cidx),gl.STATIC_DRAW);}
+            if(wireOn)updateWire();if(typeof updateVolumePanel==='function')updateVolumePanel();if(typeof syncHandlesAfterCut==='function')syncHandlesAfterCut();
+        }
+    });
+    bar.appendChild(undoBtn);
+
+    const resetBtn = document.createElement('button');
+    resetBtn.textContent = 'Reset';
+    resetBtn.style.cssText = 'padding:8px 6px;background:rgba(255,255,255,0.08);' +
+        'border:1px solid rgba(200,60,60,0.3);border-radius:6px;color:#cc6666;' +
+        'font-size:10px;cursor:pointer;flex-shrink:0;';
+    resetBtn.addEventListener('click', () => { if(confirm('Reset?')) doReset(); });
+    bar.appendChild(resetBtn);
+
     document.body.appendChild(bar);
 
     // サブメニューパネル（バーの上にスライド表示）
@@ -2877,7 +2900,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v193</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v194</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -3017,25 +3040,16 @@ function updateMobileSubPanel() {
         parent.appendChild(wrap);
     }
 
-    // ===== 常時表示行: Visibility / Undo / Reset / Volume =====
+    // ===== 常時表示行: Visibility / Volume =====
     const topRow = document.createElement('div');
     topRow.style.cssText = 'display:flex;gap:3px;align-items:center;margin-bottom:3px;';
 
-    addBtn(topRow, mobileVisExpanded ? 'Vis ▼' : 'Vis ▶', mobileVisExpanded ? AS : BS, () => {
+    addBtn(topRow, mobileVisExpanded ? 'Visibility \u25BC' : 'Visibility \u25B6', mobileVisExpanded ? AS : BS, () => {
         mobileVisExpanded = !mobileVisExpanded;
         mobileVolExpanded = false;
         updateMobileSubPanel();
     });
-    addBtn(topRow, 'Undo', BS, () => {
-        if (sb && sb.canUndo()) { sb.undoCut(); initIdxBuffer(); updateMesh();
-            for (let ci=0;ci<childBuffers.length;ci++){const cidx=new Int32Array(sb.getChildHighResSurfaceTriIds(ci));const c=childBuffers[ci];c.numIdx=cidx.length;gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,c.bIdx);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,extUint?new Uint32Array(cidx):new Uint16Array(cidx),gl.STATIC_DRAW);}
-            if(wireOn)updateWire();if(typeof updateVolumePanel==='function')updateVolumePanel();if(typeof syncHandlesAfterCut==='function')syncHandlesAfterCut();
-        }
-    });
-    addBtn(topRow, 'Reset', DS, () => {
-        if (confirm('Reset?')) doReset();
-    });
-    addBtn(topRow, mobileVolExpanded ? 'Vol ▼' : 'Vol ▶', mobileVolExpanded ? AS : BS, () => {
+    addBtn(topRow, mobileVolExpanded ? 'Volume \u25BC' : 'Volume \u25B6', mobileVolExpanded ? AS : BS, () => {
         mobileVolExpanded = !mobileVolExpanded;
         mobileVisExpanded = false;
         updateMobileSubPanel();
