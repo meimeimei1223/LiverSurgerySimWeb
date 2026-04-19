@@ -348,7 +348,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v231</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v232</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2919,7 +2919,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v231</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v232</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -4238,13 +4238,12 @@ function renderXR(time, frame) {
     if (!isPhoneAR) {
         processXRInput(frame);
     } else if (arActiveTouchSource && sb && sb.isGrabbingVR()) {
-        // ドラッグ中: 毎フレーム transient inputSource の pose でグラブ追従
+        // ドラッグ中 (Deform サブの "Deform" ボタン = deformSub==='deform'): 毎フレーム ray でグラブ追従
+        // ※ setGrabVRWristState は状態保存のみ。実際に動かすのは moveGrabVR(origin, dir, dt) (VR と同一)
         const tPose = frame.getPose(arActiveTouchSource.targetRaySpace, xrRefSpace);
         if (tPose) {
-            const p = tPose.transform.position;
-            const o = tPose.transform.orientation;
-            const simP = vrToSim(p.x, p.y, p.z);
-            sb.setGrabVRWristState(simP[0], simP[1], simP[2], o.x, o.y, o.z, o.w);
+            const { simO, simD } = arPoseToSimRay(tPose);
+            sb.moveGrabVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2], 1/72);
         }
     }
 
