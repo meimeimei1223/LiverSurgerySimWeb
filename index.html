@@ -337,7 +337,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v218</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v219</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2825,37 +2825,47 @@ function initMobileUI() {
     window.addEventListener('orientationchange', checkOrientation);
     checkOrientation();
 
-    // 下部バー: 1段統合 [Vis][Deform][Cut][Seg][Trns][Vol][Reset]
-    const bar = document.createElement('div');
-    bar.id = 'mobile-bar';
-    bar.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:50;' +
-        'display:flex;align-items:center;gap:2px;padding:3px 4px;' +
+    // 下部バー: barWrap > topRow(縦のみ) + mainRow(常時)
+    const barWrap = document.createElement('div');
+    barWrap.id = 'mobile-bar';
+    barWrap.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:50;' +
         'background:rgba(10,12,18,0.92);border-top:1px solid rgba(255,255,255,0.08);';
 
-    const barBtnStyle = 'flex:1;padding:8px 2px;border:1px solid rgba(255,255,255,0.1);' +
+    const barBtnStyle = 'flex:1;padding:10px 2px;border:1px solid rgba(255,255,255,0.1);' +
         'border-radius:5px;background:rgba(255,255,255,0.04);color:#888;' +
-        'font-size:10px;font-weight:bold;cursor:pointer;text-align:center;min-width:0;';
+        'font-size:11px;font-weight:bold;cursor:pointer;text-align:center;min-width:0;';
 
-    // Visibility トグル
-    const visBtn = document.createElement('button');
-    visBtn.id = 'mobile-vis-btn';
-    visBtn.dataset.labelShort = 'Vis';
-    visBtn.dataset.labelFull = 'Visibility';
-    visBtn.style.cssText = barBtnStyle;
-    visBtn.addEventListener('click', () => {
-        mobileVisExpanded = !mobileVisExpanded;
-        mobileVolExpanded = false;
-        if (mobileVisExpanded) setActionMode('none');
-        updateMobileBar();
+    function visClick() { mobileVisExpanded = !mobileVisExpanded; mobileVolExpanded = false;
+        if (mobileVisExpanded) setActionMode('none'); updateMobileBar(); }
+    function volClick() { mobileVolExpanded = !mobileVolExpanded; mobileVisExpanded = false;
+        if (mobileVolExpanded) setActionMode('none'); updateMobileBar(); }
+    function resetClick() { if(confirm('Reset?')) doReset(); }
+
+    // === 上段（縦のみ）: [Visibility][Volume][Reset][⛶] ===
+    const topRow = document.createElement('div');
+    topRow.id = 'mobile-top-row';
+    topRow.style.cssText = 'display:flex;align-items:center;gap:2px;padding:3px 4px;';
+    [{text:'Visibility',click:visClick,cls:'mobile-vis-top'},{text:'Volume',click:volClick,cls:'mobile-vol-top'},
+     {text:'Reset',click:resetClick,style:'border-color:rgba(200,60,60,0.3);color:#cc6666;'},
+     {text:'\u26F6',click:toggleFullscreen,style:'font-size:20px;flex:none;padding:10px 12px;'}
+    ].forEach(d => {
+        const b = document.createElement('button');
+        b.textContent = d.text;
+        b.style.cssText = barBtnStyle + (d.style||'');
+        if (d.cls) b.className = d.cls;
+        b.addEventListener('click', d.click);
+        topRow.appendChild(b);
     });
-    bar.appendChild(visBtn);
 
-    // モードボタン
+    // === 下段（常時）: モードボタン + 横のみ [Vis][Vol][Reset][⛶] ===
+    const mainRow = document.createElement('div');
+    mainRow.style.cssText = 'display:flex;align-items:center;gap:2px;padding:3px 4px;';
+
     const modes = [
-        { mode:'deform',   labelShort:'Deform',  labelFull:'Deform',     color:'#cc8833' },
-        { mode:'freeCut',  labelShort:'Cut',      labelFull:'Free Cut',   color:'#cc3333' },
-        { mode:'segCut',   labelShort:'Seg',      labelFull:'Seg Cut',    color:'#3388cc' },
-        { mode:'transform',labelShort:'Trns',     labelFull:'Transform',  color:'#4dc0e6' },
+        { mode:'deform',   labelShort:'Deform',  labelFull:'Deform' },
+        { mode:'freeCut',  labelShort:'Cut',      labelFull:'Free Cut' },
+        { mode:'segCut',   labelShort:'Seg',      labelFull:'Seg Cut' },
+        { mode:'transform',labelShort:'Trns',     labelFull:'Transform' },
     ];
     modes.forEach(m => {
         const btn = document.createElement('button');
@@ -2865,47 +2875,29 @@ function initMobileUI() {
         btn.dataset.labelFull = m.labelFull;
         btn.style.cssText = barBtnStyle;
         btn.addEventListener('click', () => {
-            mobileVisExpanded = false;
-            mobileVolExpanded = false;
+            mobileVisExpanded = false; mobileVolExpanded = false;
             setActionMode(actionMode === m.mode ? 'none' : m.mode);
             updateMobileBar();
         });
-        bar.appendChild(btn);
+        mainRow.appendChild(btn);
+    });
+    // 横専用ボタン（縦では非表示）
+    [{text:'Visibility',click:visClick,cls:'mobile-land-btn mobile-vis-land'},
+     {text:'Volume',click:volClick,cls:'mobile-land-btn mobile-vol-land'},
+     {text:'Reset',click:resetClick,cls:'mobile-land-btn',style:'border-color:rgba(200,60,60,0.3);color:#cc6666;'},
+     {text:'\u26F6',click:toggleFullscreen,cls:'mobile-land-btn',style:'font-size:20px;flex:none;padding:10px 12px;'}
+    ].forEach(d => {
+        const b = document.createElement('button');
+        b.textContent = d.text;
+        b.style.cssText = barBtnStyle + (d.style||'');
+        b.className = d.cls||'';
+        b.addEventListener('click', d.click);
+        mainRow.appendChild(b);
     });
 
-    // Volume トグル
-    const volBtn = document.createElement('button');
-    volBtn.id = 'mobile-vol-btn';
-    volBtn.dataset.labelShort = 'Vol';
-    volBtn.dataset.labelFull = 'Volume';
-    volBtn.style.cssText = barBtnStyle;
-    volBtn.addEventListener('click', () => {
-        mobileVolExpanded = !mobileVolExpanded;
-        mobileVisExpanded = false;
-        if (mobileVolExpanded) setActionMode('none');
-        updateMobileBar();
-    });
-    bar.appendChild(volBtn);
-
-    // Reset
-    const resetBtn = document.createElement('button');
-    resetBtn.textContent = 'Reset';
-    resetBtn.style.cssText = 'padding:8px 4px;background:rgba(255,255,255,0.04);' +
-        'border:1px solid rgba(200,60,60,0.3);border-radius:5px;color:#cc6666;' +
-        'font-size:9px;cursor:pointer;flex-shrink:0;';
-    resetBtn.addEventListener('click', () => { if(confirm('Reset?')) doReset(); });
-    bar.appendChild(resetBtn);
-
-    // フルスクリーンボタン
-    const fsBtn = document.createElement('button');
-    fsBtn.textContent = '\u26F6';
-    fsBtn.style.cssText = 'padding:8px 12px;background:rgba(255,255,255,0.04);' +
-        'border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:#888;' +
-        'font-size:20px;cursor:pointer;flex-shrink:0;';
-    fsBtn.addEventListener('click', toggleFullscreen);
-    bar.appendChild(fsBtn);
-
-    document.body.appendChild(bar);
+    barWrap.appendChild(topRow);
+    barWrap.appendChild(mainRow);
+    document.body.appendChild(barWrap);
 
     // サブパネル（バーの上にポップアップ、選択時のみ表示）
     const subPanel = document.createElement('div');
@@ -2930,7 +2922,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v218</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v219</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -3022,6 +3014,15 @@ function initMobileUI() {
 
 function updateMobileBar() {
     const landscape = window.innerWidth > window.innerHeight;
+
+    // 縦=上段表示+横専用非表示、横=上段非表示+横専用表示
+    const topRow = document.getElementById('mobile-top-row');
+    if (topRow) topRow.style.display = landscape ? 'none' : 'flex';
+    document.querySelectorAll('.mobile-land-btn').forEach(b => {
+        b.style.display = landscape ? '' : 'none';
+    });
+
+    // モードボタンのラベル + ハイライト
     const btns = document.querySelectorAll('.mobile-action-btn');
     const modeColors = { deform:'#cc8833', freeCut:'#cc3333', segCut:'#3388cc', transform:'#4dc0e6' };
     btns.forEach(btn => {
@@ -3032,21 +3033,21 @@ function updateMobileBar() {
         btn.style.color = active ? modeColors[m] : '#888';
         btn.textContent = landscape ? btn.dataset.labelFull : btn.dataset.labelShort;
     });
-    // Vis/Vol ラベル切替 + ハイライト
-    const vb = document.getElementById('mobile-vis-btn');
-    if (vb) {
-        vb.textContent = landscape ? vb.dataset.labelFull : vb.dataset.labelShort;
-        vb.style.background = mobileVisExpanded ? 'rgba(0,200,150,0.2)' : 'rgba(255,255,255,0.04)';
-        vb.style.borderColor = mobileVisExpanded ? '#00ccaa' : 'rgba(255,255,255,0.1)';
-        vb.style.color = mobileVisExpanded ? '#00ffdd' : '#888';
-    }
-    const vlb = document.getElementById('mobile-vol-btn');
-    if (vlb) {
-        vlb.textContent = landscape ? vlb.dataset.labelFull : vlb.dataset.labelShort;
-        vlb.style.background = mobileVolExpanded ? 'rgba(0,200,150,0.2)' : 'rgba(255,255,255,0.04)';
-        vlb.style.borderColor = mobileVolExpanded ? '#00ccaa' : 'rgba(255,255,255,0.1)';
-        vlb.style.color = mobileVolExpanded ? '#00ffdd' : '#888';
-    }
+
+    // Vis/Vol ハイライト（上段+横専用の両セット）
+    const visH = mobileVisExpanded ? 'rgba(0,200,150,0.2)' : 'rgba(255,255,255,0.04)';
+    const visB = mobileVisExpanded ? '#00ccaa' : 'rgba(255,255,255,0.1)';
+    const visC = mobileVisExpanded ? '#00ffdd' : '#888';
+    const volH = mobileVolExpanded ? 'rgba(0,200,150,0.2)' : 'rgba(255,255,255,0.04)';
+    const volB = mobileVolExpanded ? '#00ccaa' : 'rgba(255,255,255,0.1)';
+    const volC = mobileVolExpanded ? '#00ffdd' : '#888';
+    document.querySelectorAll('.mobile-vis-top,.mobile-vis-land').forEach(b => {
+        b.style.background = visH; b.style.borderColor = visB; b.style.color = visC;
+    });
+    document.querySelectorAll('.mobile-vol-top,.mobile-vol-land').forEach(b => {
+        b.style.background = volH; b.style.borderColor = volB; b.style.color = volC;
+    });
+
     updateMobileSubPanel();
 }
 
