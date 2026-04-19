@@ -337,7 +337,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v209</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v210</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2837,7 +2837,8 @@ function initMobileUI() {
     // Visibility トグル
     const visBtn = document.createElement('button');
     visBtn.id = 'mobile-vis-btn';
-    visBtn.textContent = 'Vis';
+    visBtn.dataset.labelShort = 'Vis';
+    visBtn.dataset.labelFull = 'Visibility';
     visBtn.style.cssText = barBtnStyle;
     visBtn.addEventListener('click', () => {
         mobileVisExpanded = !mobileVisExpanded;
@@ -2849,16 +2850,17 @@ function initMobileUI() {
 
     // モードボタン
     const modes = [
-        { mode:'deform',   label:'Deform',  color:'#cc8833' },
-        { mode:'freeCut',  label:'Cut',     color:'#cc3333' },
-        { mode:'segCut',   label:'Seg',     color:'#3388cc' },
-        { mode:'transform',label:'Trns',    color:'#4dc0e6' },
+        { mode:'deform',   labelShort:'Deform',  labelFull:'Deform',     color:'#cc8833' },
+        { mode:'freeCut',  labelShort:'Cut',      labelFull:'Free Cut',   color:'#cc3333' },
+        { mode:'segCut',   labelShort:'Seg',      labelFull:'Seg Cut',    color:'#3388cc' },
+        { mode:'transform',labelShort:'Trns',     labelFull:'Transform',  color:'#4dc0e6' },
     ];
     modes.forEach(m => {
         const btn = document.createElement('button');
         btn.className = 'mobile-action-btn';
         btn.dataset.mode = m.mode;
-        btn.textContent = m.label;
+        btn.dataset.labelShort = m.labelShort;
+        btn.dataset.labelFull = m.labelFull;
         btn.style.cssText = barBtnStyle;
         btn.addEventListener('click', () => {
             mobileVisExpanded = false;
@@ -2872,7 +2874,8 @@ function initMobileUI() {
     // Volume トグル
     const volBtn = document.createElement('button');
     volBtn.id = 'mobile-vol-btn';
-    volBtn.textContent = 'Vol';
+    volBtn.dataset.labelShort = 'Vol';
+    volBtn.dataset.labelFull = 'Volume';
     volBtn.style.cssText = barBtnStyle;
     volBtn.addEventListener('click', () => {
         mobileVolExpanded = !mobileVolExpanded;
@@ -2925,7 +2928,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v209</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v210</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -3016,6 +3019,7 @@ function initMobileUI() {
 }
 
 function updateMobileBar() {
+    const landscape = window.innerWidth > window.innerHeight;
     const btns = document.querySelectorAll('.mobile-action-btn');
     const modeColors = { deform:'#cc8833', freeCut:'#cc3333', segCut:'#3388cc', transform:'#4dc0e6' };
     btns.forEach(btn => {
@@ -3024,7 +3028,13 @@ function updateMobileBar() {
         btn.style.background = active ? modeColors[m] + '33' : 'rgba(255,255,255,0.04)';
         btn.style.borderColor = active ? modeColors[m] : 'rgba(255,255,255,0.1)';
         btn.style.color = active ? modeColors[m] : '#888';
+        btn.textContent = landscape ? btn.dataset.labelFull : btn.dataset.labelShort;
     });
+    // Vis/Vol ラベル切替
+    const vb = document.getElementById('mobile-vis-btn');
+    if (vb) vb.textContent = landscape ? vb.dataset.labelFull : vb.dataset.labelShort;
+    const vlb = document.getElementById('mobile-vol-btn');
+    if (vlb) vlb.textContent = landscape ? vlb.dataset.labelFull : vlb.dataset.labelShort;
     // Vis/Vol ボタンハイライト
     const vb = document.getElementById('mobile-vis-btn');
     if (vb) {
