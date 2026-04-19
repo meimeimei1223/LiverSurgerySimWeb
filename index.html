@@ -6,7 +6,12 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <title>SoftBodyDuo WASM - Liver Demo</title>
+    <title>Liver Surgery Simulator</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="data/cut_icon.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#1a1a2e">
     <style>
         * { margin:0; padding:0; box-sizing:border-box; }
         html { height:100%; }
@@ -331,7 +336,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v195</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v196</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2887,7 +2892,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v195</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v196</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -6690,5 +6695,12 @@ function vrExitVR() { if (xrSession) xrSession.end(); }
 </div>
 </div>
 <script type="module" src="firebase-loader.js?v=179"></script>
+<script>
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').then(reg => {
+        console.log('[PWA] Service Worker registered');
+    }).catch(err => console.warn('[PWA] SW registration failed:', err));
+}
+</script>
 </body>
 </html>
