@@ -1,6 +1,6 @@
 // Service Worker for Liver Surgery Simulator PWA
 // プリキャッシュのみ（fetch 介入なし = FPS 影響ゼロ）
-const CACHE_NAME = 'liver-sim-v202';
+const CACHE_NAME = 'liver-sim-v203';
 const ASSETS = [
   './',
   './index.html',
@@ -43,5 +43,9 @@ self.addEventListener('activate', event => {
   self.clients.claim();
 });
 
-// fetch イベントなし = ブラウザのデフォルト動作（FPS影響ゼロ）
-// オフライン時はブラウザのHTTPキャッシュに依存
+// fetch: ネットワーク優先、オフライン時のみキャッシュから返す（FPS影響ゼロ）
+self.addEventListener('fetch', event => {
+  event.respondWith(
+    fetch(event.request).catch(() => caches.match(event.request))
+  );
+});
