@@ -331,7 +331,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v192</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v193</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2877,7 +2877,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v192</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v193</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -2980,86 +2980,195 @@ function updateMobileBar() {
     updateMobileSubPanel();
 }
 
+let mobileVisExpanded = false;
+let mobileVolExpanded = false;
+
 function updateMobileSubPanel() {
     const panel = document.getElementById('mobile-sub-panel');
     if (!panel) return;
 
-    if (actionMode === 'none' || actionMode === 'transform') {
-        panel.style.display = 'none';
-        return;
-    }
-    panel.style.display = 'flex';
-    panel.style.gap = '4px';
-    panel.style.flexWrap = 'wrap';
+    panel.style.display = 'block';
+    panel.style.padding = '4px 6px';
     panel.innerHTML = '';
 
-    const btnStyle = 'padding:7px 10px;border-radius:5px;border:1px solid rgba(255,255,255,0.12);' +
-        'background:rgba(255,255,255,0.06);color:#bbb;font-size:11px;font-weight:bold;cursor:pointer;';
-    const activeStyle = 'padding:7px 10px;border-radius:5px;border:1px solid #8f45ad;' +
-        'background:rgba(143,69,173,0.25);color:#c080e0;font-size:11px;font-weight:bold;cursor:pointer;';
-    const dangerStyle = 'padding:7px 10px;border-radius:5px;border:1px solid rgba(200,60,60,0.4);' +
-        'background:rgba(255,255,255,0.04);color:#ff8888;font-size:11px;font-weight:bold;cursor:pointer;';
+    const BS = 'padding:5px 8px;border-radius:4px;border:1px solid rgba(255,255,255,0.12);' +
+        'background:rgba(255,255,255,0.06);color:#bbb;font-size:10px;font-weight:bold;cursor:pointer;';
+    const AS = 'padding:5px 8px;border-radius:4px;border:1px solid #8f45ad;' +
+        'background:rgba(143,69,173,0.25);color:#c080e0;font-size:10px;font-weight:bold;cursor:pointer;';
+    const DS = 'padding:5px 8px;border-radius:4px;border:1px solid rgba(200,60,60,0.4);' +
+        'background:rgba(255,255,255,0.04);color:#ff8888;font-size:10px;font-weight:bold;cursor:pointer;';
 
-    function addBtn(label, style, onclick) {
+    function addBtn(parent, label, style, onclick) {
         const b = document.createElement('button');
         b.textContent = label;
         b.style.cssText = style;
         b.addEventListener('click', onclick);
-        panel.appendChild(b);
+        parent.appendChild(b);
         return b;
     }
+    function addSlider(parent, label, id, min, max, step, value, color, oninput) {
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'display:flex;align-items:center;gap:4px;flex:1;min-width:100px;';
+        wrap.innerHTML = `<span style="font-size:9px;color:#888;white-space:nowrap;">${label}</span>
+            <input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${value}"
+                style="flex:1;height:16px;accent-color:${color};">
+            <span id="${id}-v" style="font-size:9px;color:#aaa;width:28px;text-align:right;">${parseFloat(value).toFixed(2)}</span>`;
+        wrap.querySelector('input').addEventListener('input', oninput);
+        parent.appendChild(wrap);
+    }
 
-    if (actionMode === 'deform') {
-        addBtn('Place', deformSub === 'place' ? activeStyle : btnStyle, () => {
-            document.getElementById('btn-handle-mode').click();
-            updateMobileSubPanel();
-        });
-        addBtn('Deform', deformSub === 'deform' ? activeStyle : btnStyle, () => {
-            document.getElementById('btn-deform-mode').click();
-            updateMobileSubPanel();
-        });
-        addBtn('Undo', btnStyle, () => {
-            document.getElementById('btn-undo-handle').click();
-        });
-        addBtn('Clear', dangerStyle, () => {
-            document.getElementById('btn-clear-handles').click();
-        });
-    } else if (actionMode === 'freeCut') {
-        addBtn('Seg Overlay', segOverlayMode ? activeStyle : btnStyle, () => {
-            if (typeof toggleSegOverlay === 'function') toggleSegOverlay();
-            updateMobileSubPanel();
-        });
-        addBtn('Undo Cut', dangerStyle, () => {
-            document.getElementById('btn-undo-cut').click();
-        });
-        // CUT ボタン（カッター配置済みのみ）
-        if (cutterPlaced) {
-            addBtn('CUT', 'padding:7px 14px;border-radius:5px;border:none;' +
-                'background:#c0392b;color:white;font-size:12px;font-weight:bold;cursor:pointer;', () => {
-                document.getElementById('cut-popup-btn').click();
-            });
+    // ===== 常時表示行: Visibility / Undo / Reset / Volume =====
+    const topRow = document.createElement('div');
+    topRow.style.cssText = 'display:flex;gap:3px;align-items:center;margin-bottom:3px;';
+
+    addBtn(topRow, mobileVisExpanded ? 'Vis ▼' : 'Vis ▶', mobileVisExpanded ? AS : BS, () => {
+        mobileVisExpanded = !mobileVisExpanded;
+        mobileVolExpanded = false;
+        updateMobileSubPanel();
+    });
+    addBtn(topRow, 'Undo', BS, () => {
+        if (sb && sb.canUndo()) { sb.undoCut(); initIdxBuffer(); updateMesh();
+            for (let ci=0;ci<childBuffers.length;ci++){const cidx=new Int32Array(sb.getChildHighResSurfaceTriIds(ci));const c=childBuffers[ci];c.numIdx=cidx.length;gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,c.bIdx);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,extUint?new Uint32Array(cidx):new Uint16Array(cidx),gl.STATIC_DRAW);}
+            if(wireOn)updateWire();if(typeof updateVolumePanel==='function')updateVolumePanel();if(typeof syncHandlesAfterCut==='function')syncHandlesAfterCut();
         }
-    } else if (actionMode === 'segCut') {
-        const lSel = typeof segSelectMode !== 'undefined' && segSelectMode === 'liver';
-        const pSel = typeof segSelectMode !== 'undefined' && segSelectMode === 'portal';
-        addBtn('Liver Sel', lSel ? activeStyle : btnStyle, () => {
-            if (typeof toggleSegSelect === 'function') toggleSegSelect('liver');
-            updateMobileSubPanel();
-        });
-        addBtn('Portal Sel', pSel ? activeStyle : btnStyle, () => {
-            if (typeof toggleSegSelect === 'function') toggleSegSelect('portal');
-            updateMobileSubPanel();
-        });
-        addBtn('Seg Cut', dangerStyle, () => {
-            if (typeof doSegCut === 'function') doSegCut();
-        });
-        addBtn('Undo', btnStyle, () => {
-            if (typeof doSegUndo === 'function') doSegUndo();
-        });
-        addBtn('Clear', btnStyle, () => {
-            if (typeof doClearSelection === 'function') doClearSelection();
-            updateMobileSubPanel();
-        });
+    });
+    addBtn(topRow, 'Reset', DS, () => {
+        if (confirm('Reset?')) doReset();
+    });
+    addBtn(topRow, mobileVolExpanded ? 'Vol ▼' : 'Vol ▶', mobileVolExpanded ? AS : BS, () => {
+        mobileVolExpanded = !mobileVolExpanded;
+        mobileVisExpanded = false;
+        updateMobileSubPanel();
+    });
+    panel.appendChild(topRow);
+
+    // ===== Visibility 展開 =====
+    if (mobileVisExpanded) {
+        const visRow = document.createElement('div');
+        visRow.style.cssText = 'display:flex;gap:3px;flex-wrap:wrap;margin-bottom:3px;';
+        const organs = ['Liver','Portal','Vein','Tumor','GB','Sphere'];
+        const colors = ['#cc3333','#cc3399','#00cccc','#cc8800','#33bb33','#4488cc'];
+        for (let i = 0; i < organs.length; i++) {
+            const alpha = meshAlphaValues[i];
+            const on = alpha > 0;
+            const b = document.createElement('button');
+            b.textContent = organs[i];
+            b.style.cssText = `padding:4px 6px;border-radius:4px;font-size:9px;font-weight:bold;cursor:pointer;
+                border:1px solid ${on ? colors[i] : '#333'};
+                background:${on ? colors[i]+'33' : 'rgba(30,30,30,0.6)'};
+                color:${on ? colors[i] : '#555'};`;
+            b.addEventListener('click', () => {
+                // Liver=3状態、他=2状態(ON/OFF)
+                const numSt = (i === 0) ? 3 : 2;
+                if (numSt === 2) {
+                    organAlphaStates[i] = organAlphaStates[i] === 0 ? 2 : 0;
+                } else {
+                    organAlphaStates[i] = (organAlphaStates[i] + 1) % numSt;
+                }
+                onAlphaChanged(i, organAlphaStates[i]);
+                updateMobileSubPanel();
+            });
+            visRow.appendChild(b);
+        }
+        panel.appendChild(visRow);
+        // Liver Alpha スライダー
+        if (meshAlphaValues[0] > 0) {
+            const alphaRow = document.createElement('div');
+            alphaRow.style.cssText = 'display:flex;align-items:center;gap:4px;margin-bottom:3px;';
+            alphaRow.innerHTML = `<span style="font-size:9px;color:#888;">Liver&alpha;</span>
+                <input type="range" min="0" max="100" step="5" value="${Math.round(meshAlphaValues[0]*100)}"
+                    style="flex:1;height:16px;accent-color:#cc3333;">
+                <span style="font-size:9px;color:#aaa;">${Math.round(meshAlphaValues[0]*100)}%</span>`;
+            alphaRow.querySelector('input').addEventListener('input', function() {
+                const a = parseInt(this.value) / 100;
+                meshAlphaValues[0] = a < 0.05 ? 0 : a;
+                liverAlphaValue = meshAlphaValues[0];
+                liverVisible = liverAlphaValue > 0;
+                alphaRow.querySelector('span:last-child').textContent = this.value + '%';
+            });
+            panel.appendChild(alphaRow);
+        }
+    }
+
+    // ===== Volume 展開 =====
+    if (mobileVolExpanded && sb && typeof sb.areVolumesCaptured === 'function' && sb.areVolumesCaptured()) {
+        const volDiv = document.createElement('div');
+        volDiv.style.cssText = 'font-size:10px;color:#aaa;margin-bottom:3px;line-height:1.5;';
+        const totalOrig = sb.getOriginalTotalVolume();
+        const totalCur = sb.calculateTotalVolume();
+        const pct = totalOrig > 0 ? (totalCur/totalOrig*100) : 100;
+        let html = `<span style="color:#7dff7d;font-weight:bold;">${totalCur.toFixed(1)} ml</span> / ${totalOrig.toFixed(1)} ml (${pct.toFixed(1)}%)<br>`;
+        const useOBJ = typeof sb.isOBJSegmentsBound === 'function' && sb.isOBJSegmentsBound();
+        const hasSkel = typeof sb.isSkeletonAnalyzed === 'function' && sb.isSkeletonAnalyzed();
+        if (useOBJ || hasSkel) {
+            for (let id=1;id<=8;id++) {
+                const cv = sb.calculateSegmentVolume(id, useOBJ);
+                const sp = totalOrig > 0 ? (cv/totalOrig*100) : 0;
+                html += `<span style="color:#4dc0e6;">S${id}</span>:${cv.toFixed(0)}ml(${sp.toFixed(1)}%) `;
+                if (id === 4) html += '<br>';
+            }
+        }
+        volDiv.innerHTML = html;
+        panel.appendChild(volDiv);
+    }
+
+    // ===== モード別行 =====
+    if (actionMode !== 'none') {
+        const modeRow = document.createElement('div');
+        modeRow.style.cssText = 'display:flex;gap:3px;align-items:center;flex-wrap:wrap;';
+
+        if (actionMode === 'deform') {
+            addBtn(modeRow, 'Place', deformSub==='place'?AS:BS, () => {
+                document.getElementById('btn-handle-mode').click(); updateMobileSubPanel(); });
+            addBtn(modeRow, 'Deform', deformSub==='deform'?AS:BS, () => {
+                document.getElementById('btn-deform-mode').click(); updateMobileSubPanel(); });
+            addBtn(modeRow, 'UndoH', BS, () => { document.getElementById('btn-undo-handle').click(); });
+            addBtn(modeRow, 'Clear', DS, () => { document.getElementById('btn-clear-handles').click(); });
+            addSlider(modeRow, 'Size', 'mob-sphere-size', '0.1', '1.0', '0.05',
+                handleSphereRadius.toString(), '#ffcc00', function() {
+                    if (sb && sb.getNumHandleSpheres() === 0) {
+                        handleSphereRadius = parseFloat(this.value);
+                        document.getElementById('mob-sphere-size-v').textContent = handleSphereRadius.toFixed(2);
+                    }
+                });
+        } else if (actionMode === 'freeCut') {
+            addBtn(modeRow, 'SegOvl', segOverlayMode?AS:BS, () => {
+                if(typeof toggleSegOverlay==='function')toggleSegOverlay(); updateMobileSubPanel(); });
+            addBtn(modeRow, 'UndoCut', DS, () => { document.getElementById('btn-undo-cut').click(); });
+            if (cutterPlaced) {
+                addBtn(modeRow, 'CUT', 'padding:5px 12px;border-radius:4px;border:none;' +
+                    'background:#c0392b;color:white;font-size:11px;font-weight:bold;cursor:pointer;', () => {
+                    document.getElementById('cut-popup-btn').click(); });
+            }
+            addSlider(modeRow, 'Size', 'mob-cut-size', '0.1', '5.0', '0.1',
+                (sb ? sb.getCutterCenterX() !== undefined ? document.getElementById('cut-scale')?.value || '1.0' : '1.0' : '1.0'),
+                '#e67e00', function() {
+                    const v = parseFloat(this.value);
+                    document.getElementById('mob-cut-size-v').textContent = v.toFixed(2);
+                    if (sb) { sb.setCutterScale(v);
+                        if(cutTargetMeshIdx>=0&&cutTargetMeshIdx<=1)cutterTargetScales.vessel=v;
+                        else cutterTargetScales.liver=v; }
+                });
+            addSlider(modeRow, 'Thick', 'mob-cut-thick', '0.05', '0.5', '0.05',
+                document.getElementById('cut-thick')?.value || '0.4',
+                '#cc6666', function() {
+                    const v = parseFloat(this.value);
+                    document.getElementById('mob-cut-thick-v').textContent = v.toFixed(2);
+                    if (sb) sb.setCutterThickness(v);
+                });
+        } else if (actionMode === 'segCut') {
+            const lSel = typeof segSelectMode!=='undefined' && segSelectMode==='liver';
+            const pSel = typeof segSelectMode!=='undefined' && segSelectMode==='portal';
+            addBtn(modeRow, 'Liver', lSel?AS:BS, () => {
+                if(typeof toggleSegSelect==='function')toggleSegSelect('liver'); updateMobileSubPanel(); });
+            addBtn(modeRow, 'Portal', pSel?AS:BS, () => {
+                if(typeof toggleSegSelect==='function')toggleSegSelect('portal'); updateMobileSubPanel(); });
+            addBtn(modeRow, 'SegCut', DS, () => { if(typeof doSegCut==='function')doSegCut(); });
+            addBtn(modeRow, 'Undo', BS, () => { if(typeof doSegUndo==='function')doSegUndo(); });
+            addBtn(modeRow, 'Clear', BS, () => {
+                if(typeof doClearSelection==='function')doClearSelection(); updateMobileSubPanel(); });
+        }
+        panel.appendChild(modeRow);
     }
 }
 
