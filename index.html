@@ -337,7 +337,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v222</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v223</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -392,9 +392,9 @@
         <div id="sphere-size-row" style="padding:4px 10px 2px;">
           <div style="display:flex;justify-content:space-between;font-size:11px;color:#888;margin-bottom:2px;">
             <span>Sphere Size</span>
-            <span id="sphere-size-val" style="color:#ffff66;">0.40</span>
+            <span id="sphere-size-val" style="color:#ffff66;">0.30</span>
           </div>
-          <input type="range" id="sphere-size-slider" min="0.1" max="1.0" step="0.05" value="0.4"
+          <input type="range" id="sphere-size-slider" min="0.1" max="1.0" step="0.05" value="0.3"
             style="width:100%;">
           <div id="sphere-size-hint" style="font-size:10px;color:#666;display:none;">
             (Clear handles to resize)
@@ -956,7 +956,7 @@ function updateMesh() {
 
 //-- Handle mode -------------------------------------------------------
 let handleMode = false;
-let handleSphereRadius = 0.4; // ハンドルスフィア半径（C++ DEFAULT_HANDLE_RADIUS = 0.4）
+let handleSphereRadius = 0.3; // ハンドルスフィア半径
 // (旧アコーディオン toggle は action-btn onclick に置き換え済み)
 
 // Deform サブモード (C++ DeformSubMode 準拠)
@@ -2906,7 +2906,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v222</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v223</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -5907,7 +5907,7 @@ function processHandTracking(frame, src, hand) {
                 const simO = vrToSim(ip.x, ip.y, ip.z);
                 const fdx = fingerDirX/fingerDirLen, fdy = fingerDirY/fingerDirLen, fdz = fingerDirZ/fingerDirLen;
                 const simD = [fdx, fdy, fdz];
-                const placed = sb.addHandleSphereVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2], 0.5);
+                const placed = sb.addHandleSphereVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2], handleSphereRadius);
                 if (!placed && sb.getNumHandleSpheres() > 0 && vrGrabOwner === null) {
                     // 配置失敗 → 既存ハンドル球のグラブを試行
                     const simPos = vrToSim(midX, midY, midZ);
