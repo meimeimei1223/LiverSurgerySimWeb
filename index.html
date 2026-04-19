@@ -331,7 +331,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v191</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v192</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -1427,6 +1427,53 @@ canvas.addEventListener('touchend', e => {
     }
 });
 
+// モバイル: 遅延タップ実行（100ms後に1本指のまま → アクション実行）
+function executeMobileTap() {
+    if (!mobileTapPending || !sb) return;
+    const pe = mobileTapPending;
+    mobileTapPending = null;
+    const rect = canvas.getBoundingClientRect();
+    const sx = pe.clientX - rect.left;
+    const sy = pe.clientY - rect.top;
+
+    if (pe.action === 'handlePlace') {
+        sendMatricesToCpp();
+        const ok = sb.addHandleSphereAtScreen(sx, sy, handleSphereRadius);
+        if (ok) {
+            const n = sb.getNumHandleSpheres();
+            document.getElementById('handle-count').textContent = n > 0 ? n+' handles' : '';
+            if (typeof updateSphereSizeSlider === 'function') updateSphereSizeSlider();
+        }
+    } else if (pe.action === 'deformGrab') {
+        activePointerId = pe.pointerId;
+        canvas.setPointerCapture(pe.pointerId);
+        last = {x: pe.clientX, y: pe.clientY};
+        grabScreenX = sx; grabScreenY = sy;
+        sendMatricesToCpp();
+        sb.startGrab(grabScreenX, grabScreenY);
+        if (sb.isGrabbing()) { grab = true; }
+        else { drag = true; }
+    } else if (pe.action === 'segSelect') {
+        sendMatricesToCpp();
+        const ray = screenToWorldRay(sx, sy);
+        const targetMeshIdx = (segSelectMode === 'liver') ? -1 : 0;
+        const target = (segSelectMode === 'liver') ? 0 : 1;
+        const hit = raycastTargetMeshWithVertex(ray, targetMeshIdx);
+        if (hit && hit.vertexIdx >= 0) {
+            const mode = (segmentColorMode === 'obj') ? 1 : 0;
+            sb.clickMeshForHighlight(target, hit.vertexIdx, mode, false);
+            const lc = new Float32Array(sb.getLiverHighlightColors());
+            if (lc.length > 0) { gl.bindBuffer(gl.ARRAY_BUFFER, bLiverHL); gl.bufferData(gl.ARRAY_BUFFER, lc, gl.DYNAMIC_DRAW); }
+            if (sb.getNumChildren() > 0) {
+                const pc = new Float32Array(sb.getPortalHighlightColors());
+                if (pc.length > 0) { gl.bindBuffer(gl.ARRAY_BUFFER, bPortalHL); gl.bufferData(gl.ARRAY_BUFFER, pc, gl.DYNAMIC_DRAW); }
+            }
+        }
+    } else if (pe.action === 'cutPlace') {
+        executeCutterPlace(pe.pointerId, pe.clientX, pe.clientY);
+    }
+}
+
 // カッター配置処理（PC即時 / モバイル遅延後に呼ばれる）
 function executeCutterPlace(pointerId, clientX, clientY) {
     activePointerId = pointerId;
@@ -1493,6 +1540,11 @@ canvas.addEventListener('pointerdown', e=>{
 
     // Deform: Handle Place モード（クリックで球体配置、ヒットしなければカメラ操作）
     if (actionMode === 'deform' && handleMode && deformSub === 'place') {
+        if (isMobile) {
+            mobileTapPending = { pointerId: e.pointerId, clientX: e.clientX, clientY: e.clientY, action: 'handlePlace' };
+            mobileTapTimer = setTimeout(() => { mobileTapTimer = null; executeMobileTap(); }, 100);
+            return;
+        }
         const rect = canvas.getBoundingClientRect();
         sendMatricesToCpp();
         const ok = sb.addHandleSphereAtScreen(
@@ -1507,9 +1559,12 @@ canvas.addEventListener('pointerdown', e=>{
     }
 
     // Deform: Deform モード（GrabberDuo::startSmartGrab でハンドルグラブ）
-    // C++ 準拠: startSmartGrab が自動でハンドル球体のレイ交差判定を行い、
-    // ヒットしたらオフセット補正付きでグラブ開始
     if (actionMode === 'deform' && deformSub === 'deform' && sb.getNumHandleSpheres() > 0) {
+        if (isMobile) {
+            mobileTapPending = { pointerId: e.pointerId, clientX: e.clientX, clientY: e.clientY, action: 'deformGrab' };
+            mobileTapTimer = setTimeout(() => { mobileTapTimer = null; executeMobileTap(); }, 100);
+            return;
+        }
         activePointerId = e.pointerId;
         canvas.setPointerCapture(e.pointerId);
         last = {x: e.clientX, y: e.clientY};
@@ -1522,7 +1577,6 @@ canvas.addEventListener('pointerdown', e=>{
             grab = true;
             canvas.style.cursor = 'grabbing';
         } else {
-            // ハンドルにもメッシュにも当たらなかった → カメラ操作
             drag = true;
             canvas.style.cursor = 'move';
         }
@@ -1532,6 +1586,11 @@ canvas.addEventListener('pointerdown', e=>{
     // Seg Select モード: クリックでセグメント選択ハイライト
     // C++準拠: ターゲットメッシュのみにレイキャスト（他メッシュを貫通）
     if (segSelectMode && sb.isSkeletonAnalyzed()) {
+        if (isMobile) {
+            mobileTapPending = { pointerId: e.pointerId, clientX: e.clientX, clientY: e.clientY, action: 'segSelect' };
+            mobileTapTimer = setTimeout(() => { mobileTapTimer = null; executeMobileTap(); }, 100);
+            return;
+        }
         const rect = canvas.getBoundingClientRect();
         const sx = e.clientX - rect.left;
         const sy = e.clientY - rect.top;
@@ -1579,14 +1638,8 @@ canvas.addEventListener('pointerdown', e=>{
         if (isMobile) {
             // モバイル: 100ms 遅延でタップ判定（ピンチとの誤爆防止）
             last = {x: e.clientX, y: e.clientY};
-            mobileTapPending = { pointerId: e.pointerId, clientX: e.clientX, clientY: e.clientY };
-            mobileTapTimer = setTimeout(() => {
-                mobileTapTimer = null;
-                if (!mobileTapPending) return;
-                const pe = mobileTapPending;
-                mobileTapPending = null;
-                executeCutterPlace(pe.pointerId, pe.clientX, pe.clientY);
-            }, 100);
+            mobileTapPending = { pointerId: e.pointerId, clientX: e.clientX, clientY: e.clientY, action: 'cutPlace' };
+            mobileTapTimer = setTimeout(() => { mobileTapTimer = null; executeMobileTap(); }, 100);
             return;
         }
         // PC: 即時配置
@@ -1682,16 +1735,12 @@ canvas.addEventListener('pointermove', e=>{
 function handlePointerEnd(e) {
     // モバイルタップ遅延のクリーンアップ
     if (mobileTapPending && mobileTapPending.pointerId === e.pointerId) {
-        // タイマー実行前にリリース → 短いタップ → 配置実行
         if (mobileTapTimer) {
             clearTimeout(mobileTapTimer);
             mobileTapTimer = null;
-            const pe = mobileTapPending;
-            mobileTapPending = null;
-            executeCutterPlace(pe.pointerId, pe.clientX, pe.clientY);
-            // 即座に cutterDragging 解除（タップなのでドラッグなし）
+            executeMobileTap();
             cutterDragging = false;
-            if (cutMode && cutterPlaced && isMobile) updateMobileSubPanel();
+            if (cutMode && cutterPlaced && isMobile && typeof updateMobileSubPanel === 'function') updateMobileSubPanel();
             return;
         }
     }
@@ -2828,7 +2877,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v191</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v192</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
