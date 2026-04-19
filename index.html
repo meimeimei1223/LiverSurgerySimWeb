@@ -337,7 +337,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v199</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v200</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -1443,14 +1443,23 @@ function executeMobileTap() {
     const sy = pe.clientY - rect.top;
 
     if (pe.action === 'handlePlace') {
-        // ブラウザ版と同じ: Place モードは配置のみ（グラブはDeformモードで）
+        // ブラウザ版と同じフロー: まず配置を試す → 失敗したら一般グラブにフォールスルー
         sendMatricesToCpp();
         const ok = sb.addHandleSphereAtScreen(sx, sy, handleSphereRadius);
         if (ok) {
             const n = sb.getNumHandleSpheres();
             document.getElementById('handle-count').textContent = n > 0 ? n+' handles' : '';
             if (typeof updateSphereSizeSlider === 'function') updateSphereSizeSlider();
+            return;
         }
+        // 配置失敗 → 一般グラブ（ブラウザ版1664行のフォールスルーと同じ）
+        activePointerId = pe.pointerId;
+        canvas.setPointerCapture(pe.pointerId);
+        last = {x: pe.clientX, y: pe.clientY};
+        grabScreenX = sx; grabScreenY = sy;
+        sb.startGrab(sx, sy);
+        if (sb.isGrabbing()) { grab = true; }
+        else { drag = true; }
     } else if (pe.action === 'deformGrab') {
         activePointerId = pe.pointerId;
         canvas.setPointerCapture(pe.pointerId);
@@ -2894,7 +2903,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v199</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v200</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>

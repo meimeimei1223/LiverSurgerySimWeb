@@ -1,5 +1,5 @@
 // Service Worker for Liver Surgery Simulator PWA
-const CACHE_NAME = 'liver-sim-v199';
+const CACHE_NAME = 'liver-sim-v200';
 const ASSETS = [
   './',
   './index.html',
