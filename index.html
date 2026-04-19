@@ -337,7 +337,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v219</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v220</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2800,30 +2800,7 @@ function initMobileUI() {
         if (i !== 5) ORGAN_NUM_STATES[i] = 2;  // Sphere は元々2
     }
 
-    // 縦向き: 一時トースト表示（タップで消せる、操作はブロックしない）
-    const rotateMsg = document.createElement('div');
-    rotateMsg.id = 'rotate-msg';
-    rotateMsg.style.cssText = 'position:fixed;top:50%;left:50%;z-index:9000;' +
-        'transform:translate(-50%,-50%);background:rgba(10,12,20,0.9);' +
-        'padding:20px 30px;border-radius:12px;border:1px solid #00d4ff44;' +
-        'display:none;text-align:center;' +
-        'color:#00d4ff;font-size:15px;font-weight:bold;font-family:Arial,sans-serif;';
-    rotateMsg.innerHTML = '<div style="font-size:36px;margin-bottom:10px;">&#x1F504;</div>' +
-        'Landscape recommended<br>' +
-        '<span style="font-size:11px;color:#666;font-weight:normal;">Tap to dismiss</span>';
-    rotateMsg.addEventListener('click', () => { rotateMsg.style.display = 'none'; });
-    document.body.appendChild(rotateMsg);
-
-    let rotateMsgDismissed = false;
-    function checkOrientation() {
-        if (rotateMsgDismissed) return;
-        const portrait = window.innerHeight > window.innerWidth;
-        rotateMsg.style.display = portrait ? 'block' : 'none';
-        if (!portrait) rotateMsgDismissed = true;  // 横向きになったら以後表示しない
-    }
-    window.addEventListener('resize', checkOrientation);
-    window.addEventListener('orientationchange', checkOrientation);
-    checkOrientation();
+    // 縦向きメッセージ廃止（縦でも使いやすいUIに改善済み）
 
     // 下部バー: barWrap > topRow(縦のみ) + mainRow(常時)
     const barWrap = document.createElement('div');
@@ -2922,7 +2899,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v219</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v220</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -3031,7 +3008,7 @@ function updateMobileBar() {
         btn.style.background = active ? modeColors[m] + '33' : 'rgba(255,255,255,0.04)';
         btn.style.borderColor = active ? modeColors[m] : 'rgba(255,255,255,0.1)';
         btn.style.color = active ? modeColors[m] : '#888';
-        btn.textContent = landscape ? btn.dataset.labelFull : btn.dataset.labelShort;
+        btn.textContent = btn.dataset.labelFull;
     });
 
     // Vis/Vol ハイライト（上段+横専用の両セット）
