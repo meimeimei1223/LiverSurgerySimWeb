@@ -334,7 +334,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v226</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v227</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2905,7 +2905,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v226</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v227</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -2917,7 +2917,7 @@ function initMobileUI() {
                     <span style="color:#aaa;">Smooth:</span> <span class="v" id="sm-t">-</span> tris
                 </div>
                 <div id="mobile-data-btns" style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap;"></div>
-                <div id="xr-buttons-inline" style="display:none;margin-top:4px;"></div>
+                <div id="mobile-xr-slot" style="margin-top:4px;"></div>
             </div>`;
 
         // タップで展開/折りたたみ
@@ -2939,60 +2939,45 @@ function initMobileUI() {
             drop.innerHTML = 'OBJ <span style="font-size:9px;color:#666;">drop/click</span>';
             dataBtns.appendChild(drop);
         }
-        // Firebase ボタンも展開エリア内に移動
-        setTimeout(() => {
-            const fbToggle = document.getElementById('firebase-toggle-btn');
-            if (fbToggle && dataBtns) {
-                fbToggle.style.cssText = 'position:static;display:inline-block;' +
-                    'padding:4px 8px;background:rgba(10,30,50,0.7);' +
-                    'border:1px solid #1a4a7a;border-radius:5px;' +
-                    'cursor:pointer;font-size:10px;color:#4488aa;';
-                dataBtns.appendChild(fbToggle);
-            }
-            // Firebase展開パネルも再配置
-            const fbArea = document.getElementById('firebase-load-area');
-            if (fbArea) {
-                fbArea.style.position = 'fixed';
-                fbArea.style.top = '80px';
-                fbArea.style.left = '6px';
-                fbArea.style.bottom = 'auto';
-                fbArea.style.right = 'auto';
-            }
-        }, 500);
+        // Firebase ボタンを展開エリア内に移動（firebase-loader.js ロード完了を待つ）
+        moveFirebaseToMobileBar(dataBtns);
     }
 
     updateMobileBar();
 
-    // XRボタンを新しいDOMに直接作成（initXRが先に実行されてボタンが消えているため）
-    setTimeout(async () => {
-        if (!navigator.xr) return;
-        const container = document.getElementById('xr-buttons-inline');
-        if (!container) return;
-        const vrOk = await navigator.xr.isSessionSupported('immersive-vr').catch(() => false);
-        const arOk = await navigator.xr.isSessionSupported('immersive-ar').catch(() => false);
-        if (!vrOk && !arOk) return;
-        container.style.display = 'flex';
-        container.style.gap = '6px';
-        if (vrOk) {
-            const btn = document.createElement('button');
-            btn.className = 'xr-btn'; btn.id = 'btn-vr';
-            btn.textContent = 'VR';
-            btn.style.cssText = 'padding:4px 12px;border-radius:5px;border:1px solid #4dc0e6;' +
-                'background:transparent;color:#4dc0e6;font-size:11px;font-weight:bold;cursor:pointer;';
-            btn.onclick = () => startXR('immersive-vr');
-            container.appendChild(btn);
+    // モバイル版 XR ボタン生成（デスクトップ経路とは完全分離）
+    initMobileXR();
+}
+
+// Firebase ボタンがDOMに現れ次第モバイルバー内に移動する（タイミング競合対策）
+function moveFirebaseToMobileBar(dataBtns) {
+    const tryMove = () => {
+        const fbToggle = document.getElementById('firebase-toggle-btn');
+        if (!fbToggle || !dataBtns) return false;
+        if (fbToggle.parentElement === dataBtns) return true;  // 既に移動済み
+        fbToggle.style.cssText = 'position:static;display:inline-block;' +
+            'padding:4px 8px;background:rgba(10,30,50,0.7);' +
+            'border:1px solid #1a4a7a;border-radius:5px;' +
+            'cursor:pointer;font-size:10px;color:#4488aa;';
+        dataBtns.appendChild(fbToggle);
+        const fbArea = document.getElementById('firebase-load-area');
+        if (fbArea) {
+            fbArea.style.position = 'fixed';
+            fbArea.style.top = '80px';
+            fbArea.style.left = '6px';
+            fbArea.style.bottom = 'auto';
+            fbArea.style.right = 'auto';
         }
-        if (arOk) {
-            const btn = document.createElement('button');
-            btn.className = 'xr-btn'; btn.id = 'btn-ar';
-            btn.textContent = 'AR';
-            btn.style.cssText = 'padding:4px 12px;border-radius:5px;border:1px solid #7dff7d;' +
-                'background:transparent;color:#7dff7d;font-size:11px;font-weight:bold;cursor:pointer;';
-            btn.onclick = () => startXR('immersive-ar');
-            container.appendChild(btn);
-        }
-        console.log('[Mobile XR] VR:', vrOk, 'AR:', arOk);
-    }, 600);
+        return true;
+    };
+    if (tryMove()) return;
+    // まだ存在しない → MutationObserver で待つ
+    const obs = new MutationObserver(() => {
+        if (tryMove()) obs.disconnect();
+    });
+    obs.observe(document.body, { childList: true, subtree: true });
+    // セーフティネット: 10秒後に諦める
+    setTimeout(() => obs.disconnect(), 10000);
 }
 
 function updateMobileBar() {
@@ -3842,10 +3827,14 @@ function vrToSim(vx, vy, vz) {
             (vz - VR_OFFSET.z) / VR_SCALE];
 }
 
-// WebXR 初期化チェック
+// WebXR 初期化チェック（デスクトップ版のみ処理。モバイルは initMobileUI 内で処理）
 async function initXR() {
     if (!navigator.xr) {
         console.log('[XR] WebXR not supported');
+        return;
+    }
+    if (isMobile) {
+        console.log('[XR] mobile detected — handled by initMobileUI');
         return;
     }
     const xrBtns = document.getElementById('xr-buttons');
@@ -3856,7 +3845,7 @@ async function initXR() {
     const arOk = await navigator.xr.isSessionSupported('immersive-ar').catch(() => false);
 
     if (vrOk || arOk) {
-        // ボタンをinfoパネル内に移動（OBJドロップと重ならないように）
+        // デスクトップ: infoパネル内の #xr-buttons-inline に移動
         const inlineContainer = document.getElementById('xr-buttons-inline');
         if (inlineContainer) {
             inlineContainer.appendChild(btnVR);
@@ -3867,12 +3856,10 @@ async function initXR() {
             xrBtns.style.display = 'flex';
         }
     }
-    // VR: immersive-vr のまま（パネルは将来 Canvas→テクスチャで対応）
     if (vrOk) {
         btnVR.disabled = false;
         btnVR.onclick = () => startXR('immersive-vr');
     }
-    // AR: immersive-ar + DOM Overlay でパネル表示
     if (arOk) {
         btnAR.disabled = false;
         btnAR.onclick = () => {
@@ -3881,7 +3868,56 @@ async function initXR() {
             startXR('immersive-ar');
         };
     }
-    console.log('[XR] VR:', vrOk, 'AR:', arOk);
+    console.log('[XR Desktop] VR:', vrOk, 'AR:', arOk);
+}
+
+// モバイル版 XR ボタン生成（initMobileUI から呼ばれる、idempotent）
+async function initMobileXR() {
+    if (!navigator.xr) return;
+    const container = document.getElementById('mobile-xr-slot');
+    if (!container) return;
+    // 既にボタンがあれば作り直さない（二重実行ガード）
+    if (container.querySelector('.xr-btn')) {
+        console.log('[XR Mobile] buttons already exist — skip');
+        return;
+    }
+    // モバイルでは画面左下固定の #xr-buttons は使わないので隠す
+    const xrBtnsFixed = document.getElementById('xr-buttons');
+    if (xrBtnsFixed) xrBtnsFixed.style.display = 'none';
+    // 元々の btn-vr / btn-ar はデスクトップ用の雛形。モバイルでは使わず削除して ID 衝突回避
+    const origVR = document.getElementById('btn-vr');
+    const origAR = document.getElementById('btn-ar');
+    if (origVR && origVR.parentElement && origVR.parentElement.id === 'xr-buttons') origVR.remove();
+    if (origAR && origAR.parentElement && origAR.parentElement.id === 'xr-buttons') origAR.remove();
+
+    const vrOk = await navigator.xr.isSessionSupported('immersive-vr').catch(() => false);
+    const arOk = await navigator.xr.isSessionSupported('immersive-ar').catch(() => false);
+    if (!vrOk && !arOk) return;
+    container.style.display = 'flex';
+    container.style.gap = '6px';
+    if (vrOk) {
+        const btn = document.createElement('button');
+        btn.className = 'xr-btn'; btn.id = 'btn-vr';
+        btn.textContent = 'VR';
+        btn.style.cssText = 'padding:4px 12px;border-radius:5px;border:1px solid #4dc0e6;' +
+            'background:transparent;color:#4dc0e6;font-size:11px;font-weight:bold;cursor:pointer;';
+        btn.onclick = () => startXR('immersive-vr');
+        container.appendChild(btn);
+    }
+    if (arOk) {
+        const btn = document.createElement('button');
+        btn.className = 'xr-btn'; btn.id = 'btn-ar';
+        btn.textContent = 'AR';
+        btn.style.cssText = 'padding:4px 12px;border-radius:5px;border:1px solid #7dff7d;' +
+            'background:transparent;color:#7dff7d;font-size:11px;font-weight:bold;cursor:pointer;';
+        btn.onclick = () => {
+            document.getElementById('xr-status').style.display = 'block';
+            document.getElementById('xr-status').textContent = 'Starting AR...';
+            startXR('immersive-ar');
+        };
+        container.appendChild(btn);
+    }
+    console.log('[XR Mobile] VR:', vrOk, 'AR:', arOk);
 }
 
 async function startXR(mode) {
