@@ -157,6 +157,20 @@
 </div>
 <div id="xr-status"></div>
 
+<!-- AR Mobile Panel (WebXR dom-overlay root). 透明領域を XR select に通すため pointer-events:none -->
+<div id="ar-panel" style="display:none;position:fixed;inset:0;z-index:60;pointer-events:none;font-family:sans-serif;">
+    <!-- 上部バー -->
+    <div style="position:absolute;top:10px;left:10px;right:10px;display:flex;justify-content:space-between;align-items:center;pointer-events:none;">
+        <div id="ar-mode-label" style="pointer-events:auto;padding:6px 10px;background:rgba(0,0,0,0.55);color:#fff;border-radius:6px;font-size:12px;">AR Screen</div>
+        <button id="ar-exit-btn" style="pointer-events:auto;padding:8px 14px;background:rgba(200,50,50,0.88);color:white;border:none;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer;">Exit AR</button>
+    </div>
+    <!-- 下部操作 -->
+    <div style="position:absolute;bottom:14px;left:10px;right:10px;display:flex;justify-content:center;gap:6px;pointer-events:none;">
+        <button id="ar-btn-reset" style="pointer-events:auto;padding:8px 14px;background:rgba(60,60,70,0.85);color:#ffb;border:1px solid rgba(255,255,255,0.2);border-radius:8px;font-size:12px;cursor:pointer;">Reset Pose</button>
+        <button id="ar-btn-clear-handles" style="pointer-events:auto;padding:8px 14px;background:rgba(60,60,70,0.85);color:#fbb;border:1px solid rgba(255,255,255,0.2);border-radius:8px;font-size:12px;cursor:pointer;">Clear Handles</button>
+    </div>
+</div>
+
 <!-- Fragment Selection ポップアップ (main.cpp drawFragmentChoicePopup 相当) -->
 <div id="fragment-popup" style="display:none;position:fixed;z-index:20;
     top:50px;right:220px;
@@ -334,7 +348,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v229</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v230</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2905,7 +2919,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v229</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v230</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -3759,6 +3773,8 @@ let xrMode = null;  // 'vr' or 'ar'
 let arMode = null;
 let arInitialPlacePending = false;   // AR 起動後、最初のフレームで配置するフラグ
 let arPrevVRState = null;            // AR 終了時に VR_OFFSET/VR_SCALE を復元
+let arActiveTouchSource = null;      // ドラッグ中の transient inputSource (毎フレーム targetRaySpace を参照)
+let arInitialPlaceOffset = null;     // Reset Pose 用: 最初の配置位置を記憶
 
 // VR 空間パラメータ（実行時調整可能）
 let VR_SCALE = 0.05;        // シミュレーション空間 → VR空間のスケール（モデル3単位→15cm）
@@ -3935,7 +3951,8 @@ async function startXR(mode) {
     if (mode === 'immersive-ar') {
         opts = {
             requiredFeatures: [],
-            optionalFeatures: ['local-floor', 'hand-tracking']
+            optionalFeatures: ['local-floor', 'hand-tracking', 'dom-overlay'],
+            domOverlay: { root: document.getElementById('ar-panel') }
         };
     } else {
         opts = {
@@ -3982,8 +3999,18 @@ async function startXR(mode) {
                 arMode = 'screen';
                 arPrevVRState = { scale: VR_SCALE, offset: { ...VR_OFFSET } };
                 arInitialPlacePending = true;  // 最初のフレームで配置
-                // 画面タップ (targetRayMode === 'screen') を受信
+                // 画面タップ (targetRayMode === 'screen') を3段階で処理
+                xrSession.addEventListener('selectstart', onARSelectStart);
                 xrSession.addEventListener('select', onARSelect);
+                xrSession.addEventListener('selectend', onARSelectEnd);
+                // AR 専用 DOM Overlay パネル表示 (vr-panel は使わない)
+                document.getElementById('vr-panel').style.display = 'none';
+                const arPanel = document.getElementById('ar-panel');
+                arPanel.style.display = 'block';
+                // ボタン配線
+                document.getElementById('ar-exit-btn').onclick = () => { if (xrSession) xrSession.end(); };
+                document.getElementById('ar-btn-reset').onclick = () => { arInitialPlacePending = true; };
+                document.getElementById('ar-btn-clear-handles').onclick = () => { if (sb) sb.clearHandleSpheres(); };
                 console.log('[AR] phone AR screen-locked mode armed');
             }
         }
@@ -4015,32 +4042,63 @@ async function startXR(mode) {
     }
 }
 
-// ===== AR モバイル: 画面タップハンドラ =====
-// WebXR 'select' イベント: inputSource.targetRayMode === 'screen' が来る
-// targetRaySpace の pose から world-space ray を取得 → sim-space に変換 → 既存 addHandleSphereVR に投入
-function onARSelect(ev) {
+// ===== AR モバイル: 画面タップ/ドラッグハンドラ =====
+// targetRaySpace pose → world ray → sim space に変換するヘルパ
+function arPoseToSimRay(pose) {
+    const p = pose.transform.position;
+    const o = pose.transform.orientation;
+    const qx = o.x, qy = o.y, qz = o.z, qw = o.w;
+    // forward = -(local +Z in world)  既存 processController と同じ
+    const dirX = 2 * (qx * qz + qy * qw);
+    const dirY = 2 * (qy * qz - qx * qw);
+    const dirZ = 1 - 2 * (qx * qx + qy * qy);
+    const simO = vrToSim(p.x, p.y, p.z);
+    const simD = [-dirX / VR_SCALE, -dirY / VR_SCALE, -dirZ / VR_SCALE];
+    return { simO, simD, worldPos: p, worldOri: o };
+}
+
+// selectstart: 指が触れた瞬間 → まず既存ハンドルのグラブを試す
+function onARSelectStart(ev) {
     const src = ev.inputSource;
     if (!src || src.targetRayMode !== 'screen') return;
     if (!sb || !xrRefSpace) return;
     const pose = ev.frame.getPose(src.targetRaySpace, xrRefSpace);
     if (!pose) return;
 
-    const p = pose.transform.position;
-    const o = pose.transform.orientation;
-    const qx = o.x, qy = o.y, qz = o.z, qw = o.w;
-    // forward = -(local +Z) in world  （既存 processController と同じ）
-    const dirX = 2 * (qx * qz + qy * qw);
-    const dirY = 2 * (qy * qz - qx * qw);
-    const dirZ = 1 - 2 * (qx * qx + qy * qy);
+    const { simO, simD } = arPoseToSimRay(pose);
+    // Ray ベースのグラブ試行（既存ハンドルに当たった場合のみ成功）
+    sb.startGrabVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2]);
+    if (sb.isGrabbingVR()) {
+        arActiveTouchSource = src;
+        console.log('[AR] grab started');
+    }
+}
 
-    const simO = vrToSim(p.x, p.y, p.z);
-    const simD = [-dirX / VR_SCALE, -dirY / VR_SCALE, -dirZ / VR_SCALE];
-    console.log('[AR Tap] simO=', simO, 'simD=', simD);
+// select (完全なタップ): グラブしてないなら新規ハンドル配置
+function onARSelect(ev) {
+    if (!sb || !xrRefSpace) return;
+    // ドラッグが発生していたら配置しない (selectend で endGrabVR)
+    if (arActiveTouchSource) return;
+    // グラブ中でもない → 新規配置を試す
+    if (sb.isGrabbingVR()) return;
 
-    // Phase 1 疎通: 既存の VR 用 Handle Place をそのまま使う
-    // (Deform モード/モード外を問わず、ray が肝臓に当たれば球配置、外れれば何も起きない)
+    const src = ev.inputSource;
+    if (!src || src.targetRayMode !== 'screen') return;
+    const pose = ev.frame.getPose(src.targetRaySpace, xrRefSpace);
+    if (!pose) return;
+
+    const { simO, simD } = arPoseToSimRay(pose);
     const placed = sb.addHandleSphereVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2], handleSphereRadius);
     console.log('[AR Tap] handle placed:', placed);
+}
+
+// selectend: 指が離れた → グラブ終了
+function onARSelectEnd(ev) {
+    if (sb && sb.isGrabbingVR()) {
+        sb.endGrabVR();
+        console.log('[AR] grab ended');
+    }
+    arActiveTouchSource = null;
 }
 
 function onXREnd() {
@@ -4077,6 +4135,10 @@ function onXREnd() {
     }
     arMode = null;
     arInitialPlacePending = false;
+    arActiveTouchSource = null;
+    // AR 専用パネルを隠す
+    const arPanel = document.getElementById('ar-panel');
+    if (arPanel) arPanel.style.display = 'none';
 
     // UI 復帰（VR→通常）
     document.getElementById('vr-panel').style.display = 'none';
@@ -4139,6 +4201,15 @@ function renderXR(time, frame) {
     // (AR のタップは xrSession 'select' イベントで別途処理)
     if (!isPhoneAR) {
         processXRInput(frame);
+    } else if (arActiveTouchSource && sb && sb.isGrabbingVR()) {
+        // ドラッグ中: 毎フレーム transient inputSource の pose でグラブ追従
+        const tPose = frame.getPose(arActiveTouchSource.targetRaySpace, xrRefSpace);
+        if (tPose) {
+            const p = tPose.transform.position;
+            const o = tPose.transform.orientation;
+            const simP = vrToSim(p.x, p.y, p.z);
+            sb.setGrabVRWristState(simP[0], simP[1], simP[2], o.x, o.y, o.z, o.w);
+        }
     }
 
     // 物理ステップ
@@ -6883,7 +6954,7 @@ function vrExitVR() { if (xrSession) xrSession.end(); }
 if ('serviceWorker' in navigator) {
     // updateViaCache:'none' で sw.js 自体の HTTP キャッシュを無効化
     // ?v=228 でキャッシュバスト（バージョン毎に更新、不一致で強制 install 発火）
-    const SW_URL = 'sw.js?v=228';
+    const SW_URL = 'sw.js?v=230';
     let __swReloaded = false;
 
     // 新 SW が activate して controllerchange が発火したら1回だけ自動リロード
