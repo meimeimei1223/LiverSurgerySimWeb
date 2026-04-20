@@ -1,7 +1,14 @@
+/*!
+ * LiverSurgerySimWeb - Copyright (c) 2026 Meidai Kasai (笠井明大)
+ * All rights reserved. See LICENSE.
+ * Unauthorized copying, modification, or redistribution is prohibited.
+ * Contact: meidai1223@gmail.com
+ */
+
 // Service Worker for Liver Surgery Simulator PWA
 // 軽量 fetch ハンドラ: 同一オリジン GET のみ cache-first
 // Firebase 等の別オリジン通信は素通し → FPS 影響最小
-const CACHE_NAME = 'liver-sim-v237';
+const CACHE_NAME = 'liver-sim-v238';
 const ASSETS = [
   './',
   './index.html',

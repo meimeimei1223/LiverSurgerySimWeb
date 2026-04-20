@@ -1,7 +1,8 @@
 {
   "name": "Liver Surgery Simulator",
   "short_name": "Liver Surgery Simulator",
-  "description": "Real-time liver surgery simulation with WebAssembly",
+  "description": "Real-time liver surgery simulation with WebAssembly. Copyright (c) 2026 Meidai Kasai (笠井明大). All rights reserved. See LICENSE.",
+  "author": "Meidai Kasai (笠井明大) <meidai1223@gmail.com>",
   "start_url": "./",
   "display": "standalone",
   "orientation": "landscape",

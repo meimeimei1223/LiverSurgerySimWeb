@@ -1,4 +1,10 @@
 <!DOCTYPE html>
+<!--
+  LiverSurgerySimWeb - Copyright (c) 2026 Meidai Kasai (笠井明大)
+  All rights reserved. See LICENSE.
+  Unauthorized copying, modification, or redistribution is prohibited.
+  Contact: meidai1223@gmail.com
+-->
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
@@ -355,7 +361,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v237</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v238</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2926,7 +2932,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v237</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v238</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -7230,7 +7236,7 @@ function vrExitVR() { if (xrSession) xrSession.end(); }
 if ('serviceWorker' in navigator) {
     // updateViaCache:'none' で sw.js 自体の HTTP キャッシュを無効化
     // ?v=228 でキャッシュバスト（バージョン毎に更新、不一致で強制 install 発火）
-    const SW_URL = 'sw.js?v=237';
+    const SW_URL = 'sw.js?v=238';
     let __swReloaded = false;
 
     // 新 SW が activate して controllerchange が発火したら1回だけ自動リロード

@@ -1,3 +1,10 @@
+/*!
+ * LiverSurgerySimWeb - Copyright (c) 2026 Meidai Kasai (笠井明大)
+ * All rights reserved. See LICENSE.
+ * Unauthorized copying, modification, or redistribution is prohibited.
+ * Contact: meidai1223@gmail.com
+ */
+
 // ============================================================
 // firebase-loader.js
 // Firebase認証 + Storage からOBJをロードして handleFiles() へ渡す
