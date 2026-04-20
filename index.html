@@ -365,7 +365,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v242</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v243</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2936,7 +2936,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v242</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v243</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -4335,7 +4335,7 @@ function setupARCutHandlers() {
         delete arCutTouches[e.pointerId];
         arCutPrev2F = null;
         try { ov.releasePointerCapture(e.pointerId); } catch(_) {}
-        // v242: 短タップでの再配置は完全に無効化 (指を離した瞬間のタップ誤判定対策)
+        // v243: 短タップでの再配置は完全に無効化 (指を離した瞬間のタップ誤判定対策)
         // 再配置したい場合は: UndoCut (モバイルバーCutサブパネル) か Cut 実行後に再タップ
     };
     ov.addEventListener('pointerup', end);
@@ -4350,7 +4350,7 @@ function placeCutterAR(simO, simD) {
     if (!sb || !cutMode) return false;
     const hit = raycastMesh({ origin: simO, direction: simD });
     if (!hit) {
-        // ヒットミス: 配置済みカッターを維持 (ユーザー要望 v242: 押すまで消さない)
+        // ヒットミス: 配置済みカッターを維持 (ユーザー要望 v243: 押すまで消さない)
         return false;
     }
     cutTargetMeshIdx = hit.meshIdx;
@@ -4438,8 +4438,12 @@ function onARSelect(ev) {
 
     const { simO, simD } = arPoseToSimRay(pose);
 
-    // Free Cut モード: タップ位置にカッター配置
+    // Free Cut モード: 初回のみタップ位置にカッター配置 (配置済みなら無視)
+    // v243: Android Chrome は DOM overlay で tap を処理しても WebXR 'select' が同時発火することがあるため、
+    // cutterPlaced ガードを入れて「一度置いたら Cut 押すか Undo するまで移動しない」状態機械に。
+    // (モバイル非AR版の cutterDragging フラグと同じ役割)
     if (actionMode === 'freeCut') {
+        if (cutterPlaced) return;  // 配置済みなら re-place しない
         placeCutterAR(simO, simD);
         return;
     }
@@ -7381,7 +7385,7 @@ function vrExitVR() { if (xrSession) xrSession.end(); }
 if ('serviceWorker' in navigator) {
     // updateViaCache:'none' で sw.js 自体の HTTP キャッシュを無効化
     // ?v=228 でキャッシュバスト（バージョン毎に更新、不一致で強制 install 発火）
-    const SW_URL = 'sw.js?v=242';
+    const SW_URL = 'sw.js?v=243';
     let __swReloaded = false;
 
     // 新 SW が activate して controllerchange が発火したら1回だけ自動リロード
