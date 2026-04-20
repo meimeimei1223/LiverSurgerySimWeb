@@ -117,38 +117,19 @@ software is subject to the strict terms below.
    used, evaluated, or only discussed.
 
 
-4. PATENT NOTICE AND RESERVATION OF RIGHTS
+4. RESERVATION OF RIGHTS
 
-   The author is actively pursuing patent protection on
-   multiple proprietary algorithms and methods contained in
-   this software, including but not limited to techniques
-   relating to:
+   All intellectual property rights in this software,
+   including but not limited to copyrights, trade secrets,
+   know-how, and any future patents that may be filed, are
+   retained by the author. Nothing in this license shall be
+   construed as granting any such rights, express or implied,
+   by estoppel or otherwise, except as explicitly stated in
+   Section 1.
 
-   - Voxel-based tetrahedralization for soft-body simulation
-   - Automatic anatomical segment identification and
-     classification
-   - Segment-aware cutting operations with fragment selection
-   - Real-time volume calculation by anatomical segment
-   - Integration of soft-body physics with in-browser
-     execution via WebAssembly
-
-   This license does NOT grant any patent rights, express or
-   implied, by estoppel, exhaustion, or otherwise. No patent
-   license is conveyed by the act of publishing, hosting,
-   distributing, or providing access to this software or its
-   source code.
-
-   Any party wishing to practice any patented or
-   patent-pending algorithms contained herein, in any context
-   other than personal academic study by a single individual
-   within a single institution, must obtain a separate
-   written patent license from the author.
-
-   The author expressly reserves the right to pursue patent
-   protection in Japan, the United States, the European Patent
-   Office, the People's Republic of China, the Republic of
-   Korea, and any other jurisdiction, and to enforce such
-   patents against unauthorized users.
+   The author reserves the right to seek patent protection
+   in any jurisdiction at any time on any algorithm, method,
+   or system contained in or related to this software.
 
 
 5. COMMERCIAL AND CLINICAL USE
