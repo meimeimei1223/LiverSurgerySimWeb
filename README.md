@@ -71,9 +71,6 @@ This software is released under the **LiverSurgerySimWeb License**, a proprietar
 | ❌ | No commercial or clinical use without written permission |
 | ❌ | Not a medical device — not for clinical decision making |
 
-### Patent Pending
-
-Proprietary algorithms in this software are subject to pending patent applications in multiple jurisdictions, including but not limited to techniques related to voxel-based tetrahedralization, automatic anatomical segment identification, segment-aware cutting operations, and real-time volumetric analysis.
 
 ### Commercial Licensing
 
