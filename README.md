@@ -54,7 +54,7 @@ Real-time liver surgery simulation running in the browser via WebAssembly.
 
 ## License
 
-This software is released under the **LiverSurgerySimWeb License**, a proprietary source-available license with patent rights reserved and commercial licensing available. See [LICENSE](LICENSE) for the complete terms.
+This software is released under the **LiverSurgerySimWeb License**, a proprietary source-available license with all rights reserved. See [LICENSE](LICENSE) for the complete terms.
 
 ### Key Points
 
@@ -68,7 +68,6 @@ This software is released under the **LiverSurgerySimWeb License**, a proprietar
 | ❌ | No use as AI / machine learning training data |
 | ❌ | No commercial or clinical use without written permission |
 | ❌ | Not a medical device — not for clinical decision making |
-
 
 ### Commercial Licensing
 
