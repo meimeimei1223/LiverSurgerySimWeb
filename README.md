@@ -2,8 +2,6 @@
 
 Real-time liver surgery simulation running in the browser via WebAssembly.
 
-> **Patent Pending** · **Proprietary Software** · **Commercial Licensing Available**
-
 ---
 
 ## Features
