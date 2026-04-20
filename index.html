@@ -166,6 +166,8 @@
 <!-- AR Transform モード用オーバーレイ: actionMode==='transform' のときだけ表示してタッチを捕獲
      z-index は mobile-bar(50) / ar-panel(60) より低く設定 → UIボタンはTransform中もタップ可能 -->
 <div id="ar-transform-overlay" style="display:none;position:fixed;inset:0;z-index:40;background:transparent;touch-action:none;pointer-events:auto;"></div>
+<!-- AR Free Cut モード用オーバーレイ (cutMode && cutterPlaced のとき): ドラッグで回転 / 2本指ピンチでサイズ / 短タップで再配置 -->
+<div id="ar-cut-overlay" style="display:none;position:fixed;inset:0;z-index:40;background:transparent;touch-action:none;pointer-events:auto;"></div>
 
 <!-- AR Mobile Panel (WebXR dom-overlay root). 透明領域を XR select に通すため pointer-events:none -->
 <div id="ar-panel" style="display:none;position:fixed;inset:0;z-index:60;pointer-events:none;font-family:sans-serif;">
@@ -363,7 +365,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v239</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v240</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2934,7 +2936,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v239</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v240</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -3801,6 +3803,10 @@ let arTransformTouches = {};         // {pointerId: {x, y}}
 let arTransformPrev2F = null;        // {midX, midY, dist} 2本指前回状態
 let arTransformHandlersAttached = false;
 let arLastViewOri = null;            // 最新の viewer 姿勢 quaternion (タッチ時のカメラ軸計算用)
+// ===== Phase 3b: Free Cut カッター制御 (1本指=回転 / 2本指=サイズ / 短タップ=再配置) =====
+let arCutTouches = {};               // {pointerId: {x, y, x0, y0, t0, moved}}
+let arCutPrev2F = null;              // 2本指ピンチ前回距離
+let arCutHandlersAttached = false;
 
 // VR 空間パラメータ（実行時調整可能）
 let VR_SCALE = 0.05;        // シミュレーション空間 → VR空間のスケール（モデル3単位→15cm）
@@ -4061,8 +4067,9 @@ async function startXR(mode) {
                         document.getElementById('cut-popup-btn').click();
                     };
                 }
-                // Transform モード用タッチハンドラをアタッチ (遅延初期化、最初の AR で1回)
+                // Transform / Cut モード用タッチハンドラをアタッチ (遅延初期化、最初の AR で1回)
                 setupARTransformHandlers();
+                setupARCutHandlers();
                 // hit-test source を非同期に要求 (非対応時は silently disable)
                 try {
                     arViewerSpace = await xrSession.requestReferenceSpace('viewer');
@@ -4256,6 +4263,99 @@ function setupARTransformHandlers() {
     arTransformHandlersAttached = true;
 }
 
+// ===== Phase 3b: AR Cut overlay ハンドラ =====
+// 1本指ドラッグ: cutterDeltaRotate (既存 1756行 と同式)
+// 2本指ピンチ: setCutterScale (距離比、cutterTargetScales も同期更新)
+// 短タップ(ドラッグなし、<300ms): カメラ中央 ray で cutter 再配置
+function setupARCutHandlers() {
+    if (arCutHandlersAttached) return;
+    const ov = document.getElementById('ar-cut-overlay');
+    if (!ov) return;
+
+    function getCamAxes() {
+        const ori = arLastViewOri;
+        if (!ori) return null;
+        const qx = ori.x, qy = ori.y, qz = ori.z, qw = ori.w;
+        return {
+            right: [1 - 2*(qy*qy + qz*qz), 2*(qx*qy + qw*qz), 2*(qx*qz - qw*qy)],
+            up:    [2*(qx*qy - qw*qz), 1 - 2*(qx*qx + qz*qz), 2*(qy*qz + qw*qx)]
+        };
+    }
+
+    ov.addEventListener('pointerdown', (e) => {
+        ov.setPointerCapture(e.pointerId);
+        arCutTouches[e.pointerId] = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t0: Date.now(), moved: false };
+        arCutPrev2F = null;
+    });
+
+    ov.addEventListener('pointermove', (e) => {
+        if (!sb) return;
+        if (!(e.pointerId in arCutTouches)) return;
+        const t = arCutTouches[e.pointerId];
+        const prevX = t.x, prevY = t.y;
+        t.x = e.clientX; t.y = e.clientY;
+        if (Math.hypot(e.clientX - t.x0, e.clientY - t.y0) > 8) t.moved = true;
+        const ids = Object.keys(arCutTouches);
+        const axes = getCamAxes();
+        if (!axes) return;
+
+        if (ids.length === 1) {
+            arCutPrev2F = null;
+            if (!t.moved) return;  // まだドラッグ判定前
+            const dx = e.clientX - prevX;
+            const dy = e.clientY - prevY;
+            // ブラウザ版 1756 と同じ引数: (pitchDelta, yawDelta, right, up)
+            sb.cutterDeltaRotate(dy * 0.01, dx * 0.01,
+                axes.right[0], axes.right[1], axes.right[2],
+                axes.up[0], axes.up[1], axes.up[2]);
+        } else if (ids.length === 2) {
+            const a = arCutTouches[ids[0]], b = arCutTouches[ids[1]];
+            const curDist = Math.hypot(a.x - b.x, a.y - b.y);
+            if (arCutPrev2F && arCutPrev2F > 1 && curDist > 1) {
+                const ratio = curDist / arCutPrev2F;
+                const target = (cutTargetMeshIdx >= 0 && cutTargetMeshIdx <= 1) ? 'vessel' : 'liver';
+                const cur = cutterTargetScales[target] || 1.0;
+                const next = Math.max(0.1, Math.min(5.0, cur * ratio));
+                if (Math.abs(next - cur) > 1e-4) {
+                    cutterTargetScales[target] = next;
+                    sb.setCutterScale(next);
+                    // スライダー表示同期
+                    const sl = document.getElementById('cut-scale');
+                    if (sl) sl.value = next;
+                    const sv = document.getElementById('cut-scale-v');
+                    if (sv) sv.textContent = next.toFixed(2);
+                }
+            }
+            arCutPrev2F = curDist;
+        }
+    });
+
+    const end = (e) => {
+        if (!(e.pointerId in arCutTouches)) return;
+        const t = arCutTouches[e.pointerId];
+        delete arCutTouches[e.pointerId];
+        arCutPrev2F = null;
+        try { ov.releasePointerCapture(e.pointerId); } catch(_) {}
+        // 短タップ(移動なし、<300ms、他に指なし) → カメラ中央 ray で cutter 再配置
+        if (!t.moved && (Date.now() - t.t0) < 300 && Object.keys(arCutTouches).length === 0) {
+            if (arLastViewOri && vrHeadPos) {
+                const o = arLastViewOri;
+                const qx=o.x, qy=o.y, qz=o.z, qw=o.w;
+                const dirX = 2 * (qx * qz + qy * qw);
+                const dirY = 2 * (qy * qz - qx * qw);
+                const dirZ = 1 - 2 * (qx * qx + qy * qy);
+                const simO = vrToSim(vrHeadPos[0], vrHeadPos[1], vrHeadPos[2]);
+                const simD = [-dirX / VR_SCALE, -dirY / VR_SCALE, -dirZ / VR_SCALE];
+                placeCutterAR(simO, simD);
+            }
+        }
+    };
+    ov.addEventListener('pointerup', end);
+    ov.addEventListener('pointercancel', end);
+
+    arCutHandlersAttached = true;
+}
+
 // ===== Phase 3a: AR Free Cut — ray で肝臓にヒットした位置にカッター配置 =====
 // 既存 executeCutterPlace (1529行) の AR 版。screenToWorldRay の代わりに arPoseToSimRay 由来の ray を使う
 function placeCutterAR(simO, simD) {
@@ -4432,9 +4532,13 @@ function onXREnd() {
     arTransformTouches = {};
     arTransformPrev2F = null;
     arLastViewOri = null;
-    // AR CUT ボタンを隠す
+    // AR CUT ボタンと Cut overlay を隠す + touches クリア
     const cutBtnEl = document.getElementById('ar-cut-execute-btn');
     if (cutBtnEl) cutBtnEl.style.display = 'none';
+    const cutOvEl = document.getElementById('ar-cut-overlay');
+    if (cutOvEl) cutOvEl.style.display = 'none';
+    arCutTouches = {};
+    arCutPrev2F = null;
     // AR で一時無効化した DOM ポインタイベントと display を復元
     ['canvas', 'handle-overlay'].forEach(id => {
         const el = document.getElementById(id);
@@ -4511,11 +4615,16 @@ function renderXR(time, frame) {
             const want = (actionMode === 'transform') ? 'block' : 'none';
             if (tfOv.style.display !== want) tfOv.style.display = want;
         }
-        // Free Cut: カッター配置済みなら AR CUT ボタン表示
+        // Free Cut: カッター配置済みなら AR CUT ボタン表示 + 回転/サイズ overlay 表示
         const cutBtn = document.getElementById('ar-cut-execute-btn');
         if (cutBtn) {
             const want = (cutMode && cutterPlaced) ? 'block' : 'none';
             if (cutBtn.style.display !== want) cutBtn.style.display = want;
+        }
+        const cutOv = document.getElementById('ar-cut-overlay');
+        if (cutOv) {
+            const want = (cutMode && cutterPlaced) ? 'block' : 'none';
+            if (cutOv.style.display !== want) cutOv.style.display = want;
         }
     }
 
@@ -7289,7 +7398,7 @@ function vrExitVR() { if (xrSession) xrSession.end(); }
 if ('serviceWorker' in navigator) {
     // updateViaCache:'none' で sw.js 自体の HTTP キャッシュを無効化
     // ?v=228 でキャッシュバスト（バージョン毎に更新、不一致で強制 install 発火）
-    const SW_URL = 'sw.js?v=239';
+    const SW_URL = 'sw.js?v=240';
     let __swReloaded = false;
 
     // 新 SW が activate して controllerchange が発火したら1回だけ自動リロード
