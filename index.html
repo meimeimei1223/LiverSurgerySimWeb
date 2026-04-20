@@ -354,7 +354,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v235</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v236</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2925,7 +2925,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v235</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v236</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -3787,9 +3787,11 @@ let arViewerSpace = null;            // XRReferenceSpace('viewer')
 let arReticleHit = null;             // 最新の XRHitTestResult pose (XRPose or null)
 let arAnchorPlaceMode = false;       // true: 次のタップで anchor 配置 / reticle 表示
 let bARReticle = null;               // reticle 用 GL バッファ
-// ===== Phase 2.5: Transform モード (1本指回転 / 2本指ピンチ) =====
+// ===== Phase 2.5: Transform モード (1本指回転 / 2本指Pan+ピンチ) =====
 let arTransformTouches = {};         // {pointerId: {x, y}}
+let arTransformPrev2F = null;        // {midX, midY, dist} 2本指前回状態
 let arTransformHandlersAttached = false;
+let arLastViewOri = null;            // 最新の viewer 姿勢 quaternion (タッチ時のカメラ軸計算用)
 
 // VR 空間パラメータ（実行時調整可能）
 let VR_SCALE = 0.05;        // シミュレーション空間 → VR空間のスケール（モデル3単位→15cm）
@@ -4149,58 +4151,90 @@ function drawARReticle(V, P) {
     gl.disableVertexAttribArray(LW.aPos);
 }
 
-// ===== Phase 2.5: AR Transform (1本指=Y軸回転 / 2本指ピンチ=スケール) =====
+// ===== Phase 2.5: AR Transform (ブラウザ版と同じ挙動) =====
+//   1本指ドラッグ: dx → camera_up 軸で回転, dy → camera_right 軸で回転 (2軸同時)
+//   2本指ドラッグ: midpoint 差分 → camera_right/up で translateModel (平行移動)
+//                  + 指間距離比 → スケール (重心維持)
 function setupARTransformHandlers() {
     if (arTransformHandlersAttached) return;
     const ov = document.getElementById('ar-transform-overlay');
     if (!ov) return;
 
+    // 現在のカメラ姿勢から world-space の right / up ベクトルを取得
+    // (M 行列は uniform scale + translate のみなので world 軸 == sim 軸)
+    function getCamAxes() {
+        const ori = arLastViewOri;
+        if (!ori) return null;
+        const qx = ori.x, qy = ori.y, qz = ori.z, qw = ori.w;
+        return {
+            right: [1 - 2*(qy*qy + qz*qz), 2*(qx*qy + qw*qz), 2*(qx*qz - qw*qy)],
+            up:    [2*(qx*qy - qw*qz), 1 - 2*(qx*qx + qz*qz), 2*(qy*qz + qw*qx)]
+        };
+    }
+
+    function compute2F() {
+        const ids = Object.keys(arTransformTouches);
+        if (ids.length !== 2) return null;
+        const a = arTransformTouches[ids[0]], b = arTransformTouches[ids[1]];
+        return { midX: (a.x + b.x)/2, midY: (a.y + b.y)/2, dist: Math.hypot(a.x - b.x, a.y - b.y) };
+    }
+
     ov.addEventListener('pointerdown', (e) => {
         ov.setPointerCapture(e.pointerId);
         arTransformTouches[e.pointerId] = { x: e.clientX, y: e.clientY };
+        arTransformPrev2F = null;  // 指の構成が変わったのでリセット
     });
 
     ov.addEventListener('pointermove', (e) => {
         if (!sb) return;
         if (!(e.pointerId in arTransformTouches)) return;
         const prev = arTransformTouches[e.pointerId];
-        const cur = { x: e.clientX, y: e.clientY };
+        arTransformTouches[e.pointerId] = { x: e.clientX, y: e.clientY };
         const ids = Object.keys(arTransformTouches);
+        const axes = getCamAxes();
+        if (!axes) return;
+        const cx = sb.getMeshCentroidX(), cy = sb.getMeshCentroidY(), cz = sb.getMeshCentroidZ();
 
         if (ids.length === 1) {
-            // 1本指: dx でY軸回転
-            const dx = cur.x - prev.x;
-            const sens = 0.01;   // rad/pixel
-            const cx = sb.getMeshCentroidX(), cy = sb.getMeshCentroidY(), cz = sb.getMeshCentroidZ();
-            sb.rotateModelAroundCenter(dx * sens, 0, 1, 0, cx, cy, cz);
+            arTransformPrev2F = null;
+            const dx = e.clientX - prev.x;
+            const dy = e.clientY - prev.y;
+            // ブラウザ版 1721-1723 と同じ式: dx→up軸, dy→right軸で回転
+            sb.rotateModelAroundCenter(dx * 0.01, axes.up[0],    axes.up[1],    axes.up[2],    cx, cy, cz);
+            sb.rotateModelAroundCenter(dy * 0.01, axes.right[0], axes.right[1], axes.right[2], cx, cy, cz);
         } else if (ids.length === 2) {
-            // 2本指ピンチ: 距離比でスケール
-            const a = arTransformTouches[ids[0]];
-            const b = arTransformTouches[ids[1]];
-            const prevDist = Math.hypot(a.x - b.x, a.y - b.y);
-            // 更新後の位置で再計算
-            arTransformTouches[e.pointerId] = cur;
-            const a2 = arTransformTouches[ids[0]];
-            const b2 = arTransformTouches[ids[1]];
-            const newDist = Math.hypot(a2.x - b2.x, a2.y - b2.y);
-            if (prevDist > 1 && newDist > 1) {
-                const ratio = newDist / prevDist;
-                const newScale = Math.max(0.01, Math.min(0.5, VR_SCALE * ratio));
-                if (Math.abs(newScale - VR_SCALE) > 1e-5) {
-                    const cx = sb.getMeshCentroidX(), cy = sb.getMeshCentroidY(), cz = sb.getMeshCentroidZ();
-                    VR_OFFSET.x += (VR_SCALE - newScale) * cx;
-                    VR_OFFSET.y += (VR_SCALE - newScale) * cy;
-                    VR_OFFSET.z += (VR_SCALE - newScale) * cz;
-                    VR_SCALE = newScale;
+            const cur = compute2F();
+            if (!cur) return;
+            if (arTransformPrev2F) {
+                // 平行移動: midpoint 差分を camera_right/up で展開 (ブラウザ版 1436-1439 と同じ)
+                const panDx = cur.midX - arTransformPrev2F.midX;
+                const panDy = cur.midY - arTransformPrev2F.midY;
+                // AR 用スケール調整: world メートル換算で一定 (VR_SCALE が変わっても見た目同速)
+                const wsens = 0.0006;  // m/pixel (約100px で 6cm)
+                const s = wsens / VR_SCALE;
+                sb.translateModel(
+                    axes.right[0]*panDx*s + axes.up[0]*(-panDy)*s,
+                    axes.right[1]*panDx*s + axes.up[1]*(-panDy)*s,
+                    axes.right[2]*panDx*s + axes.up[2]*(-panDy)*s);
+                // スケール: 距離比
+                if (arTransformPrev2F.dist > 1 && cur.dist > 1) {
+                    const ratio = cur.dist / arTransformPrev2F.dist;
+                    const newScale = Math.max(0.01, Math.min(0.5, VR_SCALE * ratio));
+                    if (Math.abs(newScale - VR_SCALE) > 1e-5) {
+                        VR_OFFSET.x += (VR_SCALE - newScale) * cx;
+                        VR_OFFSET.y += (VR_SCALE - newScale) * cy;
+                        VR_OFFSET.z += (VR_SCALE - newScale) * cz;
+                        VR_SCALE = newScale;
+                    }
                 }
             }
-            return;  // 位置更新済み
+            arTransformPrev2F = cur;
         }
-        arTransformTouches[e.pointerId] = cur;
     });
 
     const end = (e) => {
         delete arTransformTouches[e.pointerId];
+        arTransformPrev2F = null;
         try { ov.releasePointerCapture(e.pointerId); } catch(_) {}
     };
     ov.addEventListener('pointerup', end);
@@ -4345,6 +4379,8 @@ function onXREnd() {
     const tfOv = document.getElementById('ar-transform-overlay');
     if (tfOv) tfOv.style.display = 'none';
     arTransformTouches = {};
+    arTransformPrev2F = null;
+    arLastViewOri = null;
     // AR で一時無効化した DOM ポインタイベントと display を復元
     ['canvas', 'handle-overlay'].forEach(id => {
         const el = document.getElementById(id);
@@ -4385,6 +4421,8 @@ function renderXR(time, frame) {
     // ヘッド位置を保存（パネルグラブ回転で使用）
     const hp = pose.views[0].transform.position;
     vrHeadPos = [hp.x, hp.y, hp.z];
+    // AR Transform 用にカメラ姿勢を保存
+    arLastViewOri = pose.views[0].transform.orientation;
 
     // モバイル AR: 初回フレームでユーザーの正面に肝臓を配置 (screen-locked の初期位置)
     const isPhoneAR = (xrMode === 'ar' && isMobile);
@@ -7191,7 +7229,7 @@ function vrExitVR() { if (xrSession) xrSession.end(); }
 if ('serviceWorker' in navigator) {
     // updateViaCache:'none' で sw.js 自体の HTTP キャッシュを無効化
     // ?v=228 でキャッシュバスト（バージョン毎に更新、不一致で強制 install 発火）
-    const SW_URL = 'sw.js?v=235';
+    const SW_URL = 'sw.js?v=236';
     let __swReloaded = false;
 
     // 新 SW が activate して controllerchange が発火したら1回だけ自動リロード
