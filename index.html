@@ -365,7 +365,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v241</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v242</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2936,7 +2936,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v241</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v242</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -4332,23 +4332,11 @@ function setupARCutHandlers() {
 
     const end = (e) => {
         if (!(e.pointerId in arCutTouches)) return;
-        const t = arCutTouches[e.pointerId];
         delete arCutTouches[e.pointerId];
         arCutPrev2F = null;
         try { ov.releasePointerCapture(e.pointerId); } catch(_) {}
-        // 明確な短タップ (移動なし<4px、<200ms、他に指なし、ヒット時のみ再配置) → 意図せぬ回転終端での移動を抑止
-        if (!t.moved && (Date.now() - t.t0) < 200 && Object.keys(arCutTouches).length === 0) {
-            if (arLastViewOri && vrHeadPos) {
-                const o = arLastViewOri;
-                const qx=o.x, qy=o.y, qz=o.z, qw=o.w;
-                const dirX = 2 * (qx * qz + qy * qw);
-                const dirY = 2 * (qy * qz - qx * qw);
-                const dirZ = 1 - 2 * (qx * qx + qy * qy);
-                const simO = vrToSim(vrHeadPos[0], vrHeadPos[1], vrHeadPos[2]);
-                const simD = [-dirX / VR_SCALE, -dirY / VR_SCALE, -dirZ / VR_SCALE];
-                placeCutterAR(simO, simD);
-            }
-        }
+        // v242: 短タップでの再配置は完全に無効化 (指を離した瞬間のタップ誤判定対策)
+        // 再配置したい場合は: UndoCut (モバイルバーCutサブパネル) か Cut 実行後に再タップ
     };
     ov.addEventListener('pointerup', end);
     ov.addEventListener('pointercancel', end);
@@ -4362,7 +4350,7 @@ function placeCutterAR(simO, simD) {
     if (!sb || !cutMode) return false;
     const hit = raycastMesh({ origin: simO, direction: simD });
     if (!hit) {
-        // ヒットミス: 配置済みカッターを維持 (ユーザー要望 v241: 押すまで消さない)
+        // ヒットミス: 配置済みカッターを維持 (ユーザー要望 v242: 押すまで消さない)
         return false;
     }
     cutTargetMeshIdx = hit.meshIdx;
@@ -7393,7 +7381,7 @@ function vrExitVR() { if (xrSession) xrSession.end(); }
 if ('serviceWorker' in navigator) {
     // updateViaCache:'none' で sw.js 自体の HTTP キャッシュを無効化
     // ?v=228 でキャッシュバスト（バージョン毎に更新、不一致で強制 install 発火）
-    const SW_URL = 'sw.js?v=241';
+    const SW_URL = 'sw.js?v=242';
     let __swReloaded = false;
 
     // 新 SW が activate して controllerchange が発火したら1回だけ自動リロード
