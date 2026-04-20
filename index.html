@@ -157,8 +157,9 @@
 </div>
 <div id="xr-status"></div>
 
-<!-- AR Transform モード用オーバーレイ: actionMode==='transform' のときだけ表示してタッチを捕獲 -->
-<div id="ar-transform-overlay" style="display:none;position:fixed;inset:0;z-index:55;background:transparent;touch-action:none;pointer-events:auto;"></div>
+<!-- AR Transform モード用オーバーレイ: actionMode==='transform' のときだけ表示してタッチを捕獲
+     z-index は mobile-bar(50) / ar-panel(60) より低く設定 → UIボタンはTransform中もタップ可能 -->
+<div id="ar-transform-overlay" style="display:none;position:fixed;inset:0;z-index:40;background:transparent;touch-action:none;pointer-events:auto;"></div>
 
 <!-- AR Mobile Panel (WebXR dom-overlay root). 透明領域を XR select に通すため pointer-events:none -->
 <div id="ar-panel" style="display:none;position:fixed;inset:0;z-index:60;pointer-events:none;font-family:sans-serif;">
@@ -354,7 +355,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v236</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v237</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2925,7 +2926,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v236</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v237</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -4210,7 +4211,7 @@ function setupARTransformHandlers() {
                 const panDx = cur.midX - arTransformPrev2F.midX;
                 const panDy = cur.midY - arTransformPrev2F.midY;
                 // AR 用スケール調整: world メートル換算で一定 (VR_SCALE が変わっても見た目同速)
-                const wsens = 0.0006;  // m/pixel (約100px で 6cm)
+                const wsens = 0.0005;  // m/pixel (約100px で 5cm)
                 const s = wsens / VR_SCALE;
                 sb.translateModel(
                     axes.right[0]*panDx*s + axes.up[0]*(-panDy)*s,
@@ -7229,7 +7230,7 @@ function vrExitVR() { if (xrSession) xrSession.end(); }
 if ('serviceWorker' in navigator) {
     // updateViaCache:'none' で sw.js 自体の HTTP キャッシュを無効化
     // ?v=228 でキャッシュバスト（バージョン毎に更新、不一致で強制 install 発火）
-    const SW_URL = 'sw.js?v=236';
+    const SW_URL = 'sw.js?v=237';
     let __swReloaded = false;
 
     // 新 SW が activate して controllerchange が発火したら1回だけ自動リロード
