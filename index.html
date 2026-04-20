@@ -182,6 +182,8 @@
     </div>
     <!-- Anchor モード中のヒント -->
     <div id="ar-anchor-hint" style="display:none;position:absolute;bottom:14px;left:10px;right:10px;text-align:center;pointer-events:none;color:#7bf;font-size:13px;background:rgba(0,0,0,0.6);padding:6px;border-radius:6px;">机/床にレチクルを合わせてタップ</div>
+    <!-- AR Free Cut 実行ボタン (cutMode && cutterPlaced のときだけ表示) -->
+    <button id="ar-cut-execute-btn" style="display:none;pointer-events:auto;position:absolute;bottom:200px;left:50%;transform:translateX(-50%);padding:14px 40px;background:#c0392b;color:white;border:2px solid #e84c3d;border-radius:10px;font-size:18px;font-weight:bold;cursor:pointer;box-shadow:0 6px 16px rgba(0,0,0,0.6);letter-spacing:0.08em;">CUT</button>
 </div>
 
 <!-- Fragment Selection ポップアップ (main.cpp drawFragmentChoicePopup 相当) -->
@@ -361,7 +363,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v238</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v239</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2932,7 +2934,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v238</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v239</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -4054,6 +4056,10 @@ async function startXR(mode) {
                     document.getElementById('ar-btn-reset').onclick = () => { arInitialPlacePending = true; };
                     document.getElementById('ar-btn-clear-handles').onclick = () => { if (sb) sb.clearHandleSpheres(); };
                     document.getElementById('ar-btn-anchor').onclick = () => toggleARAnchorMode();
+                    // CUT ボタン: 既存 cut-popup-btn の click をそのままトリガ (実行ロジック共通化)
+                    document.getElementById('ar-cut-execute-btn').onclick = () => {
+                        document.getElementById('cut-popup-btn').click();
+                    };
                 }
                 // Transform モード用タッチハンドラをアタッチ (遅延初期化、最初の AR で1回)
                 setupARTransformHandlers();
@@ -4250,6 +4256,37 @@ function setupARTransformHandlers() {
     arTransformHandlersAttached = true;
 }
 
+// ===== Phase 3a: AR Free Cut — ray で肝臓にヒットした位置にカッター配置 =====
+// 既存 executeCutterPlace (1529行) の AR 版。screenToWorldRay の代わりに arPoseToSimRay 由来の ray を使う
+function placeCutterAR(simO, simD) {
+    if (!sb || !cutMode) return false;
+    const hit = raycastMesh({ origin: simO, direction: simD });
+    if (!hit) {
+        if (cutterPlaced) {
+            cutterPlaced = false;
+            numHighlightIdx = 0;
+            const s = document.getElementById('cut-status');
+            if (s) s.textContent = 'Tap mesh to place cutter';
+        }
+        return false;
+    }
+    cutTargetMeshIdx = hit.meshIdx;
+    sb.setCutterPosition(hit.point[0], hit.point[1], hit.point[2]);
+    const isVessel = (cutTargetMeshIdx >= 0 && cutTargetMeshIdx <= 1);
+    const targetScale = isVessel ? cutterTargetScales.vessel : cutterTargetScales.liver;
+    sb.setCutterScale(targetScale);
+    cutterPlaced = true;
+    numHighlightIdx = 0;
+    const label = cutTargetMeshIdx < 0 ? 'Liver' : (childBuffers[cutTargetMeshIdx]?.label || 'Child');
+    const statusEl = document.getElementById('cut-status');
+    if (statusEl) statusEl.textContent = label + ': placed';
+    if (segOverlayMode && sb.isSkeletonAnalyzed()) {
+        updateSegOverlayColors(hit.point[0], hit.point[1], hit.point[2], cutTargetMeshIdx);
+    }
+    console.log('[AR Cut] cutter placed on', label, 'at', hit.point);
+    return true;
+}
+
 // ===== AR モバイル: 画面タップ/ドラッグハンドラ =====
 // targetRaySpace pose → world ray → sim space に変換するヘルパ
 function arPoseToSimRay(pose) {
@@ -4316,11 +4353,18 @@ function onARSelect(ev) {
     const pose = ev.frame.getPose(src.targetRaySpace, xrRefSpace);
     if (!pose) return;
 
+    const { simO, simD } = arPoseToSimRay(pose);
+
+    // Free Cut モード: タップ位置にカッター配置
+    if (actionMode === 'freeCut') {
+        placeCutterAR(simO, simD);
+        return;
+    }
+
     // 配置を許可するモード: Deform + Place (または Deform で sub 未設定)
     const allowPlace = (actionMode === 'deform') && (deformSub === 'place' || deformSub === 'none');
     if (!allowPlace) return;
 
-    const { simO, simD } = arPoseToSimRay(pose);
     const placed = sb.addHandleSphereVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2], handleSphereRadius);
     console.log('[AR Tap] handle placed:', placed, 'mode=', actionMode, deformSub);
 }
@@ -4388,6 +4432,9 @@ function onXREnd() {
     arTransformTouches = {};
     arTransformPrev2F = null;
     arLastViewOri = null;
+    // AR CUT ボタンを隠す
+    const cutBtnEl = document.getElementById('ar-cut-execute-btn');
+    if (cutBtnEl) cutBtnEl.style.display = 'none';
     // AR で一時無効化した DOM ポインタイベントと display を復元
     ['canvas', 'handle-overlay'].forEach(id => {
         const el = document.getElementById(id);
@@ -4463,6 +4510,12 @@ function renderXR(time, frame) {
         if (tfOv) {
             const want = (actionMode === 'transform') ? 'block' : 'none';
             if (tfOv.style.display !== want) tfOv.style.display = want;
+        }
+        // Free Cut: カッター配置済みなら AR CUT ボタン表示
+        const cutBtn = document.getElementById('ar-cut-execute-btn');
+        if (cutBtn) {
+            const want = (cutMode && cutterPlaced) ? 'block' : 'none';
+            if (cutBtn.style.display !== want) cutBtn.style.display = want;
         }
     }
 
@@ -7236,7 +7289,7 @@ function vrExitVR() { if (xrSession) xrSession.end(); }
 if ('serviceWorker' in navigator) {
     // updateViaCache:'none' で sw.js 自体の HTTP キャッシュを無効化
     // ?v=228 でキャッシュバスト（バージョン毎に更新、不一致で強制 install 発火）
-    const SW_URL = 'sw.js?v=238';
+    const SW_URL = 'sw.js?v=239';
     let __swReloaded = false;
 
     // 新 SW が activate して controllerchange が発火したら1回だけ自動リロード
