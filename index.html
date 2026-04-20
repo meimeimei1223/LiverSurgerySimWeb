@@ -157,6 +157,9 @@
 </div>
 <div id="xr-status"></div>
 
+<!-- AR Transform モード用オーバーレイ: actionMode==='transform' のときだけ表示してタッチを捕獲 -->
+<div id="ar-transform-overlay" style="display:none;position:fixed;inset:0;z-index:55;background:transparent;touch-action:none;pointer-events:auto;"></div>
+
 <!-- AR Mobile Panel (WebXR dom-overlay root). 透明領域を XR select に通すため pointer-events:none -->
 <div id="ar-panel" style="display:none;position:fixed;inset:0;z-index:60;pointer-events:none;font-family:sans-serif;">
     <!-- 上部バー -->
@@ -351,7 +354,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v234</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v235</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2922,7 +2925,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v234</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v235</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -3784,6 +3787,9 @@ let arViewerSpace = null;            // XRReferenceSpace('viewer')
 let arReticleHit = null;             // 最新の XRHitTestResult pose (XRPose or null)
 let arAnchorPlaceMode = false;       // true: 次のタップで anchor 配置 / reticle 表示
 let bARReticle = null;               // reticle 用 GL バッファ
+// ===== Phase 2.5: Transform モード (1本指回転 / 2本指ピンチ) =====
+let arTransformTouches = {};         // {pointerId: {x, y}}
+let arTransformHandlersAttached = false;
 
 // VR 空間パラメータ（実行時調整可能）
 let VR_SCALE = 0.05;        // シミュレーション空間 → VR空間のスケール（モデル3単位→15cm）
@@ -4040,6 +4046,8 @@ async function startXR(mode) {
                     document.getElementById('ar-btn-clear-handles').onclick = () => { if (sb) sb.clearHandleSpheres(); };
                     document.getElementById('ar-btn-anchor').onclick = () => toggleARAnchorMode();
                 }
+                // Transform モード用タッチハンドラをアタッチ (遅延初期化、最初の AR で1回)
+                setupARTransformHandlers();
                 // hit-test source を非同期に要求 (非対応時は silently disable)
                 try {
                     arViewerSpace = await xrSession.requestReferenceSpace('viewer');
@@ -4139,6 +4147,66 @@ function drawARReticle(V, P) {
     gl.vertexAttribPointer(LW.aPos, 3, gl.FLOAT, false, 0, 0);
     gl.drawArrays(gl.LINES, 0, verts.length / 3);
     gl.disableVertexAttribArray(LW.aPos);
+}
+
+// ===== Phase 2.5: AR Transform (1本指=Y軸回転 / 2本指ピンチ=スケール) =====
+function setupARTransformHandlers() {
+    if (arTransformHandlersAttached) return;
+    const ov = document.getElementById('ar-transform-overlay');
+    if (!ov) return;
+
+    ov.addEventListener('pointerdown', (e) => {
+        ov.setPointerCapture(e.pointerId);
+        arTransformTouches[e.pointerId] = { x: e.clientX, y: e.clientY };
+    });
+
+    ov.addEventListener('pointermove', (e) => {
+        if (!sb) return;
+        if (!(e.pointerId in arTransformTouches)) return;
+        const prev = arTransformTouches[e.pointerId];
+        const cur = { x: e.clientX, y: e.clientY };
+        const ids = Object.keys(arTransformTouches);
+
+        if (ids.length === 1) {
+            // 1本指: dx でY軸回転
+            const dx = cur.x - prev.x;
+            const sens = 0.01;   // rad/pixel
+            const cx = sb.getMeshCentroidX(), cy = sb.getMeshCentroidY(), cz = sb.getMeshCentroidZ();
+            sb.rotateModelAroundCenter(dx * sens, 0, 1, 0, cx, cy, cz);
+        } else if (ids.length === 2) {
+            // 2本指ピンチ: 距離比でスケール
+            const a = arTransformTouches[ids[0]];
+            const b = arTransformTouches[ids[1]];
+            const prevDist = Math.hypot(a.x - b.x, a.y - b.y);
+            // 更新後の位置で再計算
+            arTransformTouches[e.pointerId] = cur;
+            const a2 = arTransformTouches[ids[0]];
+            const b2 = arTransformTouches[ids[1]];
+            const newDist = Math.hypot(a2.x - b2.x, a2.y - b2.y);
+            if (prevDist > 1 && newDist > 1) {
+                const ratio = newDist / prevDist;
+                const newScale = Math.max(0.01, Math.min(0.5, VR_SCALE * ratio));
+                if (Math.abs(newScale - VR_SCALE) > 1e-5) {
+                    const cx = sb.getMeshCentroidX(), cy = sb.getMeshCentroidY(), cz = sb.getMeshCentroidZ();
+                    VR_OFFSET.x += (VR_SCALE - newScale) * cx;
+                    VR_OFFSET.y += (VR_SCALE - newScale) * cy;
+                    VR_OFFSET.z += (VR_SCALE - newScale) * cz;
+                    VR_SCALE = newScale;
+                }
+            }
+            return;  // 位置更新済み
+        }
+        arTransformTouches[e.pointerId] = cur;
+    });
+
+    const end = (e) => {
+        delete arTransformTouches[e.pointerId];
+        try { ov.releasePointerCapture(e.pointerId); } catch(_) {}
+    };
+    ov.addEventListener('pointerup', end);
+    ov.addEventListener('pointercancel', end);
+
+    arTransformHandlersAttached = true;
 }
 
 // ===== AR モバイル: 画面タップ/ドラッグハンドラ =====
@@ -4273,6 +4341,10 @@ function onXREnd() {
     // AR 専用パネルを隠す
     const arPanel = document.getElementById('ar-panel');
     if (arPanel) arPanel.style.display = 'none';
+    // Transform オーバーレイ非表示 + touches クリア
+    const tfOv = document.getElementById('ar-transform-overlay');
+    if (tfOv) tfOv.style.display = 'none';
+    arTransformTouches = {};
     // AR で一時無効化した DOM ポインタイベントと display を復元
     ['canvas', 'handle-overlay'].forEach(id => {
         const el = document.getElementById(id);
@@ -4338,6 +4410,15 @@ function renderXR(time, frame) {
         VR_OFFSET = { x: ox, y: oy, z: oz };
         arInitialPlacePending = false;
         console.log('[AR] Initial placement:', VR_OFFSET, 'scale=', VR_SCALE);
+    }
+
+    // モバイル AR: Transform モード時のみオーバーレイ表示 (タッチ捕獲)
+    if (isPhoneAR) {
+        const tfOv = document.getElementById('ar-transform-overlay');
+        if (tfOv) {
+            const want = (actionMode === 'transform') ? 'block' : 'none';
+            if (tfOv.style.display !== want) tfOv.style.display = want;
+        }
     }
 
     // モバイル AR: hit-test 結果を毎フレーム更新 (床/机検出 → レチクル位置)
@@ -7110,7 +7191,7 @@ function vrExitVR() { if (xrSession) xrSession.end(); }
 if ('serviceWorker' in navigator) {
     // updateViaCache:'none' で sw.js 自体の HTTP キャッシュを無効化
     // ?v=228 でキャッシュバスト（バージョン毎に更新、不一致で強制 install 発火）
-    const SW_URL = 'sw.js?v=234';
+    const SW_URL = 'sw.js?v=235';
     let __swReloaded = false;
 
     // 新 SW が activate して controllerchange が発火したら1回だけ自動リロード
