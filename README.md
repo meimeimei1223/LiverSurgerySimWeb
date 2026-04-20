@@ -3,7 +3,13 @@
 Real-time liver surgery simulation running in the browser via WebAssembly.
 
 ---
+## Live Demo
 
+**[Launch Simulator](https://meimeimei1223.github.io/LiverSurgerySimWeb/)**
+
+> ⚠️ **Not for clinical use.** This is an educational demonstration only.
+> Do not upload identifiable patient data.
+> 
 ## Features
 
 - **Soft-body physics** — XPBD (Extended Position Based Dynamics) solver compiled from C++ to WebAssembly
@@ -15,13 +21,6 @@ Real-time liver surgery simulation running in the browser via WebAssembly.
 - **Volume Display** — Real-time volume calculation with segment breakdown (ml / %)
 - **Seg Overlay** — Visualize which segment the cutter is touching during Free Cut
 - **OBJ Drop** — Drop custom OBJ files to tetrahedralize and simulate any liver model
-
-## Live Demo
-
-**[Launch Simulator](https://meimeimei1223.github.io/LiverSurgerySimWeb/)**
-
-> ⚠️ **Not for clinical use.** This is an educational demonstration only.
-> Do not upload identifiable patient data.
 
 ## Controls
 
