@@ -189,7 +189,7 @@
 </div>
 
 <!-- Fragment Selection ポップアップ (main.cpp drawFragmentChoicePopup 相当) -->
-<div id="fragment-popup" style="display:none;position:fixed;z-index:20;
+<div id="fragment-popup" style="display:none;position:fixed;z-index:70;
     top:50px;right:220px;
     background:rgba(15,18,28,0.95);border:1px solid rgba(75,185,230,0.3);
     border-radius:10px;padding:0;min-width:340px;color:#fff;font-size:13px;cursor:default;">
@@ -365,7 +365,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v251</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v252</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2127,6 +2127,34 @@ function showFragmentPopup() {
     const popup = document.getElementById('fragment-popup');
     const btnDiv = document.getElementById('fragment-buttons');
     const count = sb.getPendingFragmentCount();
+    // v252: AR モバイルでは画面はみ出し対策 + ar-cut-overlay (z=40) より上に表示
+    //        デスクトップはタイトルバードラッグで動かせるので右上配置を維持
+    const inPhoneAR = (typeof xrSession !== 'undefined' && xrSession && xrMode === 'ar' && isMobile);
+    if (inPhoneAR) {
+        popup.style.top = '60px';
+        popup.style.left = '50%';
+        popup.style.right = 'auto';
+        popup.style.transform = 'translateX(-50%)';
+        popup.style.minWidth = '0';
+        popup.style.width = 'min(92vw, 360px)';
+        popup.style.maxHeight = '70vh';
+        popup.style.overflowY = 'auto';
+        // フラグメント選択中は ar-cut-overlay と CUT ボタンを隠す (popup タップ干渉防止)
+        const cutOv = document.getElementById('ar-cut-overlay');
+        const cutBtn = document.getElementById('ar-cut-execute-btn');
+        if (cutOv) cutOv.style.display = 'none';
+        if (cutBtn) cutBtn.style.display = 'none';
+    } else {
+        // デスクトップ用デフォルトに戻す (前回 AR で書き換えた可能性に備えて)
+        popup.style.top = '50px';
+        popup.style.left = '';
+        popup.style.right = '220px';
+        popup.style.transform = '';
+        popup.style.minWidth = '340px';
+        popup.style.width = '';
+        popup.style.maxHeight = '';
+        popup.style.overflowY = '';
+    }
     btnDiv.innerHTML = '';
     for (let r = 0; r < count; r++) {
         const size = sb.getPendingFragmentSize(r);
@@ -2980,7 +3008,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v251</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v252</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -3883,6 +3911,17 @@ let arCutHandlersAttached = false;
 let arCutMultiTouchActive = false;   // この touch sequence で 2本指以上が触れたか
 let arCutCleanTapPending = false;    // 直前にクリーンタップが完了した (300ms 以内)
 let arCutCleanTapTimer = null;       // クリーンタップ消費タイマー
+// v252: AR-panel / mobile-bar 等の <button> タップ直後の WebXR 'select' を抑止
+//       (Android Chrome の DOM tap と XR select の dual-fire 対策、Anchor / SegSelect / Deform 全般)
+let arButtonClickRecent = false;
+let arButtonClickTimer = null;
+document.addEventListener('pointerdown', (e) => {
+    if (e.target && e.target.closest && e.target.closest('button')) {
+        arButtonClickRecent = true;
+        if (arButtonClickTimer) clearTimeout(arButtonClickTimer);
+        arButtonClickTimer = setTimeout(() => { arButtonClickRecent = false; }, 250);
+    }
+}, true);  // capture phase で先に走るので XR select より早く反映される
 
 // VR 空間パラメータ（実行時調整可能）
 let VR_SCALE = 0.05;        // シミュレーション空間 → VR空間のスケール（モデル3単位→15cm）
@@ -4479,6 +4518,7 @@ function arPoseToSimRay(pose) {
 // - Deform + Deform (Grab): ray でメッシュ/ハンドルをグラブ開始 → per-frame で追従
 // - それ以外: 何もしない (select で配置判定)
 function onARSelectStart(ev) {
+    if (arButtonClickRecent) return;  // v252: ボタンタップの dual-fire を抑止
     const src = ev.inputSource;
     if (!src || src.targetRayMode !== 'screen') return;
     if (!sb || !xrRefSpace) return;
@@ -4501,6 +4541,7 @@ function onARSelectStart(ev) {
 // - その他: 何もしない
 function onARSelect(ev) {
     if (!sb || !xrRefSpace) return;
+    if (arButtonClickRecent) return;  // v252: ボタンタップの dual-fire を抑止 (SegSelect / 各種配置を保護)
 
     // Anchor モード: reticle 位置を liver の世界座標として確定
     if (arAnchorPlaceMode && arReticleHit) {
@@ -4730,14 +4771,16 @@ function renderXR(time, frame) {
             if (tfOv.style.display !== want) tfOv.style.display = want;
         }
         // Free Cut: カッター配置済みなら AR CUT ボタン表示 + 回転/サイズ overlay 表示
+        // v252: フラグメント選択ポップアップ表示中は隠す (popup タップ干渉防止)
+        const fragPending = sb && typeof sb.hasPendingFragment === 'function' && sb.hasPendingFragment();
         const cutBtn = document.getElementById('ar-cut-execute-btn');
         if (cutBtn) {
-            const want = (cutMode && cutterPlaced) ? 'block' : 'none';
+            const want = (cutMode && cutterPlaced && !fragPending) ? 'block' : 'none';
             if (cutBtn.style.display !== want) cutBtn.style.display = want;
         }
         const cutOv = document.getElementById('ar-cut-overlay');
         if (cutOv) {
-            const want = (cutMode && cutterPlaced) ? 'block' : 'none';
+            const want = (cutMode && cutterPlaced && !fragPending) ? 'block' : 'none';
             if (cutOv.style.display !== want) cutOv.style.display = want;
         }
     }
