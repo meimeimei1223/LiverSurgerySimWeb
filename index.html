@@ -192,7 +192,7 @@
     <!-- Anchor モード中のヒント (画面中央上、タップ動作の邪魔にならない位置) -->
     <div id="ar-anchor-hint" style="display:none;position:absolute;top:60px;left:50%;transform:translateX(-50%);pointer-events:none;color:#7bf;font-size:13px;background:rgba(0,0,0,0.7);padding:6px 14px;border-radius:6px;white-space:nowrap;">机/床にレチクルを合わせてタップ</div>
     <!-- AR Free Cut 実行ボタン (cutMode && cutterPlaced のときだけ表示) -->
-    <button id="ar-cut-execute-btn" style="display:none;pointer-events:auto;position:absolute;bottom:160px;left:50%;transform:translateX(-50%);padding:14px 40px;background:#c0392b;color:white;border:2px solid #e84c3d;border-radius:10px;font-size:18px;font-weight:bold;cursor:pointer;box-shadow:0 6px 16px rgba(0,0,0,0.6);letter-spacing:0.08em;">CUT</button>
+    <button id="ar-cut-execute-btn" style="display:none;pointer-events:auto;position:absolute;bottom:160px;left:50%;transform:translateX(-50%);padding:7px 22px;background:#c0392b;color:white;border:1px solid #e84c3d;border-radius:6px;font-size:13px;font-weight:bold;cursor:pointer;box-shadow:0 3px 8px rgba(0,0,0,0.5);letter-spacing:0.06em;">CUT</button>
 </div>
 
 <!-- Fragment Selection ポップアップ (main.cpp drawFragmentChoicePopup 相当) -->
@@ -372,7 +372,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v255</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v256</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -3015,7 +3015,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v255</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v256</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
