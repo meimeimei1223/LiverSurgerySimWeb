@@ -372,7 +372,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v254</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v255</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -3015,7 +3015,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v254</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v255</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -4735,6 +4735,46 @@ function onXREnd() {
     requestAnimationFrame(render);
 }
 
+// v255: AR の CUT ボタンをカッター中心の少し上に配置 (非AR の updateCutPopupPosition と同等)
+//   sim 空間のカッター中心 → VR_SCALE/VR_OFFSET 適用で AR ワールド → view/proj で screen
+function positionARCutBtn(view) {
+    const cutBtn = document.getElementById('ar-cut-execute-btn');
+    if (!cutBtn || !sb) return;
+    const verts = sb.getCutterVertices();
+    if (!verts || verts.length < 3) return;
+    let cx = 0, cy = 0, cz = 0;
+    const nv = verts.length / 3;
+    for (let i = 0; i < verts.length; i += 3) {
+        cx += verts[i]; cy += verts[i+1]; cz += verts[i+2];
+    }
+    cx /= nv; cy /= nv; cz /= nv;
+    // sim → AR world (drawSceneXR の M 行列と同じ変換)
+    const wx = cx * VR_SCALE + VR_OFFSET.x;
+    const wy = cy * VR_SCALE + VR_OFFSET.y;
+    const wz = cz * VR_SCALE + VR_OFFSET.z;
+    const V = view.transform.inverse.matrix;
+    const P = view.projectionMatrix;
+    const W = window.innerWidth, H = window.innerHeight;
+    const sp = worldToScreen(wx, wy, wz, V, P, W, H);
+    if (!sp) return;  // カメラ後方なら位置更新せず (前フレームの位置維持)
+    const bw = cutBtn.offsetWidth || 100;
+    const bh = cutBtn.offsetHeight || 50;
+    let px = sp.x - bw * 0.5;
+    let py = sp.y - bh - 30;  // カッター中心の 30px 上
+    // ビューポート内にクリップ (上部60pxはAR-panel/anchor-hint予約、下部100pxはmobile-bar/sub-panel予約)
+    const margin = 8;
+    const topReserved = 60, bottomReserved = 100;
+    if (px < margin) px = margin;
+    if (px + bw > W - margin) px = W - bw - margin;
+    if (py < topReserved) py = sp.y + 30;  // 上に余裕なければカッター下
+    if (py + bh > H - bottomReserved) py = H - bh - bottomReserved;
+    cutBtn.style.left = px + 'px';
+    cutBtn.style.top = py + 'px';
+    cutBtn.style.right = '';
+    cutBtn.style.bottom = '';
+    cutBtn.style.transform = '';
+}
+
 // XR レンダーループ
 let vrFc = 0, vrFt = 0;  // VR FPSカウンター
 function renderXR(time, frame) {
@@ -4790,16 +4830,19 @@ function renderXR(time, frame) {
         }
         // Free Cut: カッター配置済みなら AR CUT ボタン表示 + 回転/サイズ overlay 表示
         // v252: フラグメント選択ポップアップ表示中は隠す (popup タップ干渉防止)
+        // v255: ar-cut-execute-btn はカッター中心の上に追従配置 (非AR cut-popup と同じ挙動)
+        //        ドラッグ/ピンチ中は非表示 (ボタンが指の動きに追従して見苦しい/誤タップ防止)
         const fragPending = sb && typeof sb.hasPendingFragment === 'function' && sb.hasPendingFragment();
+        const dragActive = Object.keys(arCutTouches).length > 0;
         const cutBtn = document.getElementById('ar-cut-execute-btn');
-        if (cutBtn) {
-            const want = (cutMode && cutterPlaced && !fragPending) ? 'block' : 'none';
-            if (cutBtn.style.display !== want) cutBtn.style.display = want;
-        }
         const cutOv = document.getElementById('ar-cut-overlay');
-        if (cutOv) {
-            const want = (cutMode && cutterPlaced && !fragPending) ? 'block' : 'none';
-            if (cutOv.style.display !== want) cutOv.style.display = want;
+        const ovWant  = (cutMode && cutterPlaced && !fragPending) ? 'block' : 'none';
+        const btnWant = (cutMode && cutterPlaced && !fragPending && !dragActive) ? 'block' : 'none';
+        if (cutOv && cutOv.style.display !== ovWant) cutOv.style.display = ovWant;
+        if (cutBtn && cutBtn.style.display !== btnWant) cutBtn.style.display = btnWant;
+        // CUT ボタンをカッター中心の少し上に配置 (毎フレーム)
+        if (cutBtn && btnWant === 'block' && pose.views.length > 0) {
+            positionARCutBtn(pose.views[0]);
         }
     }
 
