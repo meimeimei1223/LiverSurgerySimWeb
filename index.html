@@ -365,7 +365,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v245</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v246</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2936,7 +2936,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v245</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v246</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -3507,21 +3507,42 @@ setTimeout(()=>{ if(!sb) showErr('WASM load timeout (30s)'); }, 30000);
 // OBJフォルダドロップ → 四面体化 → シミュレーション再開
 //==========================================================================
 function classifyOBJFiles(files) {
+    // 戦略: 完全一致優先 → 完全一致が無いキーのみ部分一致でフォールバック (複数あれば最後勝ち)
+    // 例: liver.obj + soft_liver.obj + liver2.obj → liver.obj が採用される
     const r = {liver:null,portal:null,vein:null,gb:null,tumor:null};
+    const ORG_KEYS = ['liver','portal','vein','gb','tumor'];
+    const exactMatched = {};  // key -> true (Pass 1 で確定したキー、Pass 2 で上書き禁止)
+    const objs = [];
     for (const f of files) {
         const basename = (f.webkitRelativePath || f.name || '').replace(/\\/g,'/').split('/').pop();
         if (!basename.match(/\.obj$/i)) continue;
-        const n = basename.toLowerCase();
-        console.log('[classify]', basename);
-        if (n.includes('liver'))       r.liver=f;
-        else if (n.includes('portal')) r.portal=f;
-        else if (n.includes('vein'))   r.vein=f;
-        else if (n.includes('gb'))     r.gb=f;
-        else if (n.includes('tumor'))  r.tumor=f;
-        // S1-S8 セグメントOBJ（"s1.obj", "S1.obj" 等）
-        else {
-            const sm = basename.match(/^[Ss](\d+)\.obj$/i);
-            if (sm) r['S'+sm[1]] = f;
+        objs.push({f, basename, n: basename.toLowerCase()});
+    }
+    // Pass 1: 完全一致 ("liver.obj" 等)
+    for (const o of objs) {
+        for (const k of ORG_KEYS) {
+            if (o.n === k + '.obj') { r[k] = o.f; exactMatched[k] = true; break; }
+        }
+    }
+    // Pass 2: 部分一致フォールバック (Pass 1 で確定したキーには代入しない)
+    for (const o of objs) {
+        console.log('[classify]', o.basename);
+        if (ORG_KEYS.some(k => o.n === k + '.obj')) continue; // 完全一致は Pass 1 済み
+        let matchedKey = null;
+        if      (o.n.includes('liver'))  matchedKey = 'liver';
+        else if (o.n.includes('portal')) matchedKey = 'portal';
+        else if (o.n.includes('vein'))   matchedKey = 'vein';
+        else if (o.n.includes('gb'))     matchedKey = 'gb';
+        else if (o.n.includes('tumor'))  matchedKey = 'tumor';
+        if (matchedKey) {
+            if (exactMatched[matchedKey]) {
+                console.log('[classify]   skip (exact match wins for ' + matchedKey + '):', o.basename);
+            } else {
+                r[matchedKey] = o.f; // 複数あれば最後勝ち（現状維持）
+            }
+        } else {
+            const sm = o.basename.match(/^[Ss](\d+)\.obj$/i);
+            if (sm) r['S'+sm[1]] = o.f;
         }
     }
     console.log('[classify] result:', Object.entries(r).filter(([k,v])=>v).map(([k,v])=>k).join(', '));
