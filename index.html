@@ -373,7 +373,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v258</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v259</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -3003,6 +3003,14 @@ function initMobileUI() {
         'background:rgba(10,12,18,0.95);border-top:1px solid rgba(255,255,255,0.1);';
     document.body.appendChild(subPanel);
 
+    // v258: Firebase ボタンを moveFirebaseToMobileBar が捕まえるまで強制 hidden に
+    //   firebase-loader.js が非同期でボタンを生成し、デフォルト位置 (おそらく fixed 配置) で
+    //   一瞬見える → AR/VR ボタン行と被る誤表示が起きていた。CSS で初期 hidden、移動完了で visible に戻す
+    const fbHideStyle = document.createElement('style');
+    fbHideStyle.id = 'mobile-firebase-hide';
+    fbHideStyle.textContent = '#firebase-toggle-btn { visibility: hidden; }';
+    document.head.appendChild(fbHideStyle);
+
     // info パネルを統合型に改造（FPSのみ常時表示、他は折りたたみ）
     const info = document.getElementById('info');
     if (info) {
@@ -3018,7 +3026,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v258</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v259</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -3071,8 +3079,11 @@ function moveFirebaseToMobileBar(dataBtns) {
         fbToggle.style.cssText = 'position:static;display:inline-block;' +
             'padding:4px 8px;background:rgba(10,30,50,0.7);' +
             'border:1px solid #1a4a7a;border-radius:5px;' +
-            'cursor:pointer;font-size:10px;color:#4488aa;';
+            'cursor:pointer;font-size:10px;color:#4488aa;' +
+            'visibility:visible;';  // v258: 初期 hidden を解除
         dataBtns.appendChild(fbToggle);
+        // v258: 念のため style 属性経由でも visibility を visible に固定 (CSS rule に勝つ)
+        fbToggle.style.visibility = 'visible';
         const fbArea = document.getElementById('firebase-load-area');
         if (fbArea) {
             fbArea.style.position = 'fixed';
