@@ -212,7 +212,8 @@
 </div></div>
 
 <!-- Reset 確認ポップアップ (C++ drawResetConfirmPopup 準拠) -->
-<div id="reset-popup" style="display:none;position:fixed;z-index:30;top:50%;left:50%;transform:translate(-50%,-50%);
+<!-- v258: z-index 30→70 (ar-cut-overlay z=40 / ar-panel z=60 より上で AR 中もタップ可能に) -->
+<div id="reset-popup" style="display:none;position:fixed;z-index:70;top:50%;left:50%;transform:translate(-50%,-50%);
     background:rgba(15,18,28,0.97);border:1px solid rgba(200,60,60,0.3);border-radius:10px;
     padding:20px 24px;min-width:260px;color:#fff;font-size:13px;text-align:center;">
     <div style="font-size:15px;font-weight:bold;margin-bottom:8px;color:#e84c3d;">Reset All?</div>
@@ -372,7 +373,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v257</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v258</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2931,7 +2932,9 @@ function initMobileUI() {
         if (mobileVisExpanded) setActionMode('none'); updateMobileBar(); }
     function volClick() { mobileVolExpanded = !mobileVolExpanded; mobileVisExpanded = false;
         if (mobileVolExpanded) setActionMode('none'); updateMobileBar(); }
-    function resetClick() { if(confirm('Reset?')) doReset(); }
+    // v258: 元は confirm() を使っていたが Android Chrome の WebXR セッションが native dialog で
+    //        強制終了するため、デスクトップ・VR と同じ DOM ベース reset-popup に統一
+    function resetClick() { document.getElementById('reset-popup').style.display = 'block'; }
 
     // === 上段（縦のみ）: [Visibility][Volume][Reset][⛶] ===
     const topRow = document.createElement('div');
@@ -3015,7 +3018,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v257</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v258</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
