@@ -170,16 +170,24 @@
 <div id="ar-cut-overlay" style="display:none;position:fixed;inset:0;z-index:40;background:transparent;touch-action:none;pointer-events:auto;"></div>
 
 <!-- AR Mobile Panel (WebXR dom-overlay root). 透明領域を XR select に通すため pointer-events:none -->
-<!-- v253: ボタンを上部に集約 (Anchor/Reset/Clear が bottom:54px で mobile-sub-panel と被っていたため) -->
+<!-- v253: ボタンを上部に集約 (Anchor/Reset/Clear が bottom:54px で mobile-sub-panel と被っていたため)
+     v254: Anchor/Reset/Clear は折りたたみメニュー化 (Exit AR は常時表示、緊急脱出用) -->
 <div id="ar-panel" style="display:none;position:fixed;inset:0;z-index:60;pointer-events:none;font-family:sans-serif;">
     <!-- 上部左: モードラベル -->
     <div id="ar-mode-label" style="position:absolute;top:10px;left:10px;pointer-events:auto;padding:6px 10px;background:rgba(0,0,0,0.55);color:#fff;border-radius:6px;font-size:12px;">AR Screen</div>
-    <!-- 上部右: 縦並びでアクションボタン群 (Exit / Anchor / Reset / Clear) -->
+    <!-- 上部右: 縦並びでアクションボタン群 -->
     <div style="position:absolute;top:10px;right:10px;display:flex;flex-direction:column;gap:6px;align-items:stretch;pointer-events:none;min-width:120px;">
-        <button id="ar-exit-btn" style="pointer-events:auto;padding:8px 14px;background:rgba(200,50,50,0.88);color:white;border:none;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer;">Exit AR</button>
-        <button id="ar-btn-anchor" style="pointer-events:auto;padding:7px 12px;background:rgba(40,60,90,0.85);color:#7bf;border:1px solid #4a7;border-radius:8px;font-size:12px;cursor:pointer;">📍 Anchor</button>
-        <button id="ar-btn-reset" style="pointer-events:auto;padding:7px 12px;background:rgba(60,60,70,0.85);color:#ffb;border:1px solid rgba(255,255,255,0.2);border-radius:8px;font-size:12px;cursor:pointer;">↻ Reset Pose</button>
-        <button id="ar-btn-clear-handles" style="pointer-events:auto;padding:7px 12px;background:rgba(60,60,70,0.85);color:#fbb;border:1px solid rgba(255,255,255,0.2);border-radius:8px;font-size:12px;cursor:pointer;">🗑 Clear Handles</button>
+        <!-- 1段目: メニュートグル + Exit AR (常時表示) -->
+        <div style="display:flex;gap:6px;justify-content:flex-end;">
+            <button id="ar-btn-menu" style="pointer-events:auto;padding:8px 12px;background:rgba(40,40,50,0.85);color:#bbb;border:1px solid rgba(255,255,255,0.15);border-radius:8px;font-size:14px;cursor:pointer;font-weight:bold;line-height:1;">⋯</button>
+            <button id="ar-exit-btn" style="pointer-events:auto;padding:8px 14px;background:rgba(200,50,50,0.88);color:white;border:none;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer;">Exit AR</button>
+        </div>
+        <!-- 2段目以降: 折りたたみメニュー (Anchor/Reset/Clear) -->
+        <div id="ar-menu-items" style="display:none;flex-direction:column;gap:6px;align-items:stretch;">
+            <button id="ar-btn-anchor" style="pointer-events:auto;padding:7px 12px;background:rgba(40,60,90,0.85);color:#7bf;border:1px solid #4a7;border-radius:8px;font-size:12px;cursor:pointer;">📍 Anchor</button>
+            <button id="ar-btn-reset" style="pointer-events:auto;padding:7px 12px;background:rgba(60,60,70,0.85);color:#ffb;border:1px solid rgba(255,255,255,0.2);border-radius:8px;font-size:12px;cursor:pointer;">↻ Reset Pose</button>
+            <button id="ar-btn-clear-handles" style="pointer-events:auto;padding:7px 12px;background:rgba(60,60,70,0.85);color:#fbb;border:1px solid rgba(255,255,255,0.2);border-radius:8px;font-size:12px;cursor:pointer;">🗑 Clear Handles</button>
+        </div>
     </div>
     <!-- Anchor モード中のヒント (画面中央上、タップ動作の邪魔にならない位置) -->
     <div id="ar-anchor-hint" style="display:none;position:absolute;top:60px;left:50%;transform:translateX(-50%);pointer-events:none;color:#7bf;font-size:13px;background:rgba(0,0,0,0.7);padding:6px 14px;border-radius:6px;white-space:nowrap;">机/床にレチクルを合わせてタップ</div>
@@ -364,7 +372,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v253</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v254</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -3007,7 +3015,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v253</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v254</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -4176,6 +4184,17 @@ async function startXR(mode) {
                     document.getElementById('ar-btn-reset').onclick = () => { arInitialPlacePending = true; };
                     document.getElementById('ar-btn-clear-handles').onclick = () => { if (sb) sb.clearHandleSpheres(); };
                     document.getElementById('ar-btn-anchor').onclick = () => toggleARAnchorMode();
+                    // v254: 折りたたみメニュートグル
+                    const menuItems = document.getElementById('ar-menu-items');
+                    const menuBtn = document.getElementById('ar-btn-menu');
+                    menuBtn.onclick = () => {
+                        const open = menuItems.style.display !== 'none' && menuItems.style.display !== '';
+                        menuItems.style.display = open ? 'none' : 'flex';
+                        menuBtn.style.background = open ? 'rgba(40,40,50,0.85)' : 'rgba(80,100,140,0.85)';
+                        menuBtn.style.color = open ? '#bbb' : '#fff';
+                    };
+                    // 初期は閉じた状態
+                    menuItems.style.display = 'none';
                     // CUT ボタン: 既存 cut-popup-btn の click をそのままトリガ (実行ロジック共通化)
                     document.getElementById('ar-cut-execute-btn').onclick = () => {
                         document.getElementById('cut-popup-btn').click();
