@@ -170,22 +170,21 @@
 <div id="ar-cut-overlay" style="display:none;position:fixed;inset:0;z-index:40;background:transparent;touch-action:none;pointer-events:auto;"></div>
 
 <!-- AR Mobile Panel (WebXR dom-overlay root). 透明領域を XR select に通すため pointer-events:none -->
+<!-- v253: ボタンを上部に集約 (Anchor/Reset/Clear が bottom:54px で mobile-sub-panel と被っていたため) -->
 <div id="ar-panel" style="display:none;position:fixed;inset:0;z-index:60;pointer-events:none;font-family:sans-serif;">
-    <!-- 上部バー -->
-    <div style="position:absolute;top:10px;left:10px;right:10px;display:flex;justify-content:space-between;align-items:center;pointer-events:none;">
-        <div id="ar-mode-label" style="pointer-events:auto;padding:6px 10px;background:rgba(0,0,0,0.55);color:#fff;border-radius:6px;font-size:12px;">AR Screen</div>
+    <!-- 上部左: モードラベル -->
+    <div id="ar-mode-label" style="position:absolute;top:10px;left:10px;pointer-events:auto;padding:6px 10px;background:rgba(0,0,0,0.55);color:#fff;border-radius:6px;font-size:12px;">AR Screen</div>
+    <!-- 上部右: 縦並びでアクションボタン群 (Exit / Anchor / Reset / Clear) -->
+    <div style="position:absolute;top:10px;right:10px;display:flex;flex-direction:column;gap:6px;align-items:stretch;pointer-events:none;min-width:120px;">
         <button id="ar-exit-btn" style="pointer-events:auto;padding:8px 14px;background:rgba(200,50,50,0.88);color:white;border:none;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer;">Exit AR</button>
+        <button id="ar-btn-anchor" style="pointer-events:auto;padding:7px 12px;background:rgba(40,60,90,0.85);color:#7bf;border:1px solid #4a7;border-radius:8px;font-size:12px;cursor:pointer;">📍 Anchor</button>
+        <button id="ar-btn-reset" style="pointer-events:auto;padding:7px 12px;background:rgba(60,60,70,0.85);color:#ffb;border:1px solid rgba(255,255,255,0.2);border-radius:8px;font-size:12px;cursor:pointer;">↻ Reset Pose</button>
+        <button id="ar-btn-clear-handles" style="pointer-events:auto;padding:7px 12px;background:rgba(60,60,70,0.85);color:#fbb;border:1px solid rgba(255,255,255,0.2);border-radius:8px;font-size:12px;cursor:pointer;">🗑 Clear Handles</button>
     </div>
-    <!-- 下部操作: Anchor / Reset / Clear -->
-    <div style="position:absolute;bottom:54px;left:10px;right:10px;display:flex;justify-content:center;gap:6px;pointer-events:none;">
-        <button id="ar-btn-anchor" style="pointer-events:auto;padding:8px 14px;background:rgba(40,60,90,0.85);color:#7bf;border:1px solid #4a7;border-radius:8px;font-size:12px;cursor:pointer;">📍 Anchor Surface</button>
-        <button id="ar-btn-reset" style="pointer-events:auto;padding:8px 14px;background:rgba(60,60,70,0.85);color:#ffb;border:1px solid rgba(255,255,255,0.2);border-radius:8px;font-size:12px;cursor:pointer;">Reset Pose</button>
-        <button id="ar-btn-clear-handles" style="pointer-events:auto;padding:8px 14px;background:rgba(60,60,70,0.85);color:#fbb;border:1px solid rgba(255,255,255,0.2);border-radius:8px;font-size:12px;cursor:pointer;">Clear Handles</button>
-    </div>
-    <!-- Anchor モード中のヒント -->
-    <div id="ar-anchor-hint" style="display:none;position:absolute;bottom:14px;left:10px;right:10px;text-align:center;pointer-events:none;color:#7bf;font-size:13px;background:rgba(0,0,0,0.6);padding:6px;border-radius:6px;">机/床にレチクルを合わせてタップ</div>
+    <!-- Anchor モード中のヒント (画面中央上、タップ動作の邪魔にならない位置) -->
+    <div id="ar-anchor-hint" style="display:none;position:absolute;top:60px;left:50%;transform:translateX(-50%);pointer-events:none;color:#7bf;font-size:13px;background:rgba(0,0,0,0.7);padding:6px 14px;border-radius:6px;white-space:nowrap;">机/床にレチクルを合わせてタップ</div>
     <!-- AR Free Cut 実行ボタン (cutMode && cutterPlaced のときだけ表示) -->
-    <button id="ar-cut-execute-btn" style="display:none;pointer-events:auto;position:absolute;bottom:200px;left:50%;transform:translateX(-50%);padding:14px 40px;background:#c0392b;color:white;border:2px solid #e84c3d;border-radius:10px;font-size:18px;font-weight:bold;cursor:pointer;box-shadow:0 6px 16px rgba(0,0,0,0.6);letter-spacing:0.08em;">CUT</button>
+    <button id="ar-cut-execute-btn" style="display:none;pointer-events:auto;position:absolute;bottom:160px;left:50%;transform:translateX(-50%);padding:14px 40px;background:#c0392b;color:white;border:2px solid #e84c3d;border-radius:10px;font-size:18px;font-weight:bold;cursor:pointer;box-shadow:0 6px 16px rgba(0,0,0,0.6);letter-spacing:0.08em;">CUT</button>
 </div>
 
 <!-- Fragment Selection ポップアップ (main.cpp drawFragmentChoicePopup 相当) -->
@@ -365,7 +364,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v252</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v253</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -3008,7 +3007,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v252</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v253</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
