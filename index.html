@@ -372,7 +372,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v256</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v257</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -3015,7 +3015,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v256</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v257</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -3918,6 +3918,8 @@ let arCutHandlersAttached = false;
 let arCutMultiTouchActive = false;   // この touch sequence で 2本指以上が触れたか
 let arCutCleanTapPending = false;    // 直前にクリーンタップが完了した (300ms 以内)
 let arCutCleanTapTimer = null;       // クリーンタップ消費タイマー
+// v257: AR CUT ボタン位置を配置時に1度だけ計算してロック (毎フレーム投影するとカメラ揺れでちらつくため)
+let arCutBtnPosLocked = false;
 // v252: AR-panel / mobile-bar 等の <button> タップ直後の WebXR 'select' を抑止
 //       (Android Chrome の DOM tap と XR select の dual-fire 対策、Anchor / SegSelect / Deform 全般)
 let arButtonClickRecent = false;
@@ -4505,6 +4507,7 @@ function placeCutterAR(simO, simD) {
     const targetScale = isVessel ? cutterTargetScales.vessel : cutterTargetScales.liver;
     sb.setCutterScale(targetScale);
     cutterPlaced = true;
+    arCutBtnPosLocked = false;  // v257: 新しい配置/再配置 → 次フレームで位置を再計算
     numHighlightIdx = 0;
     const label = cutTargetMeshIdx < 0 ? 'Liver' : (childBuffers[cutTargetMeshIdx]?.label || 'Child');
     const statusEl = document.getElementById('cut-status');
@@ -4840,9 +4843,12 @@ function renderXR(time, frame) {
         const btnWant = (cutMode && cutterPlaced && !fragPending && !dragActive) ? 'block' : 'none';
         if (cutOv && cutOv.style.display !== ovWant) cutOv.style.display = ovWant;
         if (cutBtn && cutBtn.style.display !== btnWant) cutBtn.style.display = btnWant;
-        // CUT ボタンをカッター中心の少し上に配置 (毎フレーム)
-        if (cutBtn && btnWant === 'block' && pose.views.length > 0) {
+        // CUT ボタンをカッター中心の少し上に配置
+        // v257: 配置時に1度だけ計算 (arCutBtnPosLocked=false の時のみ)、以降はロック
+        //        毎フレーム再投影だとカメラ揺れで 1-2px 変動して見苦しいため
+        if (cutBtn && btnWant === 'block' && !arCutBtnPosLocked && pose.views.length > 0) {
             positionARCutBtn(pose.views[0]);
+            arCutBtnPosLocked = true;
         }
     }
 

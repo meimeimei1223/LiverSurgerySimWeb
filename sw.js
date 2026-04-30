@@ -8,7 +8,7 @@
 // Service Worker for Liver Surgery Simulator PWA
 // 軽量 fetch ハンドラ: 同一オリジン GET のみ cache-first
 // Firebase 等の別オリジン通信は素通し → FPS 影響最小
-const CACHE_NAME = 'liver-sim-v256';
+const CACHE_NAME = 'liver-sim-v257';
 const ASSETS = [
   './',
   './index.html',
