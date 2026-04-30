@@ -365,7 +365,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v249</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v250</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2974,7 +2974,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v249</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v250</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -4520,6 +4520,36 @@ function onARSelect(ev) {
     if (!pose) return;
 
     const { simO, simD } = arPoseToSimRay(pose);
+
+    // Seg Select モード: タップしたメッシュ上のセグメントをハイライト (v250)
+    //   非AR mobile path 1651-1688 / VR path 6638-6662 と同じロジック
+    //   raycastTargetMeshWithVertex でターゲットメッシュ (liver か portal) のみレイキャスト
+    //   clickMeshForHighlight(target, vertexIdx, mode, false) で単一選択 (上書き)
+    //   後続の SegCut ボタンタップで doSegCut() が実行される
+    if (actionMode === 'segCut' && segSelectMode && sb.isSkeletonAnalyzed()) {
+        const ray = { origin: simO, direction: simD };
+        const targetMeshIdx = (segSelectMode === 'liver') ? -1 : 0;
+        const target        = (segSelectMode === 'liver') ?  0 : 1;
+        const hit = raycastTargetMeshWithVertex(ray, targetMeshIdx);
+        if (hit && hit.vertexIdx >= 0) {
+            const mode = (segmentColorMode === 'obj') ? 1 : 0;
+            const segId = sb.clickMeshForHighlight(target, hit.vertexIdx, mode, false);
+            if (segId >= 0) {
+                const lc = new Float32Array(sb.getLiverHighlightColors());
+                gl.bindBuffer(gl.ARRAY_BUFFER, bLiverHL);
+                gl.bufferData(gl.ARRAY_BUFFER, lc, gl.DYNAMIC_DRAW);
+                if (sb.getNumChildren() > 0) {
+                    const pc = new Float32Array(sb.getPortalHighlightColors());
+                    gl.bindBuffer(gl.ARRAY_BUFFER, bPortalHL);
+                    gl.bufferData(gl.ARRAY_BUFFER, pc, gl.DYNAMIC_DRAW);
+                }
+                const stat = document.getElementById('seg-select-status');
+                if (stat) stat.textContent = 'S' + segId;
+                console.log('[AR SegSelect]', segSelectMode, 'segId=' + segId, 'mode=' + mode);
+            }
+        }
+        return;
+    }
 
     // Free Cut モード: 初回配置はそのまま許可、再配置は「ar-cut-overlay 上のクリーンタップ」を必須とする (v249)
     //   クリーンタップ = overlay の pointerdown→pointerup で動きなし、終始 1 本指のみ
