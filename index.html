@@ -365,7 +365,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v246</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v247</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2073,6 +2073,7 @@ document.getElementById('btn-apply-objseg').addEventListener('click', ()=>{
             } else {
                 document.getElementById('skel-status').textContent += ' (OBJ bind failed)';
             }
+            if (typeof updatePresetSegBtnEnabled === 'function') updatePresetSegBtnEnabled();
         } catch(e) {
             console.error('[OBJSeg]', e);
         }
@@ -2259,8 +2260,9 @@ function updateVolumePanel() {
     html += `<div style="height:6px;background:#222;border-radius:3px;margin:4px 0;"><div style="height:100%;width:${barPct.toFixed(1)}%;background:${pctColor(remnantPct)};border-radius:3px;"></div></div>`;
     html += `<div style="font-size:10px;color:#888;">Original: ${totalOrig.toFixed(1)} ml &nbsp; Remnant: <span style="color:${pctColor(remnantPct)}">${remnantPct.toFixed(1)}%</span></div>`;
     // S1-S8 セグメント別（現在値 + 比率）
+    // Preset Seg OBJ がバインドされている時のみ S1-S8 表示（Auto Seg の番号は解剖学的 S1-S8 ではないので混同しない）
     const useOBJ = sb.isOBJSegmentsBound();
-    if (useOBJ || sb.isSkeletonAnalyzed()) {
+    if (useOBJ) {
         html += '<div style="margin-top:6px;border-top:1px solid #333;padding-top:4px;font-size:11px;">';
         html += '<div style="display:flex;gap:4px;font-size:10px;color:#556;margin-bottom:2px;"><span style="min-width:22px;"></span><span style="min-width:55px;">vol</span><span style="min-width:40px;">%</span><span>remain</span></div>';
         for (let id = 1; id <= 8; id++) {
@@ -2383,8 +2385,36 @@ function doClearSelection() {
     document.getElementById('seg-select-status').textContent = '';
 }
 
+// Preset Seg ボタンの有効/無効状態を更新（OBJ セグメントが未バインドなら無効化）
+// Auto Seg があっても Preset Seg は別物（Auto Seg の番号は解剖学的 S1-S8 ではない）
+function updatePresetSegBtnEnabled() {
+    const enabled = sb && typeof sb.isOBJSegmentsBound === 'function' && sb.isOBJSegmentsBound();
+    // Desktop 通常パネル
+    const desktopBtn = document.getElementById('btn-vm-preset');
+    if (desktopBtn) {
+        desktopBtn.disabled = !enabled;
+        desktopBtn.style.opacity = enabled ? '' : '0.3';
+        desktopBtn.style.cursor = enabled ? '' : 'not-allowed';
+    }
+    // VR HTML パネル
+    const vrBtn = document.getElementById('vr-disp-preset');
+    if (vrBtn) {
+        vrBtn.disabled = !enabled;
+        vrBtn.style.opacity = enabled ? '' : '0.3';
+        vrBtn.style.cursor = enabled ? '' : 'not-allowed';
+    }
+    // 既に Preset Seg モードのまま OBJ がアンバインドされたら Normal に戻す
+    if (!enabled && segmentColorMode === 'obj') {
+        setVisualMode(false);
+    }
+}
+
 // Visual Mode 切替（3ボタン）
 function setVisualMode(mode) {
+    // OBJ 未バインド時の Preset Seg クリックは無視
+    if (mode === 'obj' && (!sb || typeof sb.isOBJSegmentsBound !== 'function' || !sb.isOBJSegmentsBound())) {
+        return;
+    }
     segmentColorMode = mode;
 
     // C++ onVisualModeChanged 準拠: Display 切替時にセグメント選択をクリア
@@ -2936,7 +2966,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v246</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v247</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -3149,16 +3179,21 @@ function updateMobileSubPanel() {
             { label:'Preset', mode:'obj' },
         ];
         const curDisp = typeof segmentColorMode !== 'undefined' ? segmentColorMode : false;
+        const objBound = sb && typeof sb.isOBJSegmentsBound === 'function' && sb.isOBJSegmentsBound();
         dispModes.forEach(d => {
             const active = curDisp === d.mode;
+            // Preset Seg は OBJ がバインドされていない時は無効化（Auto Seg の番号は別物）
+            const dimmed = (d.mode === 'obj' && !objBound);
             const b = document.createElement('button');
             b.textContent = d.label;
             b.style.cssText = `flex:1;padding:4px 2px;border-radius:4px;font-size:9px;font-weight:bold;
-                cursor:pointer;text-align:center;min-width:0;
+                cursor:${dimmed ? 'not-allowed' : 'pointer'};text-align:center;min-width:0;
+                opacity:${dimmed ? '0.3' : '1'};
                 border:1px solid ${active ? '#00ccaa' : 'rgba(255,255,255,0.1)'};
                 background:${active ? 'rgba(0,200,150,0.2)' : 'rgba(255,255,255,0.04)'};
                 color:${active ? '#00ffdd' : '#888'};`;
             b.addEventListener('click', () => {
+                if (dimmed) return;
                 if (typeof setVisualMode === 'function') setVisualMode(d.mode);
                 updateMobileSubPanel();
             });
@@ -3177,9 +3212,9 @@ function updateMobileSubPanel() {
         const pctCol = (pct >= 80 && pct <= 120) ? '#7dff7d' : '#ffcc33';
         let html = `<span style="color:${pctCol};font-weight:bold;">${totalCur.toFixed(1)} ml</span>`;
         html += ` <span style="color:#556;">/ ${totalOrig.toFixed(1)} ml</span> (${pct.toFixed(1)}%)<br>`;
+        // Preset Seg OBJ がバインドされている時のみ S1-S8 表示（Auto Seg の番号は混同しない）
         const useOBJ = typeof sb.isOBJSegmentsBound === 'function' && sb.isOBJSegmentsBound();
-        const hasSkel = typeof sb.isSkeletonAnalyzed === 'function' && sb.isSkeletonAnalyzed();
-        if (useOBJ || hasSkel) {
+        if (useOBJ) {
             for (let id=1;id<=8;id++) {
                 const origV = sb.getOriginalSegmentVolume(id, useOBJ);
                 const cv = sb.calculateSegmentVolume(id, useOBJ);
@@ -3467,6 +3502,7 @@ function initApp() {
                     document.getElementById('visual-mode-btns').style.display = 'flex';
                     document.getElementById('display-placeholder').style.display = 'none';
                     document.getElementById('btn-action-segcut').style.display = 'flex';
+                    if (typeof updatePresetSegBtnEnabled === 'function') updatePresetSegBtnEnabled();
                     document.getElementById('skel-status').textContent =
                         sb.getNumSkeletonNodes() + ' nodes' +
                         (sb.isOBJSegmentsBound() ? ' + S1-S8' : '');
@@ -3777,6 +3813,7 @@ async function runTetrahedralization(classified) {
                     document.getElementById('visual-mode-btns').style.display = 'flex';
                     document.getElementById('display-placeholder').style.display = 'none';
                     document.getElementById('btn-action-segcut').style.display = 'flex';
+                    if (typeof updatePresetSegBtnEnabled === 'function') updatePresetSegBtnEnabled();
                 }
             } catch(e) { console.warn('[Drop Skeleton]', e); }
         }
@@ -5356,11 +5393,14 @@ function drawPanelCanvas() {
     const dispLabels = ['Normal','Auto Seg','Preset Seg'];
     const curDisp = typeof segmentColorMode !== 'undefined' ? segmentColorMode : false;
     const dispBtnW = Math.floor((W - 32 - 8) / 3);
+    const objBoundVR = sb && typeof sb.isOBJSegmentsBound === 'function' && sb.isOBJSegmentsBound();
     for (let di = 0; di < 3; di++) {
         const bx = 16 + di * (dispBtnW + 4);
         const isActive = (di===0 && !curDisp) || (di===1 && curDisp==='skeleton') || (di===2 && curDisp==='obj');
         const isHovered = panelHoveredBtn >= 0 && panelBtnWorldPos[panelHoveredBtn]
             && panelBtnWorldPos[panelHoveredBtn].action === 'display' && panelBtnWorldPos[panelHoveredBtn].idx === di;
+        const isDimmed = (di === 2 && !objBoundVR);  // Preset Seg は OBJ 未バインドで無効
+        if (isDimmed) c.globalAlpha = 0.3;
         c.fillStyle = isActive ? 'rgba(0,200,150,0.25)' : isHovered ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.05)';
         c.fillRect(bx, y, dispBtnW, 30);
         c.strokeStyle = isActive ? '#00ccaa' : isHovered ? '#fff' : 'rgba(255,255,255,0.1)';
@@ -5371,6 +5411,7 @@ function drawPanelCanvas() {
         c.textAlign = 'center';
         c.fillText(dispLabels[di], bx + dispBtnW/2, y + 20);
         c.textAlign = 'left';
+        if (isDimmed) c.globalAlpha = 1;
     }
     y += 34;  // display buttons (30px) + gap (4px)
 
@@ -5426,9 +5467,9 @@ function drawPanelCanvas() {
             c.font = '10px Arial';
             c.fillText('Original: ' + totalOrig.toFixed(1) + ' ml', 16, y + 6);
             y += 14;
+            // Preset Seg OBJ がバインドされている時のみ S1-S8 表示（Auto Seg の番号は混同しない）
             const useOBJ = typeof sb.isOBJSegmentsBound === 'function' && sb.isOBJSegmentsBound();
-            const hasSkel = typeof sb.isSkeletonAnalyzed === 'function' && sb.isSkeletonAnalyzed();
-            if (useOBJ || hasSkel) {
+            if (useOBJ) {
                 c.fillStyle = 'rgba(255,255,255,0.06)';
                 c.fillRect(12, y, W - 24, 2); y += 6;
                 c.fillStyle = '#556';
@@ -5767,8 +5808,8 @@ function getPanelLayout() {
     if (vrVolumeExpanded) {
         if (sb && typeof sb.areVolumesCaptured === 'function' && sb.areVolumesCaptured()) {
             volSectionH += 16 + 10 + 14;
-            const hasSegData = (typeof sb !== 'undefined' && typeof sb.isOBJSegmentsBound === 'function' && sb.isOBJSegmentsBound()) ||
-                              (typeof sb !== 'undefined' && typeof sb.isSkeletonAnalyzed === 'function' && sb.isSkeletonAnalyzed());
+            // Preset Seg OBJ がバインドされている時のみ S1-S8 表示分の高さを確保（Auto Seg は混同しない）
+            const hasSegData = typeof sb !== 'undefined' && typeof sb.isOBJSegmentsBound === 'function' && sb.isOBJSegmentsBound();
             if (hasSegData) volSectionH += 6 + 12 + 8 * 14;
         } else {
             volSectionH += 20;
