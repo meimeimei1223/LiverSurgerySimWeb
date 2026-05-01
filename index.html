@@ -182,11 +182,9 @@
             <button id="ar-btn-menu" style="pointer-events:auto;padding:8px 12px;background:rgba(40,40,50,0.85);color:#bbb;border:1px solid rgba(255,255,255,0.15);border-radius:8px;font-size:14px;cursor:pointer;font-weight:bold;line-height:1;">⋯</button>
             <button id="ar-exit-btn" style="pointer-events:auto;padding:8px 14px;background:rgba(200,50,50,0.88);color:white;border:none;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer;">Exit AR</button>
         </div>
-        <!-- 2段目以降: 折りたたみメニュー (Anchor/Reset/Clear) -->
+        <!-- 2段目: 折りたたみメニュー (Anchor のみ。v261: Reset Pose は通常 Reset と被るため、Clear Handles は Deform サブパネルにあるため削除) -->
         <div id="ar-menu-items" style="display:none;flex-direction:column;gap:6px;align-items:stretch;">
             <button id="ar-btn-anchor" style="pointer-events:auto;padding:7px 12px;background:rgba(40,60,90,0.85);color:#7bf;border:1px solid #4a7;border-radius:8px;font-size:12px;cursor:pointer;">📍 Anchor</button>
-            <button id="ar-btn-reset" style="pointer-events:auto;padding:7px 12px;background:rgba(60,60,70,0.85);color:#ffb;border:1px solid rgba(255,255,255,0.2);border-radius:8px;font-size:12px;cursor:pointer;">↻ Reset Pose</button>
-            <button id="ar-btn-clear-handles" style="pointer-events:auto;padding:7px 12px;background:rgba(60,60,70,0.85);color:#fbb;border:1px solid rgba(255,255,255,0.2);border-radius:8px;font-size:12px;cursor:pointer;">🗑 Clear Handles</button>
         </div>
     </div>
     <!-- Anchor モード中のヒント (画面中央上、タップ動作の邪魔にならない位置) -->
@@ -373,7 +371,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v260</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v261</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -3027,7 +3025,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v260</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v261</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -3971,15 +3969,22 @@ let arCutCleanTapTimer = null;       // クリーンタップ消費タイマー
 let arCutBtnPosLocked = false;
 // v252: AR-panel / mobile-bar 等の <button> タップ直後の WebXR 'select' を抑止
 //       (Android Chrome の DOM tap と XR select の dual-fire 対策、Anchor / SegSelect / Deform 全般)
+// v261: pointerup でも timer を refresh。長押し (>250ms) → 指離す → WebXR select の流れで
+//        timer が切れていてカッター再配置等が発火する問題への対策。
+//        WebXR select は pointerup から ~50ms 以内に発火するので、pointerup から 250ms あれば余裕
 let arButtonClickRecent = false;
 let arButtonClickTimer = null;
+function arArmButtonGuard() {
+    arButtonClickRecent = true;
+    if (arButtonClickTimer) clearTimeout(arButtonClickTimer);
+    arButtonClickTimer = setTimeout(() => { arButtonClickRecent = false; }, 250);
+}
 document.addEventListener('pointerdown', (e) => {
-    if (e.target && e.target.closest && e.target.closest('button')) {
-        arButtonClickRecent = true;
-        if (arButtonClickTimer) clearTimeout(arButtonClickTimer);
-        arButtonClickTimer = setTimeout(() => { arButtonClickRecent = false; }, 250);
-    }
-}, true);  // capture phase で先に走るので XR select より早く反映される
+    if (e.target && e.target.closest && e.target.closest('button')) arArmButtonGuard();
+}, true);
+document.addEventListener('pointerup', (e) => {
+    if (e.target && e.target.closest && e.target.closest('button')) arArmButtonGuard();
+}, true);
 
 // VR 空間パラメータ（実行時調整可能）
 let VR_SCALE = 0.05;        // シミュレーション空間 → VR空間のスケール（モデル3単位→15cm）
@@ -4232,8 +4237,6 @@ async function startXR(mode) {
                 if (arPanel) {
                     arPanel.style.display = 'block';
                     document.getElementById('ar-exit-btn').onclick = () => { if (xrSession) xrSession.end(); };
-                    document.getElementById('ar-btn-reset').onclick = () => { arInitialPlacePending = true; };
-                    document.getElementById('ar-btn-clear-handles').onclick = () => { if (sb) sb.clearHandleSpheres(); };
                     document.getElementById('ar-btn-anchor').onclick = () => toggleARAnchorMode();
                     // v254: 折りたたみメニュートグル
                     const menuItems = document.getElementById('ar-menu-items');
@@ -4782,6 +4785,13 @@ function onXREnd() {
     document.getElementById('xr-status').style.display = 'none';
     document.getElementById('btn-vr').textContent = 'VR';
     document.getElementById('btn-ar').textContent = 'AR';
+
+    // v261: XR 中に gl.viewport が AR layer サイズに設定されたまま残るため、
+    //        canvas.width/height + viewport をウィンドウサイズに戻す。これがないと
+    //        通常レンダリングで描画範囲が崩れて「オブジェクトが表示されない」症状になる
+    if (typeof resize === 'function') resize();
+    // フレームバッファも明示的に default (canvas) に戻す
+    if (gl) gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
     // 通常レンダーループ再開
     requestAnimationFrame(render);
