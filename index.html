@@ -163,9 +163,11 @@
 </div>
 <div id="xr-status"></div>
 
-<!-- AR Transform モード用オーバーレイ: actionMode==='transform' のときだけ表示してタッチを捕獲
-     z-index は mobile-bar(50) / ar-panel(60) より低く設定 → UIボタンはTransform中もタップ可能 -->
-<div id="ar-transform-overlay" style="display:none;position:fixed;inset:0;z-index:40;background:transparent;touch-action:none;pointer-events:auto;"></div>
+<!-- AR Transform モード用オーバーレイ
+     v263: AR 中は常時表示。pointermove ハンドラ側で「メッシュ外タップ or transform モード or 2本指」のみ
+     transform を実行する条件分岐をかける (AR は phone がカメラなので、mesh 外タップで navigation できると便利)
+     z-index 30: cut overlay (40) の下、ボタン (50/60) の下 → cut/UI が優先 -->
+<div id="ar-transform-overlay" style="display:none;position:fixed;inset:0;z-index:30;background:transparent;touch-action:none;pointer-events:auto;"></div>
 <!-- AR Free Cut モード用オーバーレイ (cutMode && cutterPlaced のとき): ドラッグで回転 / 2本指ピンチでサイズ / 短タップで再配置 -->
 <div id="ar-cut-overlay" style="display:none;position:fixed;inset:0;z-index:40;background:transparent;touch-action:none;pointer-events:auto;"></div>
 
@@ -371,7 +373,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v262</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v263</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -3025,7 +3027,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v262</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v263</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -3967,6 +3969,9 @@ let arCutCleanTapPending = false;    // 直前にクリーンタップが完了�
 let arCutCleanTapTimer = null;       // クリーンタップ消費タイマー
 // v257: AR CUT ボタン位置を配置時に1度だけ計算してロック (毎フレーム投影するとカメラ揺れでちらつくため)
 let arCutBtnPosLocked = false;
+// v263: 直近の selectstart raycast がメッシュにヒットしたか
+//        ar-transform-overlay が「メッシュ外タップで navigation」する判定に使う
+let arSelectStartHitMesh = false;
 // v252: AR-panel / mobile-bar 等の <button> タップ直後の WebXR 'select' を抑止
 //       (Android Chrome の DOM tap と XR select の dual-fire 対策、Anchor / SegSelect / Deform 全般)
 // v261: pointerup でも timer を refresh。長押し (>250ms) → 指離す → WebXR select の流れで
@@ -4400,6 +4405,11 @@ function setupARTransformHandlers() {
         const ids = Object.keys(arTransformTouches);
         const axes = getCamAxes();
         if (!axes) return;
+        // v263: 1本指でメッシュをヒットしたタップは transform スキップ (mode-specific action 優先)
+        //        2本指 (pinch/pan) と Transform mode は常に transform 実行 (AR navigation として必須)
+        //        Anchor 配置モード中も transform しない
+        if (arAnchorPlaceMode) return;
+        if (ids.length === 1 && actionMode !== 'transform' && arSelectStartHitMesh) return;
         const cx = sb.getMeshCentroidX(), cy = sb.getMeshCentroidY(), cz = sb.getMeshCentroidZ();
 
         if (ids.length === 1) {
@@ -4595,12 +4605,17 @@ function onARSelectStart(ev) {
     const src = ev.inputSource;
     if (!src || src.targetRayMode !== 'screen') return;
     if (!sb || !xrRefSpace) return;
+
+    // v263: 全タップで raycast → ar-transform-overlay の navigation 判定に使う (mode 関係なく)
+    const pose = ev.frame.getPose(src.targetRaySpace, xrRefSpace);
+    if (!pose) { arSelectStartHitMesh = false; return; }
+    const { simO, simD } = arPoseToSimRay(pose);
+    const hit = raycastMesh({ origin: simO, direction: simD });
+    arSelectStartHitMesh = !!hit;
+
     if (arAnchorPlaceMode) return;  // Anchor モード中は grab しない
     if (!(actionMode === 'deform' && deformSub === 'deform')) return;  // Grab モード時のみ
 
-    const pose = ev.frame.getPose(src.targetRaySpace, xrRefSpace);
-    if (!pose) return;
-    const { simO, simD } = arPoseToSimRay(pose);
     sb.startGrabVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2]);
     if (sb.isGrabbingVR()) {
         arActiveTouchSource = src;
@@ -4895,11 +4910,13 @@ function renderXR(time, frame) {
         console.log('[AR] Initial placement:', VR_OFFSET, 'scale=', VR_SCALE);
     }
 
-    // モバイル AR: Transform モード時のみオーバーレイ表示 (タッチ捕獲)
+    // モバイル AR: Transform オーバーレイは常時表示 (v263)
+    //   pointermove ハンドラ側で「メッシュ外タップ or transform mode or 2本指」のみ実行する条件分岐
+    //   z-index 30 で cut overlay (40) の下なので、cut 中は cut が優先
     if (isPhoneAR) {
         const tfOv = document.getElementById('ar-transform-overlay');
         if (tfOv) {
-            const want = (actionMode === 'transform') ? 'block' : 'none';
+            const want = 'block';
             if (tfOv.style.display !== want) tfOv.style.display = want;
         }
         // Free Cut: カッター配置済みなら AR CUT ボタン表示 + 回転/サイズ overlay 表示
