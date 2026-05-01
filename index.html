@@ -371,7 +371,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v261</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v262</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -3025,7 +3025,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v261</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v262</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -4779,12 +4779,24 @@ function onXREnd() {
 
     // UI 復帰（VR→通常）
     document.getElementById('vr-panel').style.display = 'none';
-    document.getElementById('ctrl').style.display = '';
-    document.getElementById('info').style.display = '';
-    document.getElementById('params').style.display = '';
     document.getElementById('xr-status').style.display = 'none';
     document.getElementById('btn-vr').textContent = 'VR';
     document.getElementById('btn-ar').textContent = 'AR';
+    // v262: info / ctrl / params の復元はモバイル/デスクトップで分ける
+    //   - モバイル: ctrl/params は隠したまま、info だけ block で復活 (initMobileUI 初期状態と同じ)
+    //   - デスクトップ: 全部 block 復活
+    if (isMobile) {
+        document.getElementById('info').style.display = 'block';
+        document.getElementById('ctrl').style.display = 'none';
+        document.getElementById('params').style.display = 'none';
+    } else {
+        document.getElementById('info').style.display = 'block';
+        document.getElementById('ctrl').style.display = 'block';
+        document.getElementById('params').style.display = 'block';
+    }
+    console.log('[XR End] info display=', document.getElementById('info').style.display,
+                ' computed=', getComputedStyle(document.getElementById('info')).display,
+                ' isMobile=', isMobile);
 
     // v261: XR 中に gl.viewport が AR layer サイズに設定されたまま残るため、
     //        canvas.width/height + viewport をウィンドウサイズに戻す。これがないと
