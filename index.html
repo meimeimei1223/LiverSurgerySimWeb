@@ -373,7 +373,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v264</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v265</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -1045,10 +1045,14 @@ function updateSphereSizeSlider() {
     const slider = document.getElementById('sphere-size-slider');
     const hint = document.getElementById('sphere-size-hint');
     const row = document.getElementById('sphere-size-row');
-    if (!slider) return;
-    slider.disabled = !canEdit;
-    row.style.opacity = canEdit ? '1.0' : '0.35';
-    hint.style.display = canEdit ? 'none' : 'block';
+    if (slider) {
+        slider.disabled = !canEdit;
+        row.style.opacity = canEdit ? '1.0' : '0.35';
+        hint.style.display = canEdit ? 'none' : 'block';
+    }
+    // v265: モバイル/AR サブパネルも再描画して mob-sphere-size の disabled 状態を同期
+    //   (v264 までは updateMobileSubPanel が呼ばれず、配置後もスライダーが動かせる見た目のままだった)
+    if (typeof updateMobileSubPanel === 'function') updateMobileSubPanel();
 }
 function updateDeformBtns() {
     document.getElementById('btn-handle-mode').style.background =
@@ -3027,7 +3031,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v264</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v265</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -4632,6 +4636,8 @@ function onARSelectStart(ev) {
             const n = sb.getNumHandleSpheres();
             const h = document.getElementById('handle-count');
             if (h) h.textContent = n > 0 ? n + ' handles' : '';
+            // v265: スフィアサイズスライダーを disabled 状態に同期 (mobile/AR サブパネル再描画含む)
+            if (typeof updateSphereSizeSlider === 'function') updateSphereSizeSlider();
             console.log('[AR] handle placed at touchstart, n=' + n);
             return;
         }
@@ -4746,6 +4752,13 @@ function onARSelect(ev) {
     // touchstart で pose 取得失敗等のフォールバック (通常は到達しない)
     const placed = sb.addHandleSphereVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2], handleSphereRadius);
     console.log('[AR Tap] handle placed at touchend (fallback):', placed);
+    if (placed) {
+        const n = sb.getNumHandleSpheres();
+        const h = document.getElementById('handle-count');
+        if (h) h.textContent = n > 0 ? n + ' handles' : '';
+        // v265: スフィアサイズスライダーを disabled 状態に同期
+        if (typeof updateSphereSizeSlider === 'function') updateSphereSizeSlider();
+    }
 }
 
 // selectend: 指が離れた → グラブ終了
