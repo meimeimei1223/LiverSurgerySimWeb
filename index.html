@@ -373,7 +373,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v263</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v264</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -3027,7 +3027,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v263</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v264</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -3972,6 +3972,8 @@ let arCutBtnPosLocked = false;
 // v263: 直近の selectstart raycast がメッシュにヒットしたか
 //        ar-transform-overlay が「メッシュ外タップで navigation」する判定に使う
 let arSelectStartHitMesh = false;
+// v264: Deform+Place モードで touchstart に配置済みなら touchend での二重配置を抑止するフラグ
+let arHandlePlacedAtStart = false;
 // v252: AR-panel / mobile-bar 等の <button> タップ直後の WebXR 'select' を抑止
 //       (Android Chrome の DOM tap と XR select の dual-fire 対策、Anchor / SegSelect / Deform 全般)
 // v261: pointerup でも timer を refresh。長押し (>250ms) → 指離す → WebXR select の流れで
@@ -4601,6 +4603,7 @@ function arPoseToSimRay(pose) {
 // - Deform + Deform (Grab): ray でメッシュ/ハンドルをグラブ開始 → per-frame で追従
 // - それ以外: 何もしない (select で配置判定)
 function onARSelectStart(ev) {
+    arHandlePlacedAtStart = false;  // v264: 毎タップでリセット
     if (arButtonClickRecent) return;  // v252: ボタンタップの dual-fire を抑止
     const src = ev.inputSource;
     if (!src || src.targetRayMode !== 'screen') return;
@@ -4614,12 +4617,39 @@ function onARSelectStart(ev) {
     arSelectStartHitMesh = !!hit;
 
     if (arAnchorPlaceMode) return;  // Anchor モード中は grab しない
-    if (!(actionMode === 'deform' && deformSub === 'deform')) return;  // Grab モード時のみ
 
-    sb.startGrabVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2]);
-    if (sb.isGrabbingVR()) {
-        arActiveTouchSource = src;
-        console.log('[AR] grab started');
+    const isPlace = (actionMode === 'deform' && (deformSub === 'place' || deformSub === 'none'));
+    const isGrab  = (actionMode === 'deform' && deformSub === 'deform');
+
+    if (isPlace) {
+        // v264: 非AR と同じ「place を試す → 失敗したら grab」パターン
+        //   メッシュ上の空き場所タップ → addHandleSphereVR 成功 → 配置完了
+        //   既存ハンドル上タップ → addHandleSphereVR 失敗 → startGrabVR でハンドル掴む → ドラッグで動かせる
+        //   メッシュ外タップ → addHandleSphereVR 失敗 + startGrabVR 失敗 → 何も起きない (ar-transform-overlay が navigation)
+        const placed = sb.addHandleSphereVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2], handleSphereRadius);
+        if (placed) {
+            arHandlePlacedAtStart = true;
+            const n = sb.getNumHandleSpheres();
+            const h = document.getElementById('handle-count');
+            if (h) h.textContent = n > 0 ? n + ' handles' : '';
+            console.log('[AR] handle placed at touchstart, n=' + n);
+            return;
+        }
+        // 配置失敗 → 既存ハンドル grab を試行
+        sb.startGrabVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2]);
+        if (sb.isGrabbingVR()) {
+            arActiveTouchSource = src;
+            console.log('[AR] handle grab started (place mode fallback)');
+        }
+        return;
+    }
+
+    if (isGrab) {
+        sb.startGrabVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2]);
+        if (sb.isGrabbingVR()) {
+            arActiveTouchSource = src;
+            console.log('[AR] grab started');
+        }
     }
 }
 
@@ -4705,11 +4735,17 @@ function onARSelect(ev) {
     }
 
     // 配置を許可するモード: Deform + Place (または Deform で sub 未設定)
+    // v264: Place モードの配置と既存ハンドルへの grab フォールスルーは onARSelectStart で処理。
+    //        ここでは二重配置防止のフラグチェックのみ
     const allowPlace = (actionMode === 'deform') && (deformSub === 'place' || deformSub === 'none');
     if (!allowPlace) return;
-
+    if (arHandlePlacedAtStart) {
+        arHandlePlacedAtStart = false;
+        return;
+    }
+    // touchstart で pose 取得失敗等のフォールバック (通常は到達しない)
     const placed = sb.addHandleSphereVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2], handleSphereRadius);
-    console.log('[AR Tap] handle placed:', placed, 'mode=', actionMode, deformSub);
+    console.log('[AR Tap] handle placed at touchend (fallback):', placed);
 }
 
 // selectend: 指が離れた → グラブ終了
