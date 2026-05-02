@@ -7959,6 +7959,14 @@ if ('serviceWorker' in navigator) {
     }).catch(err => console.warn('[PWA] SW registration failed:', err));
 }
 </script>
+<script>
+  if (new URLSearchParams(location.search).has('bench')) {
+    const s = document.createElement('script');
+    s.src = 'benchmark.js';
+    s.defer = true;
+    document.head.appendChild(s);
+  }
+</script>
 <!-- v278: Tet density preset module -->
 <script>
 (function() {

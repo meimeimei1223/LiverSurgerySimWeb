@@ -7,6 +7,8 @@ Real-time liver surgery simulation running in the browser via WebAssembly.
 
 **[Launch Simulator](https://meimeimei1223.github.io/LiverSurgerySimWeb/)**
 
+[Benchmark mode](https://meimeimei1223.github.io/LiverSurgerySimWeb/?bench=1) — for performance measurement (AE-CAI 2026 paper data collection)
+
 > ⚠️ **Not for clinical use.** This is an educational demonstration only.
 > Do not upload identifiable patient data.
 > 
