@@ -11,7 +11,7 @@
     // Defense in depth: re-check URL param
     if (!new URLSearchParams(location.search).has('bench')) return;
 
-    const BENCH_VERSION = '1.0.3';
+    const BENCH_VERSION = '1.0.4';
     const BENCH_BOOT_AT = performance.now();
 
     // ============================================================
@@ -257,7 +257,7 @@
 
         _onDrop(e) {
             const dropAt = performance.now();
-            // Capture preset at drop time
+            // Capture preset at drop time (= what user had before opening the tet modal)
             const ts = window.TetPreset?.getCurrentValues?.();
             this._currentDrop = {
                 dropAt,
@@ -266,18 +266,33 @@
                 durationMs: null,
                 presetAtDrop: ts?.preset ?? 'unknown',
                 gridValuesAtDrop: ts?.values ?? null,
+                // v1.0.4: filled at TET complete (= what was actually used for tet化)
+                presetAtTetGen: null,
+                gridValuesAtTetGen: null,
                 simTetsAfter: null,
                 visTetsAfter: null,
             };
+            // v1.0.4: mark tet 化 window for FPS bucket isolation
+            FPSSampler.beginTetGen();
         },
 
         _onTetComplete() {
             if (!this._currentDrop) {
-                // No drop tracked (could be initial load or programmatic) — ignore
+                // No drop tracked (could be initial load or programmatic) — still end tetGen
+                FPSSampler.endTetGen();
                 return;
             }
             this._currentDrop.tetCompleteAt = performance.now();
             this._currentDrop.durationMs = this._currentDrop.tetCompleteAt - this._currentDrop.dropAt;
+
+            // v1.0.4: capture preset state AT TET COMPLETE (= what was actually used)
+            try {
+                const ts2 = window.TetPreset?.getCurrentValues?.();
+                if (ts2) {
+                    this._currentDrop.presetAtTetGen = ts2.preset;
+                    this._currentDrop.gridValuesAtTetGen = ts2.values;
+                }
+            } catch {}
 
             // Wait a few rAF for new sb, then snapshot tet counts
             const drop = this._currentDrop;
@@ -292,15 +307,25 @@
                         drop.visTetsAfter = sb.getNumHighResTets?.() ?? null;
                     } catch {}
                     LoadTimeTracker.objDropEvents.push(drop);
+                    // v1.0.4: end tetGen window (with one extra rAF to swallow final stabilization frame)
+                    requestAnimationFrame(() => FPSSampler.endTetGen());
                     return;
                 }
                 if (performance.now() - start > 5000) {
                     LoadTimeTracker.objDropEvents.push(drop);  // record anyway
+                    FPSSampler.endTetGen();
                     return;
                 }
                 requestAnimationFrame(tick);
             };
             requestAnimationFrame(tick);
+        },
+
+        // v1.0.4: Reset Samples 拡張用
+        reset() {
+            this.objDropEvents = [];
+            this._currentDrop = null;
+            // initialLoad は保持 (起動時のデータは消さない)
         },
     };
 
@@ -313,6 +338,7 @@
             rotation: { samples: [] },
             deform:   { samples: [] },
             postCut:  { samples: [] },
+            tetGen:   { samples: [] },     // v1.0.4: tet 化中 jank を分離
         },
         frameTimes: [],            // ring buffer
         _maxFrameTimes: 3000,
@@ -323,6 +349,7 @@
         _started: false,
         _lastPointerMoveAt: 0,
         _lastCutAt: 0,
+        _inTetGen: false,         // v1.0.4: drop event ~ TET complete の窓で true
 
         start() {
             if (this._started) return;
@@ -341,6 +368,15 @@
 
         notifyCut() {
             this._lastCutAt = performance.now();
+        },
+
+        // v1.0.4: tet 化中マーカー (LoadTimeTracker から呼ばれる)
+        beginTetGen() { this._inTetGen = true; },
+        endTetGen()   {
+            // 終了直後に sample 境界をリセット (in-progress count を tetGen に閉じ込める)
+            this._inTetGen = false;
+            this._lastFpsAt = performance.now();
+            this._frameCountInWindow = 0;
         },
 
         _tick(t) {
@@ -370,6 +406,8 @@
         },
 
         _classifyState(now) {
+            // v1.0.4: tetGen を最優先 (drop ~ TET complete 中の jank を idle/rotation に汚染させない)
+            if (this._inTetGen) return 'tetGen';
             // Priority order:
             // 1. XR session + active grab → deform
             // 2. sb.isGrabbing() true → deform
@@ -628,20 +666,36 @@
         build() {
             const sb = $sb();
             // v1.0.1: distinguish baked-default model from OBJ-dropped model.
-            //         Default startup uses pre-baked /model/*_mesh.txt files; the gs-* sliders
-            //         are ignored until the user drops an OBJ folder and presses Generate.
-            //         For the baked default, slider state is irrelevant — report it as
-            //         'pre-baked-default' and surface the slider state separately as a hint.
-            const usingPrebaked = LoadTimeTracker.objDropEvents.length === 0;
+            // v1.0.4: For OBJ-drop case, use the LAST drop's presetAtTetGen as the source of truth
+            //         (= preset actually used to generate the live tets). Slider state is just
+            //         the current state which may have been changed AFTER tet化.
+            const drops = LoadTimeTracker.objDropEvents;
+            const usingPrebaked = drops.length === 0;
+            const lastDrop = drops.length > 0 ? drops[drops.length - 1] : null;
             let sliderState = null;
             try {
                 const ts = window.TetPreset?.getCurrentValues?.();
                 if (ts) sliderState = { preset: ts.preset, values: ts.values };
             } catch {}
+
+            let modelPreset, modelGrid;
+            if (usingPrebaked) {
+                modelPreset = 'pre-baked-default';
+                modelGrid = null;
+            } else if (lastDrop?.presetAtTetGen) {
+                // The actual preset used at last tet化
+                modelPreset = lastDrop.presetAtTetGen;
+                modelGrid = lastDrop.gridValuesAtTetGen ?? sliderState?.values ?? null;
+            } else {
+                // Fallback: live slider state (may not match generated tets)
+                modelPreset = sliderState?.preset ?? 'unknown';
+                modelGrid = sliderState?.values ?? null;
+            }
+
             let model = {
-                preset: usingPrebaked ? 'pre-baked-default' : (sliderState?.preset ?? 'unknown'),
-                gridValues: usingPrebaked ? null : (sliderState?.values ?? null),
-                sliderState,    // always include for transparency / debug
+                preset: modelPreset,
+                gridValues: modelGrid,
+                sliderState,    // current slider state (may differ if user moved sliders after tet化)
                 source: usingPrebaked ? 'pre-baked' : 'obj-drop',
                 simTets: null,
                 visualTets: null,
@@ -765,10 +819,18 @@
             if (lt.objDrops.length === 0) {
                 lines.push('_No OBJ drops yet._');
             } else {
-                lines.push('| # | Preset | Drop → Tet complete (ms) | Sim tets after | Visual tets after |');
+                lines.push('| # | Preset (used) | Drop → Tet complete (ms) | Sim tets after | Visual tets after |');
                 lines.push('|---|---|---|---|---|');
                 lt.objDrops.forEach((d, i) => {
-                    lines.push(`| ${i + 1} | ${d.presetAtDrop?.toUpperCase() ?? '—'} | ${fmtMs(d.durationMs)} | ${fmt(d.simTetsAfter)} | ${fmt(d.visTetsAfter)} |`);
+                    // v1.0.4: prefer preset captured at TET complete (= actually used). If different
+                    //          from drop-event preset (= user changed in modal), surface as "(intended: X)"
+                    const used   = d.presetAtTetGen ?? d.presetAtDrop ?? null;
+                    const intent = d.presetAtDrop ?? null;
+                    let presetCell = used ? used.toUpperCase() : '—';
+                    if (used && intent && used !== intent) {
+                        presetCell += ` (intended: ${intent.toUpperCase()})`;
+                    }
+                    lines.push(`| ${i + 1} | ${presetCell} | ${fmtMs(d.durationMs)} | ${fmt(d.simTetsAfter)} | ${fmt(d.visTetsAfter)} |`);
                 });
             }
             lines.push('');
@@ -899,9 +961,10 @@
             });
             panel.querySelector('#bench-refresh').addEventListener('click', () => this._refresh());
             panel.querySelector('#bench-reset').addEventListener('click', () => {
-                if (!confirm('Reset all FPS/cut samples?')) return;
+                if (!confirm('Reset all FPS samples, cuts, and OBJ drop history?\n(initial load timeline is preserved)')) return;
                 FPSSampler.reset();
                 InteractionLogger.reset();
+                LoadTimeTracker.reset();   // v1.0.4: also clear objDropEvents
                 XRSessionProbe.reset();
                 MemorySampler.reset();
                 this._refresh();
@@ -980,6 +1043,7 @@
         resetSamples() {
             FPSSampler.reset();
             InteractionLogger.reset();
+            LoadTimeTracker.reset();   // v1.0.4: also clear objDropEvents
             XRSessionProbe.reset();
             MemorySampler.reset();
         },
