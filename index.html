@@ -373,7 +373,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v266</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v267</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -874,6 +874,35 @@ function rayTriIntersect(origin, dir, v0, v1, v2) {
     if(t>1e-4)return{t,point:[origin[0]+dir[0]*t,origin[1]+dir[1]*t,origin[2]+dir[2]*t]};
     return null;
 }
+// v267: ハンドルスフィアへのレイキャスト (球-レイ交差)。
+//   AR で「ハンドル grab したいがメッシュ境界付近で誤判定」する問題への対策。
+//   タッチ用に半径を 1.5x して当たり判定を緩める (touch tolerance)。
+function raycastHandleSpheres(ray, radiusMul) {
+    if (!sb || sb.getNumHandleSpheres() === 0) return null;
+    const data = sb.getHandleSphereData();  // [cx, cy, cz, r, ...]
+    if (!data || data.length === 0) return null;
+    const mul = (typeof radiusMul === 'number') ? radiusMul : 1.5;
+    const ox = ray.origin[0], oy = ray.origin[1], oz = ray.origin[2];
+    const dx = ray.direction[0], dy = ray.direction[1], dz = ray.direction[2];
+    const a = dx*dx + dy*dy + dz*dz;
+    if (a < 1e-12) return null;
+    let bestT = Infinity, bestIdx = -1;
+    for (let i = 0; i < data.length; i += 4) {
+        const cx = data[i], cy = data[i+1], cz = data[i+2];
+        const r = data[i+3] * mul;
+        const ex = ox - cx, ey = oy - cy, ez = oz - cz;
+        const b = 2 * (ex*dx + ey*dy + ez*dz);
+        const c = ex*ex + ey*ey + ez*ez - r*r;
+        const disc = b*b - 4*a*c;
+        if (disc < 0) continue;
+        const t = (-b - Math.sqrt(disc)) / (2*a);
+        if (t < 1e-4) continue;  // カメラ後方は除外
+        if (t < bestT) { bestT = t; bestIdx = i / 4; }
+    }
+    if (bestIdx < 0) return null;
+    return { t: bestT, idx: bestIdx };
+}
+
 // カット対象判定: Liver / Portal / Vein のみ可（C++ main.cpp 準拠 — Tumor/GB はカット不可）
 function isCuttableChild(ci) {
     if (ci < 0) return true; // liver
@@ -3031,7 +3060,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v266</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v267</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -3981,6 +4010,9 @@ let arCutBtnPosLocked = false;
 let arSelectStartHitMesh = false;
 // v264: Deform+Place モードで touchstart に配置済みなら touchend での二重配置を抑止するフラグ
 let arHandlePlacedAtStart = false;
+// v267: 直近の selectstart raycast がハンドルスフィアにヒットしたか (mesh より優先)
+//        メッシュ境界付近のハンドル grab が「メッシュ判定で失敗 → 配置 / transform」になる誤動作を防ぐ
+let arSelectStartHitHandle = false;
 // v252: AR-panel / mobile-bar 等の <button> タップ直後の WebXR 'select' を抑止
 //       (Android Chrome の DOM tap と XR select の dual-fire 対策、Anchor / SegSelect / Deform 全般)
 // v261: pointerup でも timer を refresh。長押し (>250ms) → 指離す → WebXR select の流れで
@@ -4417,8 +4449,9 @@ function setupARTransformHandlers() {
         // v263: 1本指でメッシュをヒットしたタップは transform スキップ (mode-specific action 優先)
         //        2本指 (pinch/pan) と Transform mode は常に transform 実行 (AR navigation として必須)
         //        Anchor 配置モード中も transform しない
+        // v267: ハンドルスフィアヒットも skip 対象に追加 (ハンドル grab を transform で邪魔しない)
         if (arAnchorPlaceMode) return;
-        if (ids.length === 1 && actionMode !== 'transform' && arSelectStartHitMesh) return;
+        if (ids.length === 1 && actionMode !== 'transform' && (arSelectStartHitMesh || arSelectStartHitHandle)) return;
         const cx = sb.getMeshCentroidX(), cy = sb.getMeshCentroidY(), cz = sb.getMeshCentroidZ();
 
         if (ids.length === 1) {
@@ -4618,21 +4651,43 @@ function onARSelectStart(ev) {
 
     // v263: 全タップで raycast → ar-transform-overlay の navigation 判定に使う (mode 関係なく)
     const pose = ev.frame.getPose(src.targetRaySpace, xrRefSpace);
-    if (!pose) { arSelectStartHitMesh = false; return; }
+    if (!pose) {
+        arSelectStartHitMesh = false;
+        arSelectStartHitHandle = false;
+        return;
+    }
     const { simO, simD } = arPoseToSimRay(pose);
-    const hit = raycastMesh({ origin: simO, direction: simD });
-    arSelectStartHitMesh = !!hit;
+    const ray = { origin: simO, direction: simD };
+    // v267: handle hit を mesh hit より先に評価
+    //        ハンドルスフィアはメッシュ表面より外側に出ていることが多く、メッシュ判定だけだと
+    //        境界で「どっちか分からない」誤判定が起きる。ハンドルが触られていれば最優先で grab
+    const hitHandle = raycastHandleSpheres(ray);
+    const hitMesh   = raycastMesh(ray);
+    arSelectStartHitHandle = !!hitHandle;
+    arSelectStartHitMesh   = !!hitMesh;
 
     if (arAnchorPlaceMode) return;  // Anchor モード中は grab しない
 
     const isPlace = (actionMode === 'deform' && (deformSub === 'place' || deformSub === 'none'));
     const isGrab  = (actionMode === 'deform' && deformSub === 'deform');
 
+    if (isPlace || isGrab) {
+        // v267: ハンドルヒットが最優先。Place / Deform どちらのサブモードでも startGrabVR で掴む
+        if (hitHandle) {
+            sb.startGrabVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2]);
+            if (sb.isGrabbingVR()) {
+                arActiveTouchSource = src;
+                console.log('[AR] handle grab (handle hit prioritized) idx=' + hitHandle.idx);
+            }
+            return;
+        }
+    }
+
     if (isPlace) {
         // v264: 非AR と同じ「place を試す → 失敗したら grab」パターン
         //   メッシュ上の空き場所タップ → addHandleSphereVR 成功 → 配置完了
-        //   既存ハンドル上タップ → addHandleSphereVR 失敗 → startGrabVR でハンドル掴む → ドラッグで動かせる
         //   メッシュ外タップ → addHandleSphereVR 失敗 + startGrabVR 失敗 → 何も起きない (ar-transform-overlay が navigation)
+        //   v267: ハンドルヒット時はここに来ない (上で return)
         const placed = sb.addHandleSphereVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2], handleSphereRadius);
         if (placed) {
             arHandlePlacedAtStart = true;
@@ -4644,11 +4699,11 @@ function onARSelectStart(ev) {
             console.log('[AR] handle placed at touchstart, n=' + n);
             return;
         }
-        // 配置失敗 → 既存ハンドル grab を試行
+        // 配置失敗 → grab フォールスルー (handle 以外の何かを掴むかも)
         sb.startGrabVR(simO[0], simO[1], simO[2], simD[0], simD[1], simD[2]);
         if (sb.isGrabbingVR()) {
             arActiveTouchSource = src;
-            console.log('[AR] handle grab started (place mode fallback)');
+            console.log('[AR] grab started (place mode fallback)');
         }
         return;
     }
