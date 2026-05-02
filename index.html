@@ -368,13 +368,13 @@
 <div class="overlay" id="loading">
     <div id="loading-title" style="font-size:14px;color:#00d4ff;margin-bottom:8px;">Loading Liver Simulator...</div>
     <div id="loading-bar"><div id="loading-fill"></div></div>
-    <div id="loading-sub" style="margin-top:8px;font-size:13px;">WASMモジュール読込中...</div>
+    <div id="loading-sub" style="margin-top:8px;font-size:13px;">Loading WASM module...</div>
     <div id="loading-pct" style="margin-top:4px;font-size:11px;color:#666;">0%</div>
 </div>
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v271</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v272</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -3080,7 +3080,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v271</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v272</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -3491,7 +3491,7 @@ async function initApp() {
         gl.viewport(0, 0, canvas.width, canvas.height);
 
         // Compile shaders (deferred to avoid softbody.js clearing script tags)
-        setLoad('シェーダー準備中...', 2);
+        setLoad('Compiling shaders...', 2);
         await yieldFrame();
         pMain = mkProg(SHADER_VS, SHADER_FS);
         pWire = mkProg(SHADER_VSW, SHADER_FSW);
@@ -3563,7 +3563,7 @@ async function initApp() {
         console.log('[APP] Emscripten GL context initialized');
 
         // Create soft body
-        setLoad('肝臓メッシュ読込中... (1/5)', 5);
+        setLoad('Loading liver mesh... (1/5)', 5);
         await yieldFrame();
         console.log('[APP] Creating SoftBodyDuoWasm');
         sb = Module.createSoftBody(
@@ -3618,13 +3618,13 @@ async function initApp() {
         // 体感ロード時間ベースで割当て: Liver(1) | Portal(2)=33% | Vein(3)=24% | Tumor(4)=5% | GB(5)=1%
         const childDefs = [
             {low:'/model/portal_lowRes_mesh.txt', high:'/model/portal_highRes_mesh.txt',
-             color:[0.95,0.30,0.55,1.0], label:'Portal', msg:'門脈メッシュ読込中... (2/5)', pct:18},
+             color:[0.95,0.30,0.55,1.0], label:'Portal', msg:'Loading portal vein... (2/5)', pct:18},
             {low:'/model/vein_lowRes_mesh.txt', high:'/model/vein_highRes_mesh.txt',
-             color:[0.2,0.8,0.8,1.0], label:'Vein', msg:'肝静脈メッシュ読込中... (3/5)', pct:50},
+             color:[0.2,0.8,0.8,1.0], label:'Vein', msg:'Loading hepatic vein... (3/5)', pct:50},
             {low:'/model/tumor_lowRes_mesh.txt', high:'/model/tumor_highRes_mesh.txt',
-             color:[0.85,0.65,0.10,1.0], label:'Tumor', msg:'腫瘍メッシュ読込中... (4/5)', pct:74},
+             color:[0.85,0.65,0.10,1.0], label:'Tumor', msg:'Loading tumor... (4/5)', pct:74},
             {low:'/model/GB_lowRes_mesh.txt', high:'/model/GB_highRes_mesh.txt',
-             color:[0.2,0.8,0.2,1.0], label:'GB', msg:'胆嚢メッシュ読込中... (5/5)', pct:79},
+             color:[0.2,0.8,0.2,1.0], label:'GB', msg:'Loading gallbladder... (5/5)', pct:79},
         ];
         for (let ci=0; ci<childDefs.length; ci++) {
             const def = childDefs[ci];
@@ -3649,7 +3649,7 @@ async function initApp() {
         // Step 5: 初期化時にスケルトン解析 + OBJセグメントバインド（重力落下前）
         if (sb.getNumChildren() > 0) {
             try {
-                setLoad('血管骨格解析中...', 80);
+                setLoad('Analyzing vascular skeleton...', 80);
                 await yieldFrame();
                 console.log('[APP] Auto-analyzing skeleton...');
                 const _tSkel = performance.now();
@@ -3661,7 +3661,7 @@ async function initApp() {
                     gl.bindBuffer(gl.ARRAY_BUFFER, bSegCol);
                     gl.bufferData(gl.ARRAY_BUFFER, colors, gl.STATIC_DRAW);
                     console.log('[Skeleton] OK, colors:', colors.length/4);
-                    setLoad('肝区域 S1-S8 読込中...', 86);
+                    setLoad('Loading liver segments S1-S8...', 86);
                     await yieldFrame();
                     const _tObjSeg = performance.now();
                     const objOk = sb.loadAndBindOBJSegments('');
@@ -3685,7 +3685,7 @@ async function initApp() {
         }
 
         // ボリューム計算: transform_info.txt から scaleFactor を読み込み
-        setLoad('体積計算中...', 99);
+        setLoad('Computing volumes...', 99);
         await yieldFrame();
         try {
             const tiText = Module.FS.readFile('/model/transform_info.txt', {encoding:'utf8'});
@@ -3700,7 +3700,7 @@ async function initApp() {
             }
         } catch(e) { console.warn('[Volume] transform_info.txt not found:', e); }
 
-        setLoad('完了', 100);
+        setLoad('Ready', 100);
         await yieldFrame();
         document.getElementById('loading').style.display = 'none';
 
@@ -7868,7 +7868,7 @@ function vrExitVR() { if (xrSession) xrSession.end(); }
 if ('serviceWorker' in navigator) {
     // updateViaCache:'none' で sw.js 自体の HTTP キャッシュを無効化
     // ?v=228 でキャッシュバスト（バージョン毎に更新、不一致で強制 install 発火）
-    const SW_URL = 'sw.js?v=271';
+    const SW_URL = 'sw.js?v=272';
     let __swReloaded = false;
 
     // 新 SW が activate して controllerchange が発火したら1回だけ自動リロード
