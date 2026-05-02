@@ -374,7 +374,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v272</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v273</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -3080,7 +3080,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v272</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v273</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -4042,9 +4042,10 @@ let arTransformTouches = {};         // {pointerId: {x, y}}
 let arTransformPrev2F = null;        // {midX, midY, dist} 2本指前回状態
 let arTransformHandlersAttached = false;
 let arLastViewOri = null;            // 最新の viewer 姿勢 quaternion (タッチ時のカメラ軸計算用)
-// ===== Phase 3b: Free Cut カッター制御 (1本指=回転 / 2本指=サイズ / 短タップ=再配置) =====
+// ===== Phase 3b: Free Cut カッター制御 (1本指=回転 / 2本指=AR navigation / 短タップ=再配置) =====
+// v273: 2本指は AR navigation (pan + scale) に統一。カッターサイズは Size スライダーで調整。
 let arCutTouches = {};               // {pointerId: {x, y, x0, y0, t0, moved}}
-let arCutPrev2F = null;              // 2本指ピンチ前回距離
+let arCutPrev2F = null;              // 2本指の前回 {midX, midY, dist} (AR navigation用)
 let arCutHandlersAttached = false;
 // v249: 誤作動防止のため「ar-cut-overlay 上のクリーンタップ」のみ再配置を許可
 let arCutMultiTouchActive = false;   // この touch sequence で 2本指以上が触れたか
@@ -4582,7 +4583,8 @@ function setupARCutHandlers() {
         const t = arCutTouches[e.pointerId];
         const prevX = t.x, prevY = t.y;
         t.x = e.clientX; t.y = e.clientY;
-        if (Math.hypot(e.clientX - t.x0, e.clientY - t.y0) > 4) t.moved = true;
+        // v273: clean tap 閾値を 4px → 15px に緩和 (長押しの微小ブレを許容)
+        if (Math.hypot(e.clientX - t.x0, e.clientY - t.y0) > 15) t.moved = true;
         const ids = Object.keys(arCutTouches);
         const axes = getCamAxes();
         if (!axes) return;
@@ -4597,24 +4599,38 @@ function setupARCutHandlers() {
                 axes.right[0], axes.right[1], axes.right[2],
                 axes.up[0], axes.up[1], axes.up[2]);
         } else if (ids.length === 2) {
+            // v273: 2本指 → カッタースケールから AR ナビゲーション (pan + scale) に変更
+            //        通常モバイル版の「2本指=カメラズーム/Pan」と同じ操作感に統一。
+            //        カッターサイズは mobile-sub-panel の Size スライダーで調整する。
+            //        実装は setupARTransformHandlers の 2 本指ロジック (line 4511-4538) と同じ。
             const a = arCutTouches[ids[0]], b = arCutTouches[ids[1]];
+            const curMidX = (a.x + b.x) / 2;
+            const curMidY = (a.y + b.y) / 2;
             const curDist = Math.hypot(a.x - b.x, a.y - b.y);
-            if (arCutPrev2F && arCutPrev2F > 1 && curDist > 1) {
-                const ratio = curDist / arCutPrev2F;
-                const target = (cutTargetMeshIdx >= 0 && cutTargetMeshIdx <= 1) ? 'vessel' : 'liver';
-                const cur = cutterTargetScales[target] || 1.0;
-                const next = Math.max(0.1, Math.min(5.0, cur * ratio));
-                if (Math.abs(next - cur) > 1e-4) {
-                    cutterTargetScales[target] = next;
-                    sb.setCutterScale(next);
-                    // スライダー表示同期
-                    const sl = document.getElementById('cut-scale');
-                    if (sl) sl.value = next;
-                    const sv = document.getElementById('cut-scale-v');
-                    if (sv) sv.textContent = next.toFixed(2);
+            if (arCutPrev2F) {
+                const cx = sb.getMeshCentroidX(), cy = sb.getMeshCentroidY(), cz = sb.getMeshCentroidZ();
+                // 平行移動 (midpoint 差分を camera_right/up で展開)
+                const panDx = curMidX - arCutPrev2F.midX;
+                const panDy = curMidY - arCutPrev2F.midY;
+                const wsens = 0.0005;  // m/pixel
+                const s = wsens / VR_SCALE;
+                sb.translateModel(
+                    axes.right[0]*panDx*s + axes.up[0]*(-panDy)*s,
+                    axes.right[1]*panDx*s + axes.up[1]*(-panDy)*s,
+                    axes.right[2]*panDx*s + axes.up[2]*(-panDy)*s);
+                // スケール (距離比 → VR_SCALE 更新、メッシュ重心が固定点)
+                if (arCutPrev2F.dist > 1 && curDist > 1) {
+                    const ratio = curDist / arCutPrev2F.dist;
+                    const newScale = Math.max(0.01, Math.min(0.5, VR_SCALE * ratio));
+                    if (Math.abs(newScale - VR_SCALE) > 1e-5) {
+                        VR_OFFSET.x += (VR_SCALE - newScale) * cx;
+                        VR_OFFSET.y += (VR_SCALE - newScale) * cy;
+                        VR_OFFSET.z += (VR_SCALE - newScale) * cz;
+                        VR_SCALE = newScale;
+                    }
                 }
             }
-            arCutPrev2F = curDist;
+            arCutPrev2F = { midX: curMidX, midY: curMidY, dist: curDist };
         }
     });
 
@@ -7868,7 +7884,7 @@ function vrExitVR() { if (xrSession) xrSession.end(); }
 if ('serviceWorker' in navigator) {
     // updateViaCache:'none' で sw.js 自体の HTTP キャッシュを無効化
     // ?v=228 でキャッシュバスト（バージョン毎に更新、不一致で強制 install 発火）
-    const SW_URL = 'sw.js?v=272';
+    const SW_URL = 'sw.js?v=273';
     let __swReloaded = false;
 
     // 新 SW が activate して controllerchange が発火したら1回だけ自動リロード
