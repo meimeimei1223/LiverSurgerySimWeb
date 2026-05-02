@@ -11,7 +11,7 @@
     // Defense in depth: re-check URL param
     if (!new URLSearchParams(location.search).has('bench')) return;
 
-    const BENCH_VERSION = '1.0.0';
+    const BENCH_VERSION = '1.0.1';
     const BENCH_BOOT_AT = performance.now();
 
     // ============================================================
@@ -612,9 +612,22 @@
     const ReportRenderer = {
         build() {
             const sb = window.sb;
+            // v1.0.1: distinguish baked-default model from OBJ-dropped model.
+            //         Default startup uses pre-baked /model/*_mesh.txt files; the gs-* sliders
+            //         are ignored until the user drops an OBJ folder and presses Generate.
+            //         For the baked default, slider state is irrelevant — report it as
+            //         'pre-baked-default' and surface the slider state separately as a hint.
+            const usingPrebaked = LoadTimeTracker.objDropEvents.length === 0;
+            let sliderState = null;
+            try {
+                const ts = window.TetPreset?.getCurrentValues?.();
+                if (ts) sliderState = { preset: ts.preset, values: ts.values };
+            } catch {}
             let model = {
-                preset: 'unknown',
-                gridValues: null,
+                preset: usingPrebaked ? 'pre-baked-default' : (sliderState?.preset ?? 'unknown'),
+                gridValues: usingPrebaked ? null : (sliderState?.values ?? null),
+                sliderState,    // always include for transparency / debug
+                source: usingPrebaked ? 'pre-baked' : 'obj-drop',
                 simTets: null,
                 visualTets: null,
                 surfaceTris: null,
@@ -623,13 +636,6 @@
                 skeletonAnalyzed: null,
                 sampledAt: nowIso(),
             };
-            try {
-                const ts = window.TetPreset?.getCurrentValues?.();
-                if (ts) {
-                    model.preset = ts.preset;
-                    model.gridValues = ts.values;
-                }
-            } catch {}
             if (sb) {
                 try {
                     model.simTets       = sb.getNumLowResTets?.() ?? null;
@@ -708,11 +714,20 @@
             lines.push('### Model');
             lines.push('| Field | Value |');
             lines.push('|---|---|');
-            lines.push(`| Preset | ${m.preset.toUpperCase()} |`);
-            if (m.gridValues) {
-                lines.push(`| Grid (liver) | low ${m.gridValues['gs-liver-low']} / high ${m.gridValues['gs-liver-high']} |`);
-                lines.push(`| Grid (vessel) | low ${m.gridValues['gs-vessel-low']} / high ${m.gridValues['gs-vessel-high']} |`);
-                lines.push(`| Grid (skeleton) | ${m.gridValues['gs-skeleton']} |`);
+            if (m.source === 'pre-baked') {
+                lines.push(`| Source | **Pre-baked default** (build-time tet, sliders ignored) |`);
+                lines.push(`| Preset | _N/A — drop OBJ folder to enable presets_ |`);
+                if (m.sliderState) {
+                    lines.push(`| Slider state (informational only) | ${m.sliderState.preset.toUpperCase()} (liver ${m.sliderState.values['gs-liver-low']}/${m.sliderState.values['gs-liver-high']}, vessel ${m.sliderState.values['gs-vessel-low']}/${m.sliderState.values['gs-vessel-high']}, skel ${m.sliderState.values['gs-skeleton']}) |`);
+                }
+            } else {
+                lines.push(`| Source | OBJ-drop (slider values applied at tet generation) |`);
+                lines.push(`| Preset | ${m.preset.toUpperCase()} |`);
+                if (m.gridValues) {
+                    lines.push(`| Grid (liver) | low ${m.gridValues['gs-liver-low']} / high ${m.gridValues['gs-liver-high']} |`);
+                    lines.push(`| Grid (vessel) | low ${m.gridValues['gs-vessel-low']} / high ${m.gridValues['gs-vessel-high']} |`);
+                    lines.push(`| Grid (skeleton) | ${m.gridValues['gs-skeleton']} |`);
+                }
             }
             lines.push(`| Sim tets (low-res) | ${fmt(m.simTets)} |`);
             lines.push(`| Visual tets (high-res) | ${fmt(m.visualTets)} |`);
