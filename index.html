@@ -374,7 +374,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v273</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v274</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -3080,7 +3080,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v273</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v274</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -4058,6 +4058,9 @@ let arCutBtnPosLocked = false;
 let arSelectStartHitMesh = false;
 // v264: Deform+Place モードで touchstart に配置済みなら touchend での二重配置を抑止するフラグ
 let arHandlePlacedAtStart = false;
+// v274: Free Cut も touchstart で即配置 (通常モバイル版と同じ「タップ即配置」UX)
+//       onARSelect (touchend) での二重配置を抑止
+let arCutPlacedAtStart = false;
 // v267: 直近の selectstart raycast がハンドルスフィアにヒットしたか (mesh より優先)
 //        メッシュ境界付近のハンドル grab が「メッシュ判定で失敗 → 配置 / transform」になる誤動作を防ぐ
 let arSelectStartHitHandle = false;
@@ -4583,8 +4586,8 @@ function setupARCutHandlers() {
         const t = arCutTouches[e.pointerId];
         const prevX = t.x, prevY = t.y;
         t.x = e.clientX; t.y = e.clientY;
-        // v273: clean tap 閾値を 4px → 15px に緩和 (長押しの微小ブレを許容)
-        if (Math.hypot(e.clientX - t.x0, e.clientY - t.y0) > 15) t.moved = true;
+        // v274: 4px に戻す (touchstart で即配置するため、clean tap の許容値は厳しくてよい)
+        if (Math.hypot(e.clientX - t.x0, e.clientY - t.y0) > 4) t.moved = true;
         const ids = Object.keys(arCutTouches);
         const axes = getCamAxes();
         if (!axes) return;
@@ -4707,6 +4710,7 @@ function arPoseToSimRay(pose) {
 // - それ以外: 何もしない (select で配置判定)
 function onARSelectStart(ev) {
     arHandlePlacedAtStart = false;  // v264: 毎タップでリセット
+    arCutPlacedAtStart = false;     // v274: 毎タップでリセット
     if (arButtonClickRecent) return;  // v252: ボタンタップの dual-fire を抑止
     const src = ev.inputSource;
     if (!src || src.targetRayMode !== 'screen') return;
@@ -4730,6 +4734,18 @@ function onARSelectStart(ev) {
     arSelectStartHitMesh   = !!hitMesh;
 
     if (arAnchorPlaceMode) return;  // Anchor モード中は grab しない
+
+    // v274: Free Cut も touchstart で即配置 (通常モバイル版と同じ UX)。
+    //        以前は touchend の clean tap 待ちだったので「タップして指を離す瞬間に配置」だったが、
+    //        通常モバイル版は pointerdown→100ms→placeCutter なので「触れた瞬間に配置 + そのまま drag で回転」が可能。
+    //        AR でも同じ即配置パターンに統一する。
+    if (actionMode === 'freeCut') {
+        const placed = placeCutterAR(simO, simD);
+        if (placed) {
+            arCutPlacedAtStart = true;
+        }
+        return;
+    }
 
     const isPlace = (actionMode === 'deform' && (deformSub === 'place' || deformSub === 'none'));
     const isGrab  = (actionMode === 'deform' && deformSub === 'deform');
@@ -4843,21 +4859,16 @@ function onARSelect(ev) {
         return;
     }
 
-    // Free Cut モード: 初回配置はそのまま許可、再配置は「ar-cut-overlay 上のクリーンタップ」を必須とする (v249)
-    //   クリーンタップ = overlay の pointerdown→pointerup で動きなし、終始 1 本指のみ
-    //   これで再配置時の以下の誤作動を防ぐ:
-    //   - ドラッグ後の指離しで発火する 'select' (動いている = clean tap でない)
-    //   - ピンチ後の指離しで発火する 'select' (multi-touch session = clean tap でない)
-    //   - AR-panel/mobile-bar ボタンタップで発火する 'select'
-    //     (それらのボタンは overlay より上の z-index でイベントを吸収するので overlay の pointerdown が来ない = clean tap でない)
-    //   v243 で完全ブロックしていた再配置を意図的なタップに限り許可。
+    // Free Cut モード: v274 から touchstart で即配置に変更 (通常モバイル版と同じ UX)
+    //   onARSelectStart で配置済みなら touchend では何もしない (二重配置防止)。
+    //   touchstart が pose 取得失敗等で配置できなかった場合のフォールバックのみここで実行。
     if (actionMode === 'freeCut') {
-        if (cutterPlaced) {
-            if (!arCutCleanTapPending) return;
-            arCutCleanTapPending = false;  // consume
-            if (arCutCleanTapTimer) { clearTimeout(arCutCleanTapTimer); arCutCleanTapTimer = null; }
+        if (arCutPlacedAtStart) {
+            arCutPlacedAtStart = false;  // consume
+            return;  // touchstart で配置済み
         }
-        placeCutterAR(simO, simD);  // 内部で raycast hit miss なら何もしない (cutter 維持)
+        // フォールバック (通常は到達しない): touchstart の pose 取得が失敗した場合
+        placeCutterAR(simO, simD);
         return;
     }
 
@@ -7884,7 +7895,7 @@ function vrExitVR() { if (xrSession) xrSession.end(); }
 if ('serviceWorker' in navigator) {
     // updateViaCache:'none' で sw.js 自体の HTTP キャッシュを無効化
     // ?v=228 でキャッシュバスト（バージョン毎に更新、不一致で強制 install 発火）
-    const SW_URL = 'sw.js?v=273';
+    const SW_URL = 'sw.js?v=274';
     let __swReloaded = false;
 
     // 新 SW が activate して controllerchange が発火したら1回だけ自動リロード
