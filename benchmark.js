@@ -11,8 +11,21 @@
     // Defense in depth: re-check URL param
     if (!new URLSearchParams(location.search).has('bench')) return;
 
-    const BENCH_VERSION = '1.0.2';
+    const BENCH_VERSION = '1.0.3';
     const BENCH_BOOT_AT = performance.now();
+
+    // ============================================================
+    // Cross-script lexical accessors
+    //   index.html declares globals as `let gl, sb = null;` (line 710),
+    //   `let xrSession`, `let vrFps`, `let vrGrabs`. `let` at top-level
+    //   does NOT bind to window, but IS accessible by name across
+    //   script blocks in the same realm. So we look them up by name,
+    //   guarded by typeof to be safe in case names get renamed.
+    // ============================================================
+    function $sb()        { try { return (typeof sb        !== 'undefined') ? sb        : null; } catch { return null; } }
+    function $gl()        { try { return (typeof gl        !== 'undefined') ? gl        : null; } catch { return null; } }
+    function $xrSession() { try { return (typeof xrSession !== 'undefined') ? xrSession : null; } catch { return null; } }
+    function $vrGrabs()   { try { return (typeof vrGrabs   !== 'undefined') ? vrGrabs   : null; } catch { return null; } }
 
     // ============================================================
     // Utility helpers
@@ -128,11 +141,11 @@
                 WebAssembly.validate(new Uint8Array([0,97,115,109,1,0,0,0,1,5,1,96,0,1,123,3,2,1,0,10,10,1,8,0,65,0,253,15,253,98,11])));
             this.data.wasm.threads = (typeof SharedArrayBuffer !== 'undefined');
 
-            // WebGL info — defer until window.gl exists
+            // WebGL info — defer until gl exists (it's `let`, not on window)
             this._pollGL();
         },
         _pollGL(attempts = 0) {
-            const gl = window.gl;
+            const gl = $gl();
             if (!gl) {
                 if (attempts < 50) setTimeout(() => this._pollGL(attempts + 1), 100);
                 return;
@@ -203,7 +216,7 @@
                 this._onDrop(e);
             }, true);
 
-            // Poll window.sb for first creation
+            // Poll sb for first creation (sb is `let`, not on window)
             this._pollSb();
         },
 
@@ -220,7 +233,7 @@
         },
 
         _pollSb(attempts = 0) {
-            if (window.sb && this.initialLoad.sbCreated === null) {
+            if ($sb() && this.initialLoad.sbCreated === null) {
                 this.initialLoad.sbCreated = performance.now();
                 this._countRenderFramesAfterSb();
                 return;
@@ -271,11 +284,12 @@
             this._currentDrop = null;
             const start = performance.now();
             const tick = () => {
-                if (window.sb) {
+                const sb = $sb();
+                if (sb) {
                     drop.simReadyAt = performance.now();
                     try {
-                        drop.simTetsAfter = window.sb.getNumLowResTets?.() ?? null;
-                        drop.visTetsAfter = window.sb.getNumHighResTets?.() ?? null;
+                        drop.simTetsAfter = sb.getNumLowResTets?.() ?? null;
+                        drop.visTetsAfter = sb.getNumHighResTets?.() ?? null;
                     } catch {}
                     LoadTimeTracker.objDropEvents.push(drop);
                     return;
@@ -363,11 +377,12 @@
             // 4. recent pointermove (<500ms) + not in cut mode placement → rotation
             // 5. else → idle
             try {
-                if (window.xrSession) {
-                    const grabs = window.vrGrabs;
+                if ($xrSession()) {
+                    const grabs = $vrGrabs();
                     if (grabs && (grabs.left?.active || grabs.right?.active)) return 'deform';
                 }
-                if (window.sb?.isGrabbing?.()) return 'deform';
+                const sbRef = $sb();
+                if (sbRef?.isGrabbing?.()) return 'deform';
                 if (now - this._lastCutAt < 500) return 'postCut';
                 if (now - this._lastPointerMoveAt < 500) {
                     // exclude pointermove during cut placement (cutMode + pointer down)
@@ -412,7 +427,7 @@
         },
 
         _poll() {
-            const sb = window.sb;
+            const sb = $sb();
             if (sb && sb !== this._lastWrappedSb) {
                 this._wrap(sb);
                 this._lastWrappedSb = sb;
@@ -611,7 +626,7 @@
     // ============================================================
     const ReportRenderer = {
         build() {
-            const sb = window.sb;
+            const sb = $sb();
             // v1.0.1: distinguish baked-default model from OBJ-dropped model.
             //         Default startup uses pre-baked /model/*_mesh.txt files; the gs-* sliders
             //         are ignored until the user drops an OBJ folder and presses Generate.
@@ -931,7 +946,7 @@
 
         // Hide button while in XR session
         _xrPoll() {
-            const inXR = !!window.xrSession;
+            const inXR = !!$xrSession();
             if (this._btn) this._btn.style.display = inXR ? 'none' : '';
             if (inXR && this._panel.style.display !== 'none') this.hide();
             setTimeout(() => this._xrPoll(), 500);
