@@ -11,7 +11,7 @@
     // Defense in depth: re-check URL param
     if (!new URLSearchParams(location.search).has('bench')) return;
 
-    const BENCH_VERSION = '1.0.1';
+    const BENCH_VERSION = '1.0.2';
     const BENCH_BOOT_AT = performance.now();
 
     // ============================================================
@@ -819,7 +819,7 @@
         _mountButton() {
             const btn = document.createElement('button');
             btn.id = 'bench-toggle-btn';
-            btn.textContent = '📊 Bench';
+            btn.textContent = '📊 Bench v' + BENCH_VERSION;
             btn.style.cssText = 'position:fixed;bottom:12px;right:12px;z-index:99998;' +
                 'background:#000a;color:#7dff7d;padding:8px 12px;' +
                 'font-family:monospace;font-size:12px;' +
@@ -839,7 +839,7 @@
                 'border:1px solid #7dff7d;border-radius:6px;display:none;';
             panel.innerHTML = `
                 <div style="display:flex;justify-content:space-between;align-items:center;">
-                    <strong style="color:#7dff7d;">📊 Benchmark Report</strong>
+                    <strong style="color:#7dff7d;">📊 Benchmark Report <span style="color:#888;font-size:11px;font-weight:normal;">v${BENCH_VERSION}</span></strong>
                     <button id="bench-close-btn" style="background:transparent;color:#aaa;border:0;font-size:18px;cursor:pointer;">×</button>
                 </div>
                 <div style="margin:10px 0;display:flex;gap:6px;flex-wrap:wrap;">
