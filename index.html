@@ -150,6 +150,18 @@
         .vr-bot-params { border-color:rgba(100,200,100,0.3); color:#88cc88; }
         .vr-bot-reset  { border-color:rgba(200,60,60,0.3); color:#e07070; }
         .vr-bot-exit   { border-color:rgba(180,140,60,0.3); color:#cc9955; }
+        /* v278: Tet density preset buttons */
+        .tet-preset-btn {
+            background:#2a3a4a; color:#ddd;
+            border:1px solid #446; border-radius:4px;
+            padding:5px 12px; font-size:12px; font-weight:bold;
+            cursor:pointer; transition:all 0.15s;
+        }
+        .tet-preset-btn:hover { background:#3a4a5a; border-color:#668; }
+        .tet-preset-active {
+            background:#1a5a3a; border-color:#3da; color:#fff;
+            box-shadow:0 0 6px rgba(60,255,180,0.3);
+        }
     </style>
 </head>
 <body>
@@ -261,6 +273,15 @@
     max-height:90vh;overflow-y:auto;margin:auto;">
     <h3 style="color:#00d4ff;margin-bottom:14px;">OBJ Folder</h3>
     <div id="tet-file-list" style="background:#111a24;border-radius:6px;padding:10px 12px;margin-bottom:16px;font-size:12px;line-height:1.8;"></div>
+    <!-- v278: Tet density preset bar -->
+    <div class="tet-preset-bar" style="display:flex;align-items:center;gap:8px;border-top:1px solid #334;padding-top:12px;margin-top:8px;margin-bottom:4px;">
+      <span style="color:#aaa;font-size:12px;">Preset:</span>
+      <button type="button" class="tet-preset-btn" data-preset="low" title="Smartphone / WebXR VR / low-end">LOW</button>
+      <button type="button" class="tet-preset-btn tet-preset-active" data-preset="middle" title="Standard desktop (= current default)">MID</button>
+      <button type="button" class="tet-preset-btn" data-preset="high" title="High-end desktop only">HIGH</button>
+      <span class="tet-preset-hint" style="color:#888;font-size:11px;margin-left:4px;">Standard desktop</span>
+      <span class="tet-preset-custom-badge" hidden style="margin-left:auto;color:#ffcc00;font-size:11px;background:#332600;padding:2px 6px;border-radius:3px;">Custom</span>
+    </div>
     <div style="border-top:1px solid #334;padding-top:14px;">
       <div style="margin-bottom:10px;"><b style="color:#ff8c8c;">Liver</b>
         <label style="display:flex;align-items:center;gap:8px;margin:3px 0;"><span style="width:90px;font-size:11px;">Low grid</span>
@@ -374,7 +395,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v277</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v278</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -3080,7 +3101,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v277</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v278</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -7910,7 +7931,7 @@ function vrExitVR() { if (xrSession) xrSession.end(); }
 if ('serviceWorker' in navigator) {
     // updateViaCache:'none' で sw.js 自体の HTTP キャッシュを無効化
     // ?v=228 でキャッシュバスト（バージョン毎に更新、不一致で強制 install 発火）
-    const SW_URL = 'sw.js?v=277';
+    const SW_URL = 'sw.js?v=278';
     let __swReloaded = false;
 
     // 新 SW が activate して controllerchange が発火したら1回だけ自動リロード
@@ -7937,6 +7958,219 @@ if ('serviceWorker' in navigator) {
         });
     }).catch(err => console.warn('[PWA] SW registration failed:', err));
 }
+</script>
+<!-- v278: Tet density preset module -->
+<script>
+(function() {
+    'use strict';
+
+    const TET_PRESETS = {
+        low: {
+            label: 'LOW',
+            description: 'Smartphone / WebXR VR / low-end',
+            'gs-liver-low':   16,
+            'gs-liver-high':  32,
+            'gs-vessel-low':  20,
+            'gs-vessel-high': 40,
+            'gs-skeleton':    60,
+        },
+        middle: {
+            label: 'MIDDLE',
+            description: 'Standard desktop (= current default)',
+            'gs-liver-low':   20,
+            'gs-liver-high':  40,
+            'gs-vessel-low':  40,
+            'gs-vessel-high': 80,
+            'gs-skeleton':    70,
+        },
+        high: {
+            label: 'HIGH',
+            description: 'High-end desktop only',
+            'gs-liver-low':   40,
+            'gs-liver-high':  80,
+            'gs-vessel-low':  60,
+            'gs-vessel-high': 120,
+            'gs-skeleton':    90,
+        },
+    };
+
+    const WATCHED_IDS = ['gs-liver-low', 'gs-liver-high', 'gs-vessel-low', 'gs-vessel-high', 'gs-skeleton'];
+    const STORAGE_KEY = 'liversim.tetPreset';
+
+    let currentPreset = 'middle';
+    const changeListeners = [];
+
+    function getInputValues() {
+        const out = {};
+        WATCHED_IDS.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) out[id] = +el.value;
+        });
+        return out;
+    }
+
+    function setActiveButton(name) {
+        document.querySelectorAll('.tet-preset-btn').forEach(btn => {
+            if (btn.dataset.preset === name) btn.classList.add('tet-preset-active');
+            else btn.classList.remove('tet-preset-active');
+        });
+    }
+
+    function clearActiveButtons() {
+        document.querySelectorAll('.tet-preset-btn').forEach(btn => btn.classList.remove('tet-preset-active'));
+    }
+
+    function updateHint(text) {
+        const hintEl = document.querySelector('.tet-preset-hint');
+        if (hintEl) {
+            hintEl.textContent = text || '';
+            hintEl.style.display = text ? '' : 'none';
+        }
+    }
+
+    function showCustomBadge() {
+        const badge = document.querySelector('.tet-preset-custom-badge');
+        if (badge) badge.hidden = false;
+    }
+
+    function hideCustomBadge() {
+        const badge = document.querySelector('.tet-preset-custom-badge');
+        if (badge) badge.hidden = true;
+    }
+
+    function saveToLocalStorage(data) {
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        } catch (e) {
+            console.warn('[TetPreset] localStorage save failed:', e);
+        }
+    }
+
+    function loadFromLocalStorage() {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (!raw) return null;
+            return JSON.parse(raw);
+        } catch (e) {
+            console.warn('[TetPreset] localStorage load failed:', e);
+            return null;
+        }
+    }
+
+    function notifyChange(name) {
+        changeListeners.forEach(cb => {
+            try { cb(name); } catch (e) { console.warn('[TetPreset] listener error:', e); }
+        });
+    }
+
+    function applyValuesToInputs(values) {
+        Object.entries(values).forEach(([key, value]) => {
+            const el = document.getElementById(key);
+            if (el) {
+                el.value = value;
+                // 既存 oninput ハンドラを発火 (gv-* span 表示更新のため)
+                el.dispatchEvent(new Event('input'));
+            }
+        });
+    }
+
+    function applyPreset(name) {
+        const preset = TET_PRESETS[name];
+        if (!preset) return;
+        const { label, description, ...values } = preset;
+        applyValuesToInputs(values);
+        setActiveButton(name);
+        hideCustomBadge();
+        updateHint(description);
+        currentPreset = name;
+        saveToLocalStorage({
+            preset: name,
+            customValues: null,
+            savedAt: new Date().toISOString(),
+        });
+        notifyChange(name);
+    }
+
+    function transitionToCustom() {
+        if (currentPreset === 'custom') {
+            // 既に custom: localStorage の customValues だけ更新
+            saveToLocalStorage({
+                preset: 'custom',
+                customValues: getInputValues(),
+                savedAt: new Date().toISOString(),
+            });
+            return;
+        }
+        currentPreset = 'custom';
+        clearActiveButtons();
+        showCustomBadge();
+        updateHint('');
+        saveToLocalStorage({
+            preset: 'custom',
+            customValues: getInputValues(),
+            savedAt: new Date().toISOString(),
+        });
+        notifyChange('custom');
+    }
+
+    function init() {
+        // preset ボタンのクリックリスナー
+        document.querySelectorAll('.tet-preset-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const name = btn.dataset.preset;
+                if (name && TET_PRESETS[name]) applyPreset(name);
+            });
+        });
+
+        // 監視対象 input の input listener (Custom 検知)
+        WATCHED_IDS.forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.addEventListener('input', (e) => {
+                // user 操作 (isTrusted=true) のみ反応。preset 適用時の dispatchEvent は無視
+                if (e.isTrusted) transitionToCustom();
+            });
+        });
+
+        // localStorage から復元 or default MIDDLE
+        const saved = loadFromLocalStorage();
+        if (saved && saved.preset === 'custom' && saved.customValues) {
+            applyValuesToInputs(saved.customValues);
+            currentPreset = 'custom';
+            clearActiveButtons();
+            showCustomBadge();
+            updateHint('');
+            notifyChange('custom');
+        } else if (saved && TET_PRESETS[saved.preset]) {
+            applyPreset(saved.preset);
+        } else {
+            applyPreset('middle');
+        }
+    }
+
+    // DOMContentLoaded で初期化 (この script は body 末尾なので DOM はもう ready のはず)
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+
+    // 公開 API
+    window.TetPreset = {
+        get current() { return currentPreset; },
+        set(name) { applyPreset(name); },
+        getValues(name) {
+            const p = TET_PRESETS[name];
+            if (!p) return null;
+            const { label, description, ...values } = p;
+            return values;
+        },
+        getCurrentValues() {
+            return { preset: currentPreset, values: getInputValues() };
+        },
+        onChange(callback) { if (typeof callback === 'function') changeListeners.push(callback); },
+    };
+})();
 </script>
 </body>
 </html>
