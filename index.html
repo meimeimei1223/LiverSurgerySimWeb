@@ -374,7 +374,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v276</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v277</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -3080,7 +3080,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v276</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v277</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -4597,10 +4597,19 @@ function setupARCutHandlers() {
             if (!t.moved) return;  // まだドラッグ判定前
             const dx = e.clientX - prevX;
             const dy = e.clientY - prevY;
-            // ブラウザ版 1756 と同じ引数: (pitchDelta, yawDelta, right, up)
-            sb.cutterDeltaRotate(dy * 0.01, dx * 0.01,
-                axes.right[0], axes.right[1], axes.right[2],
-                axes.up[0], axes.up[1], axes.up[2]);
+            if (cutterPlaced) {
+                // カッター配置中 (active=黄等) → カッター回転 (ブラウザ版 1756 と同じ)
+                sb.cutterDeltaRotate(dy * 0.01, dx * 0.01,
+                    axes.right[0], axes.right[1], axes.right[2],
+                    axes.up[0], axes.up[1], axes.up[2]);
+            } else {
+                // v276: カット後 / 未配置 (inactive=緑) → メッシュ回転 (通常モバイル版で
+                //        cutterDragging が立たず drag=true → cam.rotate するのと等価)。
+                //        AR では setupARTransformHandlers の 1 本指ロジック (line 4509-4510) と同じ式を使う。
+                const cx = sb.getMeshCentroidX(), cy = sb.getMeshCentroidY(), cz = sb.getMeshCentroidZ();
+                sb.rotateModelAroundCenter(dx * 0.01, axes.up[0], axes.up[1], axes.up[2], cx, cy, cz);
+                sb.rotateModelAroundCenter(dy * 0.01, axes.right[0], axes.right[1], axes.right[2], cx, cy, cz);
+            }
         } else if (ids.length === 2) {
             // v273: 2本指 → カッタースケールから AR ナビゲーション (pan + scale) に変更
             //        通常モバイル版の「2本指=カメラズーム/Pan」と同じ操作感に統一。
@@ -7901,7 +7910,7 @@ function vrExitVR() { if (xrSession) xrSession.end(); }
 if ('serviceWorker' in navigator) {
     // updateViaCache:'none' で sw.js 自体の HTTP キャッシュを無効化
     // ?v=228 でキャッシュバスト（バージョン毎に更新、不一致で強制 install 発火）
-    const SW_URL = 'sw.js?v=276';
+    const SW_URL = 'sw.js?v=277';
     let __swReloaded = false;
 
     // 新 SW が activate して controllerchange が発火したら1回だけ自動リロード
