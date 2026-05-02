@@ -373,7 +373,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v267</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v268</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -551,12 +551,25 @@ window.onerror = function(msg, url, line, col, err) {
     document.getElementById('err-msg').textContent =
         msg + '\n' + url + ':' + line + ':' + col + '\n' + (err&&err.stack||'');
 };
+// v268: 起動時間計測 (Quest3 でローディング 16秒問題の調査用)
+window._tStart = performance.now();
+window._perf = {
+    log: function(label) {
+        const now = performance.now();
+        const sinceStart = now - window._tStart;
+        const sincePrev = now - (window._tPrev || window._tStart);
+        window._tPrev = now;
+        console.log('[PERF] ' + label.padEnd(28) + ' +' + sincePrev.toFixed(0).padStart(5) + 'ms  total ' + sinceStart.toFixed(0) + 'ms');
+    }
+};
+window._perf.log('script start');
 window.Module = {
     canvas: document.getElementById('canvas'),
     print: function(text) { console.log('[WASM]', text); },
     printErr: function(text) { console.warn('[WASM ERR]', text); },
     onRuntimeInitialized: function() {
         console.log('[WASM] Runtime initialized');
+        window._perf.log('WASM runtime ready');
         window._wasmRuntimeReady = true;
         if (window._onWasmReady) window._onWasmReady();
     },
@@ -3060,7 +3073,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v267</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v268</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -3463,6 +3476,7 @@ function toggleMobileDrawer() {
 function initApp() {
     try {
         console.log('[APP] initApp starting');
+        window._perf.log('initApp start');
 
         // Get the WebGL context (created by Emscripten's initGL)
         gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
@@ -3534,6 +3548,8 @@ function initApp() {
         bLiverHL = gl.createBuffer();
         bPortalHL = gl.createBuffer();
 
+        window._perf.log('shaders compiled');
+
         // Initialize Emscripten's WebGL context (required before SoftBodyDuo constructor)
         Module.initGL();
         console.log('[APP] Emscripten GL context initialized');
@@ -3546,6 +3562,7 @@ function initApp() {
             '/model/liver_highRes_mesh.txt',
             1.0, 0.0
         );
+        window._perf.log('createSoftBody (liver)');
 
         // FullSphereCamera 初期化
         sb.cameraSetWindowSize(canvas.width, canvas.height);
@@ -3602,6 +3619,7 @@ function initApp() {
         ];
         for (let ci=0; ci<childDefs.length; ci++) {
             const def = childDefs[ci];
+            const _tChild = performance.now();
             const ok = sb.addChildMesh(def.low, def.high, ...def.color);
             if (!ok) { console.warn('[child] Failed:', def.low); continue; }
             const bPos=gl.createBuffer(), bNrm=gl.createBuffer(), bIdx=gl.createBuffer();
@@ -3611,22 +3629,30 @@ function initApp() {
                 extUint ? new Uint32Array(idx) : new Uint16Array(idx), gl.STATIC_DRAW);
             childBuffers.push({bPos,bNrm,bIdx, numIdx:idx.length,
                 color:def.color, label:def.label, visible:true});
-            console.log('[child]', def.label, 'verts=', sb.getChildNumHighResVerts(ci), 'tris=', idx.length/3);
+            console.log('[child]', def.label, 'verts=', sb.getChildNumHighResVerts(ci), 'tris=', idx.length/3,
+                ' (' + (performance.now()-_tChild).toFixed(0) + 'ms)');
         }
+        window._perf.log('addChildMesh x4');
         buildVisibilityUI();
 
         // Step 5: 初期化時にスケルトン解析 + OBJセグメントバインド（重力落下前）
         if (sb.getNumChildren() > 0) {
             try {
                 console.log('[APP] Auto-analyzing skeleton...');
+                const _tSkel = performance.now();
                 const skelOk = sb.analyzePortalSkeleton(SKELETON_GRID_SIZE);
+                console.log('[PERF] analyzePortalSkeleton(' + SKELETON_GRID_SIZE + ') = ' + (performance.now()-_tSkel).toFixed(0) + 'ms');
+                window._perf.log('analyzePortalSkeleton');
                 if (skelOk) {
                     const colors = new Float32Array(sb.getLiverSegmentColors());
                     gl.bindBuffer(gl.ARRAY_BUFFER, bSegCol);
                     gl.bufferData(gl.ARRAY_BUFFER, colors, gl.STATIC_DRAW);
                     console.log('[Skeleton] OK, colors:', colors.length/4);
                     // OBJセグメント（デフォルトモデルのsoft_S*.obj）
+                    const _tObjSeg = performance.now();
                     const objOk = sb.loadAndBindOBJSegments('');
+                    console.log('[PERF] loadAndBindOBJSegments = ' + (performance.now()-_tObjSeg).toFixed(0) + 'ms');
+                    window._perf.log('loadAndBindOBJSegments');
                     if (objOk) {
                         const objColors = new Float32Array(sb.getLiverOBJSegmentColors());
                         gl.bindBuffer(gl.ARRAY_BUFFER, bOBJSegCol);
@@ -3658,6 +3684,7 @@ function initApp() {
             }
         } catch(e) { console.warn('[Volume] transform_info.txt not found:', e); }
 
+        window._perf.log('initApp DONE (render start)');
         console.log('[APP] Starting render loop');
         render();
     } catch(e) {
@@ -7821,7 +7848,7 @@ function vrExitVR() { if (xrSession) xrSession.end(); }
 if ('serviceWorker' in navigator) {
     // updateViaCache:'none' で sw.js 自体の HTTP キャッシュを無効化
     // ?v=228 でキャッシュバスト（バージョン毎に更新、不一致で強制 install 発火）
-    const SW_URL = 'sw.js?v=243';
+    const SW_URL = 'sw.js?v=268';
     let __swReloaded = false;
 
     // 新 SW が activate して controllerchange が発火したら1回だけ自動リロード
