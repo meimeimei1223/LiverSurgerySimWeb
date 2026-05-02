@@ -373,7 +373,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v269</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v268</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -3073,7 +3073,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v269</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v268</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -3617,96 +3617,76 @@ function initApp() {
             {low:'/model/GB_lowRes_mesh.txt', high:'/model/GB_highRes_mesh.txt',
              color:[0.2,0.8,0.2,1.0], label:'GB'},
         ];
-
-        // v269: 子メッシュを遅延ロード（Liver を先に表示し、render() 開始後に 1フレーム1臓器ずつ追加）
-        // 体感ロード時間を Quest3 で 16秒 → 2.5秒に短縮。完全ロード完了は同じだが、肝臓がすぐ表示される。
-        // 戻したい場合は v268 と同じ同期 for ループに戻すだけ。
-        window._perf.log('initApp DONE (liver visible, render start)');
-        console.log('[APP] Starting render loop (liver only, children loading async)');
-        render();
-
-        // 非同期チェーン: 各 child を 1 フレームずつ追加 → 完了後 skeleton/OBJSeg/Volume
-        function loadChildAsync(ci) {
-            if (ci >= childDefs.length) {
-                window._perf.log('all children loaded');
-                buildVisibilityUI();
-                runPostChildInit();
-                return;
-            }
+        for (let ci=0; ci<childDefs.length; ci++) {
             const def = childDefs[ci];
             const _tChild = performance.now();
             const ok = sb.addChildMesh(def.low, def.high, ...def.color);
-            if (ok) {
-                const bPos=gl.createBuffer(), bNrm=gl.createBuffer(), bIdx=gl.createBuffer();
-                const idx = new Int32Array(sb.getChildHighResSurfaceTriIds(ci));
-                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bIdx);
-                gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,
-                    extUint ? new Uint32Array(idx) : new Uint16Array(idx), gl.STATIC_DRAW);
-                childBuffers.push({bPos,bNrm,bIdx, numIdx:idx.length,
-                    color:def.color, label:def.label, visible:true});
-                console.log('[child]', def.label, 'verts=', sb.getChildNumHighResVerts(ci), 'tris=', idx.length/3,
-                    ' (' + (performance.now()-_tChild).toFixed(0) + 'ms)');
-            } else {
-                console.warn('[child] Failed:', def.low);
-            }
-            // 次の child を次フレームで追加（render が間に挟まる → liver が動く）
-            requestAnimationFrame(() => loadChildAsync(ci + 1));
+            if (!ok) { console.warn('[child] Failed:', def.low); continue; }
+            const bPos=gl.createBuffer(), bNrm=gl.createBuffer(), bIdx=gl.createBuffer();
+            const idx = new Int32Array(sb.getChildHighResSurfaceTriIds(ci));
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, bIdx);
+            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,
+                extUint ? new Uint32Array(idx) : new Uint16Array(idx), gl.STATIC_DRAW);
+            childBuffers.push({bPos,bNrm,bIdx, numIdx:idx.length,
+                color:def.color, label:def.label, visible:true});
+            console.log('[child]', def.label, 'verts=', sb.getChildNumHighResVerts(ci), 'tris=', idx.length/3,
+                ' (' + (performance.now()-_tChild).toFixed(0) + 'ms)');
         }
+        window._perf.log('addChildMesh x4');
+        buildVisibilityUI();
 
-        function runPostChildInit() {
-            // Step 5: スケルトン解析 + OBJセグメントバインド
-            if (sb.getNumChildren() > 0) {
-                try {
-                    console.log('[APP] Auto-analyzing skeleton...');
-                    const _tSkel = performance.now();
-                    const skelOk = sb.analyzePortalSkeleton(SKELETON_GRID_SIZE);
-                    console.log('[PERF] analyzePortalSkeleton(' + SKELETON_GRID_SIZE + ') = ' + (performance.now()-_tSkel).toFixed(0) + 'ms');
-                    window._perf.log('analyzePortalSkeleton');
-                    if (skelOk) {
-                        const colors = new Float32Array(sb.getLiverSegmentColors());
-                        gl.bindBuffer(gl.ARRAY_BUFFER, bSegCol);
-                        gl.bufferData(gl.ARRAY_BUFFER, colors, gl.STATIC_DRAW);
-                        console.log('[Skeleton] OK, colors:', colors.length/4);
-                        const _tObjSeg = performance.now();
-                        const objOk = sb.loadAndBindOBJSegments('');
-                        console.log('[PERF] loadAndBindOBJSegments = ' + (performance.now()-_tObjSeg).toFixed(0) + 'ms');
-                        window._perf.log('loadAndBindOBJSegments');
-                        if (objOk) {
-                            const objColors = new Float32Array(sb.getLiverOBJSegmentColors());
-                            gl.bindBuffer(gl.ARRAY_BUFFER, bOBJSegCol);
-                            gl.bufferData(gl.ARRAY_BUFFER, objColors, gl.STATIC_DRAW);
-                            console.log('[OBJSeg] OK, colors:', objColors.length/4);
-                        }
-                        document.getElementById('visual-mode-btns').style.display = 'flex';
-                        document.getElementById('display-placeholder').style.display = 'none';
-                        document.getElementById('btn-action-segcut').style.display = 'flex';
-                        if (typeof updatePresetSegBtnEnabled === 'function') updatePresetSegBtnEnabled();
-                        document.getElementById('skel-status').textContent =
-                            sb.getNumSkeletonNodes() + ' nodes' +
-                            (sb.isOBJSegmentsBound() ? ' + S1-S8' : '');
-                    }
-                } catch(e) { console.warn('[Skeleton init]', e); }
-            }
-
-            // ボリューム計算: transform_info.txt から scaleFactor を読み込み
+        // Step 5: 初期化時にスケルトン解析 + OBJセグメントバインド（重力落下前）
+        if (sb.getNumChildren() > 0) {
             try {
-                const tiText = Module.FS.readFile('/model/transform_info.txt', {encoding:'utf8'});
-                const lines = tiText.trim().split('\n');
-                if (lines.length >= 1) {
-                    const scaleFactor = parseFloat(lines[0]);
-                    console.log('[Volume] scaleFactor from transform_info.txt:', scaleFactor);
-                    sb.setVolumeScaleFactor(scaleFactor);
-                    sb.captureOriginalVolumes();
-                    updateVolumePanel();
-                    document.getElementById('btn-volume').style.display = 'inline-block';
+                console.log('[APP] Auto-analyzing skeleton...');
+                const _tSkel = performance.now();
+                const skelOk = sb.analyzePortalSkeleton(SKELETON_GRID_SIZE);
+                console.log('[PERF] analyzePortalSkeleton(' + SKELETON_GRID_SIZE + ') = ' + (performance.now()-_tSkel).toFixed(0) + 'ms');
+                window._perf.log('analyzePortalSkeleton');
+                if (skelOk) {
+                    const colors = new Float32Array(sb.getLiverSegmentColors());
+                    gl.bindBuffer(gl.ARRAY_BUFFER, bSegCol);
+                    gl.bufferData(gl.ARRAY_BUFFER, colors, gl.STATIC_DRAW);
+                    console.log('[Skeleton] OK, colors:', colors.length/4);
+                    // OBJセグメント（デフォルトモデルのsoft_S*.obj）
+                    const _tObjSeg = performance.now();
+                    const objOk = sb.loadAndBindOBJSegments('');
+                    console.log('[PERF] loadAndBindOBJSegments = ' + (performance.now()-_tObjSeg).toFixed(0) + 'ms');
+                    window._perf.log('loadAndBindOBJSegments');
+                    if (objOk) {
+                        const objColors = new Float32Array(sb.getLiverOBJSegmentColors());
+                        gl.bindBuffer(gl.ARRAY_BUFFER, bOBJSegCol);
+                        gl.bufferData(gl.ARRAY_BUFFER, objColors, gl.STATIC_DRAW);
+                        console.log('[OBJSeg] OK, colors:', objColors.length/4);
+                    }
+                    document.getElementById('visual-mode-btns').style.display = 'flex';
+                    document.getElementById('display-placeholder').style.display = 'none';
+                    document.getElementById('btn-action-segcut').style.display = 'flex';
+                    if (typeof updatePresetSegBtnEnabled === 'function') updatePresetSegBtnEnabled();
+                    document.getElementById('skel-status').textContent =
+                        sb.getNumSkeletonNodes() + ' nodes' +
+                        (sb.isOBJSegmentsBound() ? ' + S1-S8' : '');
                 }
-            } catch(e) { console.warn('[Volume] transform_info.txt not found:', e); }
-
-            window._perf.log('post-init DONE (full ready)');
+            } catch(e) { console.warn('[Skeleton init]', e); }
         }
 
-        // 初回 child ロードを次フレームで開始（render() が一回回ってから）
-        requestAnimationFrame(() => loadChildAsync(0));
+        // ボリューム計算: transform_info.txt から scaleFactor を読み込み
+        try {
+            const tiText = Module.FS.readFile('/model/transform_info.txt', {encoding:'utf8'});
+            const lines = tiText.trim().split('\n');
+            if (lines.length >= 1) {
+                const scaleFactor = parseFloat(lines[0]);
+                console.log('[Volume] scaleFactor from transform_info.txt:', scaleFactor);
+                sb.setVolumeScaleFactor(scaleFactor);
+                sb.captureOriginalVolumes();
+                updateVolumePanel();
+                document.getElementById('btn-volume').style.display = 'inline-block';
+            }
+        } catch(e) { console.warn('[Volume] transform_info.txt not found:', e); }
+
+        window._perf.log('initApp DONE (render start)');
+        console.log('[APP] Starting render loop');
+        render();
     } catch(e) {
         showErr(e.message + '\n\n' + (e.stack||''));
     }
@@ -7868,7 +7848,7 @@ function vrExitVR() { if (xrSession) xrSession.end(); }
 if ('serviceWorker' in navigator) {
     // updateViaCache:'none' で sw.js 自体の HTTP キャッシュを無効化
     // ?v=228 でキャッシュバスト（バージョン毎に更新、不一致で強制 install 発火）
-    const SW_URL = 'sw.js?v=269';
+    const SW_URL = 'sw.js?v=268';
     let __swReloaded = false;
 
     // 新 SW が activate して controllerchange が発火したら1回だけ自動リロード
