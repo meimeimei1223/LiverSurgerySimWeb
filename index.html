@@ -395,7 +395,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v280</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v281</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -599,7 +599,7 @@ window.Module = {
 };
 </script>
 <script src="softbody.js?v=245"></script>
-<script src="fflate.min.js?v=280"></script>
+<script src="fflate.min.js?v=281"></script>
 <script>
 'use strict';
 
@@ -3102,7 +3102,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v280</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v281</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -3899,11 +3899,32 @@ function showTetModal(c) {
     const names=['liver','portal','vein','tumor','gb'];
     const labels={liver:'Liver(parent)',portal:'Portal',vein:'Vein',tumor:'Tumor',gb:'GB'};
     const el=document.getElementById('tet-file-list');
+    if (!el) { alert('[v281] tet-file-list element missing'); return; }
     el.innerHTML=names.map(n=>{
         const f=c[n]; const ok=f?'#7dff7d':'#666';
         return `<span style="color:${ok}">${f?'OK':'--'} ${labels[n]}: ${f?f.name:'not found'}</span>`;
     }).join('<br>');
-    document.getElementById('tet-modal-bg').style.display='flex';
+    // v281: Quest3 AR 後の表示問題対策。display:none → 強制 reflow → flex で
+    //       compositor に新規レイヤ生成を強制。1フレーム後にサイズ 0 なら
+    //       描画失敗 → on-screen alert で原因切り分け (Quest3 は console 確認困難)
+    const bg = document.getElementById('tet-modal-bg');
+    if (!bg) { alert('[v281] tet-modal-bg element missing'); return; }
+    bg.style.display = 'none';
+    void bg.offsetHeight;
+    bg.style.display = 'flex';
+    requestAnimationFrame(() => {
+        const r = bg.getBoundingClientRect();
+        const cs = getComputedStyle(bg);
+        if (r.width < 10 || r.height < 10) {
+            alert('[v281] Tet modal not painted.\n' +
+                  'rect=' + r.width.toFixed(0) + 'x' + r.height.toFixed(0) +
+                  '\ncomputed display=' + cs.display +
+                  '\nvisibility=' + cs.visibility +
+                  '\nopacity=' + cs.opacity +
+                  '\nzIndex=' + cs.zIndex +
+                  '\nbody.style.transform=' + (document.body.style.transform || '(none)'));
+        }
+    });
 }
 document.getElementById('tet-cancel-btn').addEventListener('click',()=>{
     document.getElementById('tet-modal-bg').style.display='none';
@@ -5088,6 +5109,22 @@ function onXREnd() {
     if (typeof resize === 'function') resize();
     // フレームバッファも明示的に default (canvas) に戻す
     if (gl) gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+    // v281: Quest3 Browser DOM Overlay 残留対策。AR セッションで
+    //       :xr-overlay 疑似クラス由来の合成レイヤが body に残ると、
+    //       後から新規 display:flex する fixed 要素 (tet-modal-bg) が
+    //       描画されない症状が出る。1フレームだけ body に transform を当てて
+    //       compositor を強制リフレッシュ + モーダル系の display 状態をクリーンに戻す。
+    const _arBody = document.body;
+    const _arPrevTransform = _arBody.style.transform;
+    _arBody.style.transform = 'translateZ(0)';
+    requestAnimationFrame(() => {
+        _arBody.style.transform = _arPrevTransform;
+        ['tet-modal-bg', 'tet-progress'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = 'none';
+        });
+    });
 
     // 通常レンダーループ再開
     requestAnimationFrame(render);
