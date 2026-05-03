@@ -1,9 +1,15 @@
 /* benchmark.js — LiverSurgerySimWeb performance measurement
- * Version: 1.0.0
+ * Version: 1.0.5
  * Loaded via ?bench URL parameter only.
  * No external dependencies. No network. No persistence.
  * Phase 1 (MVP): platform, load times, FPS (idle/rotation), 4-cut logging,
  *                report UI. Phase 2/3 (XR sessions, memory) are stubs.
+ *
+ * Changelog:
+ *  1.0.5 — Track ZIP unzip duration (Quest3 supports ZIP drop, not folder drop).
+ *          Adds 'unzipDurationMs' field per objDropEvent + Tet-only column in MD.
+ *          Listens for 'objzip-unzipped' CustomEvent dispatched by index.html v279.
+ *  1.0.4 — Tet-gen FPS bucket isolation, dual preset capture, full reset semantics.
  */
 (function() {
     'use strict';
@@ -11,7 +17,7 @@
     // Defense in depth: re-check URL param
     if (!new URLSearchParams(location.search).has('bench')) return;
 
-    const BENCH_VERSION = '1.0.4';
+    const BENCH_VERSION = '1.0.5';
     const BENCH_BOOT_AT = performance.now();
 
     // ============================================================
@@ -179,10 +185,12 @@
             sbCreated: null,
             firstInteractable: null,
         },
-        objDropEvents: [],   // {dropAt, tetCompleteAt, simReadyAt, durationMs, presetAtDrop, simTetsAfter, visTetsAfter}
+        objDropEvents: [],   // {dropAt, tetCompleteAt, simReadyAt, durationMs, presetAtDrop, simTetsAfter, visTetsAfter, unzipDurationMs}
         _currentDrop: null,  // pending drop in progress
         _origConsoleLog: null,
         _renderFramesAfterSb: 0,
+        // v1.0.5: ZIP unzip duration captured asynchronously from 'objzip-unzipped' event
+        _pendingUnzipMs: null,
 
         init() {
             // navStart from PerformanceNavigationTiming if available
@@ -215,6 +223,20 @@
             document.addEventListener('drop', (e) => {
                 this._onDrop(e);
             }, true);
+
+            // v1.0.5: ZIP unzip event from index.html — fired after drop, before tet化
+            document.addEventListener('objzip-unzipped', (e) => {
+                const ms = e.detail?.durationMs;
+                if (typeof ms !== 'number') return;
+                if (this._currentDrop) {
+                    // Add to existing (multi-zip case: accumulate)
+                    this._currentDrop.unzipDurationMs =
+                        (this._currentDrop.unzipDurationMs ?? 0) + ms;
+                } else {
+                    // No drop in flight (shouldn't happen, but stash for safety)
+                    this._pendingUnzipMs = (this._pendingUnzipMs ?? 0) + ms;
+                }
+            });
 
             // Poll sb for first creation (sb is `let`, not on window)
             this._pollSb();
@@ -271,7 +293,10 @@
                 gridValuesAtTetGen: null,
                 simTetsAfter: null,
                 visTetsAfter: null,
+                // v1.0.5: ZIP unzip cost (null for non-ZIP drops; isolated from tet化 wall-clock)
+                unzipDurationMs: this._pendingUnzipMs,
             };
+            this._pendingUnzipMs = null;
             // v1.0.4: mark tet 化 window for FPS bucket isolation
             FPSSampler.beginTetGen();
         },
@@ -819,8 +844,10 @@
             if (lt.objDrops.length === 0) {
                 lines.push('_No OBJ drops yet._');
             } else {
-                lines.push('| # | Preset (used) | Drop → Tet complete (ms) | Sim tets after | Visual tets after |');
-                lines.push('|---|---|---|---|---|');
+                // v1.0.5: Unzip ms shown as a separate column (— for non-ZIP drops).
+                //          Tet-only ms = drop→tet complete minus unzip (if any).
+                lines.push('| # | Preset (used) | Drop → Tet complete (ms) | Unzip (ms) | Tet only (ms) | Sim tets after | Visual tets after |');
+                lines.push('|---|---|---|---|---|---|---|');
                 lt.objDrops.forEach((d, i) => {
                     // v1.0.4: prefer preset captured at TET complete (= actually used). If different
                     //          from drop-event preset (= user changed in modal), surface as "(intended: X)"
@@ -830,7 +857,10 @@
                     if (used && intent && used !== intent) {
                         presetCell += ` (intended: ${intent.toUpperCase()})`;
                     }
-                    lines.push(`| ${i + 1} | ${presetCell} | ${fmtMs(d.durationMs)} | ${fmt(d.simTetsAfter)} | ${fmt(d.visTetsAfter)} |`);
+                    const tetOnly = (d.durationMs != null && d.unzipDurationMs != null)
+                        ? d.durationMs - d.unzipDurationMs
+                        : (d.durationMs != null ? d.durationMs : null);
+                    lines.push(`| ${i + 1} | ${presetCell} | ${fmtMs(d.durationMs)} | ${fmtMs(d.unzipDurationMs)} | ${fmtMs(tetOnly)} | ${fmt(d.simTetsAfter)} | ${fmt(d.visTetsAfter)} |`);
                 });
             }
             lines.push('');
