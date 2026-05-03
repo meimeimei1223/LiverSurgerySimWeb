@@ -395,7 +395,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v282</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v283</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -599,7 +599,7 @@ window.Module = {
 };
 </script>
 <script src="softbody.js?v=245"></script>
-<script src="fflate.min.js?v=282"></script>
+<script src="fflate.min.js?v=283"></script>
 <script>
 'use strict';
 
@@ -700,11 +700,24 @@ void main() {
 }`;
 
 //-- Device Detection --------------------------------------------------
+// v283: 入力モダリティで判定 (window 幅に依存しない)。タッチ対応 PC でウィンドウを
+//        狭くするとモバイル誤判定する v282 までの問題を解消。タブレット (タッチ主) は
+//        常に MOBILE、PC (マウス主) は常に DESKTOP に固定される。
+//        URL override: ?ui=mobile / ?ui=desktop で強制 (ベンチマーク再現性用)。
+const _uiOverride = new URLSearchParams(location.search).get('ui');
+const _hasMM = typeof window.matchMedia === 'function';
+const _primaryCoarse = _hasMM && window.matchMedia('(pointer: coarse)').matches;
+const _anyFine       = _hasMM && window.matchMedia('(any-pointer: fine)').matches;
 const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-const isSmallScreen = window.innerWidth <= 900 || window.innerHeight <= 500;
-const isMobile = isTouchDevice && isSmallScreen;
+const isMobile = _uiOverride === 'mobile'  ? true
+               : _uiOverride === 'desktop' ? false
+               : _hasMM                    ? (_primaryCoarse && !_anyFine)
+               : (isTouchDevice && (window.innerWidth <= 900 || window.innerHeight <= 500));
 console.log('[Device]', isMobile ? 'MOBILE' : 'DESKTOP',
-    '| touch:', isTouchDevice, '| screen:', window.innerWidth + 'x' + window.innerHeight);
+    '| pointer:coarse=', _primaryCoarse, 'any-fine=', _anyFine,
+    '| touch=', isTouchDevice,
+    '| screen=', window.innerWidth + 'x' + window.innerHeight,
+    '| override=', _uiOverride || 'none');
 
 //-- Globals -----------------------------------------------------------
 const canvas = document.getElementById('canvas');
@@ -3102,7 +3115,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v282</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v283</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
