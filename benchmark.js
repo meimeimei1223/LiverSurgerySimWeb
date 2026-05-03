@@ -1,11 +1,15 @@
 /* benchmark.js — LiverSurgerySimWeb performance measurement
- * Version: 1.0.5
+ * Version: 1.0.6
  * Loaded via ?bench URL parameter only.
  * No external dependencies. No network. No persistence.
  * Phase 1 (MVP): platform, load times, FPS (idle/rotation), 4-cut logging,
  *                report UI. Phase 2/3 (XR sessions, memory) are stubs.
  *
  * Changelog:
+ *  1.0.6 — Track input route as 'inputMethod' field per objDropEvent
+ *          ('folder-drop' | 'folder-pick' | 'zip-drop'). Listens for
+ *          'obj-input-detected' CustomEvent (dispatched by index.html v280).
+ *          Synthesizes a drop record on the folder-pick path (no native drop event).
  *  1.0.5 — Track ZIP unzip duration (Quest3 supports ZIP drop, not folder drop).
  *          Adds 'unzipDurationMs' field per objDropEvent + Tet-only column in MD.
  *          Listens for 'objzip-unzipped' CustomEvent dispatched by index.html v279.
@@ -17,7 +21,7 @@
     // Defense in depth: re-check URL param
     if (!new URLSearchParams(location.search).has('bench')) return;
 
-    const BENCH_VERSION = '1.0.5';
+    const BENCH_VERSION = '1.0.6';
     const BENCH_BOOT_AT = performance.now();
 
     // ============================================================
@@ -185,7 +189,7 @@
             sbCreated: null,
             firstInteractable: null,
         },
-        objDropEvents: [],   // {dropAt, tetCompleteAt, simReadyAt, durationMs, presetAtDrop, simTetsAfter, visTetsAfter, unzipDurationMs}
+        objDropEvents: [],   // {dropAt, tetCompleteAt, simReadyAt, durationMs, presetAtDrop, simTetsAfter, visTetsAfter, unzipDurationMs, inputMethod}
         _currentDrop: null,  // pending drop in progress
         _origConsoleLog: null,
         _renderFramesAfterSb: 0,
@@ -238,6 +242,21 @@
                 }
             });
 
+            // v1.0.6: input method classification from index.html (handleFiles entry).
+            //   - drop path: native drop fired first → fill inputMethod on existing _currentDrop
+            //   - pick path: no native drop event → synthesize a drop record
+            document.addEventListener('obj-input-detected', (e) => {
+                const d = e.detail || {};
+                if (this._currentDrop) {
+                    this._currentDrop.inputMethod = d.method ?? 'unknown';
+                } else {
+                    this._startDrop({
+                        dropAt: typeof d.ts === 'number' ? d.ts : performance.now(),
+                        inputMethod: d.method ?? 'unknown',
+                    });
+                }
+            });
+
             // Poll sb for first creation (sb is `let`, not on window)
             this._pollSb();
         },
@@ -277,9 +296,9 @@
             requestAnimationFrame(tick);
         },
 
-        _onDrop(e) {
-            const dropAt = performance.now();
-            // Capture preset at drop time (= what user had before opening the tet modal)
+        // v1.0.6: factored out of _onDrop so the folder-pick path
+        //         (no native drop event) can synthesize a drop record too.
+        _startDrop({ dropAt, inputMethod }) {
             const ts = window.TetPreset?.getCurrentValues?.();
             this._currentDrop = {
                 dropAt,
@@ -295,10 +314,20 @@
                 visTetsAfter: null,
                 // v1.0.5: ZIP unzip cost (null for non-ZIP drops; isolated from tet化 wall-clock)
                 unzipDurationMs: this._pendingUnzipMs,
+                // v1.0.6: 'folder-drop' | 'folder-pick' | 'zip-drop' | null
+                //         (null = native drop fired but obj-input-detected hasn't classified yet,
+                //          or the drop is non-OBJ noise that won't reach handleFiles)
+                inputMethod: inputMethod ?? null,
             };
             this._pendingUnzipMs = null;
             // v1.0.4: mark tet 化 window for FPS bucket isolation
             FPSSampler.beginTetGen();
+        },
+
+        _onDrop(e) {
+            // Native drag-drop event. inputMethod is filled in later by 'obj-input-detected'
+            // (which fires from handleFiles, after extension classification).
+            this._startDrop({ dropAt: performance.now(), inputMethod: null });
         },
 
         _onTetComplete() {
@@ -846,8 +875,9 @@
             } else {
                 // v1.0.5: Unzip ms shown as a separate column (— for non-ZIP drops).
                 //          Tet-only ms = drop→tet complete minus unzip (if any).
-                lines.push('| # | Preset (used) | Drop → Tet complete (ms) | Unzip (ms) | Tet only (ms) | Sim tets after | Visual tets after |');
-                lines.push('|---|---|---|---|---|---|---|');
+                // v1.0.6: Input column captures route ('folder-drop' / 'folder-pick' / 'zip-drop').
+                lines.push('| # | Preset (used) | Input | Drop → Tet complete (ms) | Unzip (ms) | Tet only (ms) | Sim tets after | Visual tets after |');
+                lines.push('|---|---|---|---|---|---|---|---|');
                 lt.objDrops.forEach((d, i) => {
                     // v1.0.4: prefer preset captured at TET complete (= actually used). If different
                     //          from drop-event preset (= user changed in modal), surface as "(intended: X)"
@@ -860,7 +890,8 @@
                     const tetOnly = (d.durationMs != null && d.unzipDurationMs != null)
                         ? d.durationMs - d.unzipDurationMs
                         : (d.durationMs != null ? d.durationMs : null);
-                    lines.push(`| ${i + 1} | ${presetCell} | ${fmtMs(d.durationMs)} | ${fmtMs(d.unzipDurationMs)} | ${fmtMs(tetOnly)} | ${fmt(d.simTetsAfter)} | ${fmt(d.visTetsAfter)} |`);
+                    const input = d.inputMethod ?? '—';
+                    lines.push(`| ${i + 1} | ${presetCell} | ${input} | ${fmtMs(d.durationMs)} | ${fmtMs(d.unzipDurationMs)} | ${fmtMs(tetOnly)} | ${fmt(d.simTetsAfter)} | ${fmt(d.visTetsAfter)} |`);
                 });
             }
             lines.push('');

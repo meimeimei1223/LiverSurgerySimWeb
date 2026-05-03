@@ -395,7 +395,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v279</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v280</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -599,7 +599,7 @@ window.Module = {
 };
 </script>
 <script src="softbody.js?v=245"></script>
-<script src="fflate.min.js?v=279"></script>
+<script src="fflate.min.js?v=280"></script>
 <script>
 'use strict';
 
@@ -3102,7 +3102,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v279</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v280</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -3797,7 +3797,7 @@ function readFileAsText(file) {
 const dropArea = document.getElementById('folder-drop-area');
 const folderInput = document.getElementById('folder-input');
 dropArea.addEventListener('click', ()=>folderInput.click());
-folderInput.addEventListener('change', e=>handleFiles(e.target.files));
+folderInput.addEventListener('change', e=>handleFiles(e.target.files, 'pick'));
 dropArea.addEventListener('dragover', e=>{e.preventDefault();dropArea.style.borderColor='#00d4ff';});
 dropArea.addEventListener('dragleave', ()=>{dropArea.style.borderColor='#555';});
 dropArea.addEventListener('drop', e=>{
@@ -3807,7 +3807,7 @@ dropArea.addEventListener('drop', e=>{
         const collectedFiles = [];
         let pending = items.length;
         function onDone() {
-            if (--pending === 0 && collectedFiles.length > 0) handleFiles(collectedFiles);
+            if (--pending === 0 && collectedFiles.length > 0) handleFiles(collectedFiles, 'drop');
         }
         function collectFromEntry(entry, done) {
             if (entry.isFile) {
@@ -3827,7 +3827,7 @@ dropArea.addEventListener('drop', e=>{
             else onDone();
         }
     } else if (e.dataTransfer.files.length > 0) {
-        handleFiles(e.dataTransfer.files);
+        handleFiles(e.dataTransfer.files, 'drop');
     }
 });
 
@@ -3861,9 +3861,21 @@ async function unzipObjFromZip(zipFile) {
     return out;
 }
 
-async function handleFiles(files) {
+// v280: input source classification for benchmark transparency.
+//   'pick' = file/folder picker (button click), 'drop' = drag-and-drop.
+//   Resolved further into 'folder-drop' / 'zip-drop' / 'folder-pick' for the report.
+async function handleFiles(files, source) {
     let arr = Array.from(files);
     const zips = arr.filter(f => /\.zip$/i.test(f.name || ''));
+
+    // v280: tell benchmark.js which input route was used (no-op when bench not loaded).
+    let inputMethod = 'unknown';
+    if (source === 'pick') inputMethod = 'folder-pick';
+    else if (source === 'drop') inputMethod = zips.length > 0 ? 'zip-drop' : 'folder-drop';
+    document.dispatchEvent(new CustomEvent('obj-input-detected', {
+        detail: { method: inputMethod, ts: performance.now() }
+    }));
+
     if (zips.length > 0) {
         try {
             const extracted = [];
