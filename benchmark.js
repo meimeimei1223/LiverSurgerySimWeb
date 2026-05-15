@@ -1,5 +1,5 @@
 /* benchmark.js — LiverSurgerySimWeb performance measurement
- * Version: 1.0.8
+ * Version: 1.0.9
  * Loaded via ?bench URL parameter only.
  * No external dependencies. No network. No persistence.
  * Phase 1 (MVP): platform, load times, FPS (idle/rotation), 4-cut logging,
@@ -7,6 +7,18 @@
  * Phase 2 (1.0.7): XR session lifecycle + per-second vrFps sampling.
  *
  * Changelog:
+ *  1.0.9 — Android AR handle-grab detection.
+ *          v1.0.8 added sb.isGrabbing() check, but that method is the
+ *          DESKTOP-MOUSE variant (paired with startGrab/endGrab). Android AR
+ *          and Quest3 use the VR-suffixed variant: sb.isGrabbingVR() (paired
+ *          with startGrabVR/endGrabVR). The two are bound separately in
+ *          WasmBindings.cpp (isGrabbing + isGrabbingVR). On Android AR,
+ *          vrGrabs.right.active is also never synced to isGrabbingVR() (only
+ *          Quest3 controller/hand-tracking handlers do that sync), so the only
+ *          reliable signal is calling sb.isGrabbingVR() directly. Both the
+ *          XR-rAF classifier (XRSessionProbe._sampleOnce) and the window-rAF
+ *          classifier (FPSSampler._classifyState) now check isGrabbingVR()
+ *          alongside the existing checks.
  *  1.0.8 — Touch-aware XR bucket classifier.
  *          v1.0.7 only checked vrGrabs.left/.right (Quest3 hand-tracking).
  *          On Android AR (dom-overlay touch), those flags never flip → all
@@ -35,7 +47,7 @@
     // Defense in depth: re-check URL param
     if (!new URLSearchParams(location.search).has('bench')) return;
 
-    const BENCH_VERSION = '1.0.8';
+    const BENCH_VERSION = '1.0.9';
     const BENCH_BOOT_AT = performance.now();
 
     // ============================================================
@@ -479,10 +491,14 @@
             // v1.0.4: tetGen を最優先 (drop ~ TET complete 中の jank を idle/rotation に汚染させない)
             if (this._inTetGen) return 'tetGen';
             // Priority order:
-            // 1. XR session + active grab → deform
-            // 2. sb.isGrabbing() true → deform
+            // 1. XR session + active vrGrabs (Quest3 controller/hand-tracking) → deform
+            // 2. sb.isGrabbing() OR sb.isGrabbingVR() → deform
+            //    v1.0.9: added isGrabbingVR() — Android AR / Quest3 hand-tracking
+            //    use startGrabVR/isGrabbingVR pair; vrGrabs may not be synced
+            //    on Android AR (no controller handler), so isGrabbingVR() is the
+            //    only reliable signal there.
             // 3. recent cut (<500ms) → postCut
-            // 4. recent pointermove (<500ms) + not in cut mode placement → rotation
+            // 4. recent pointermove (<500ms) → rotation
             // 5. else → idle
             try {
                 if ($xrSession()) {
@@ -490,7 +506,8 @@
                     if (grabs && (grabs.left?.active || grabs.right?.active)) return 'deform';
                 }
                 const sbRef = $sb();
-                if (sbRef?.isGrabbing?.()) return 'deform';
+                if (sbRef?.isGrabbing?.())   return 'deform';
+                if (sbRef?.isGrabbingVR?.()) return 'deform';
                 if (now - this._lastCutAt < 500) return 'postCut';
                 if (now - this._lastPointerMoveAt < 500) {
                     // exclude pointermove during cut placement (cutMode + pointer down)
@@ -781,11 +798,17 @@
             const grabs = $vrGrabs();
             const rightActive = !!(grabs && grabs.right && grabs.right.active);
             const leftActive  = !!(grabs && grabs.left  && grabs.left.active);
-            // Cross-platform handle grab (touch on Android AR, mouse on desktop XR).
-            // sb.isGrabbing() reflects "user has currently grabbed a deform handle".
+            // Cross-platform handle grab.
+            // - sb.isGrabbing()   = desktop mouse variant (startGrab/endGrab pair).
+            // - sb.isGrabbingVR() = VR variant (startGrabVR/endGrabVR pair) — used
+            //   by BOTH Quest3 hand-tracking AND Android AR dom-overlay touch.
+            // On Android AR, vrGrabs.right.active is never set (only Quest3
+            // controller handlers sync vrGrabs to isGrabbingVR), so checking
+            // isGrabbingVR() directly is the only reliable signal there.
             const sbRef = $sb();
-            let sbGrabbing = false;
-            try { sbGrabbing = !!(sbRef?.isGrabbing?.()); } catch {}
+            let sbGrabbing = false, sbGrabbingVR = false;
+            try { sbGrabbing   = !!(sbRef?.isGrabbing?.());   } catch {}
+            try { sbGrabbingVR = !!(sbRef?.isGrabbingVR?.()); } catch {}
             // Touch/mouse pointermove within last 500ms (= dragging = rotation, when
             // not also grabbing a handle). pointermove fires for touch on dom-overlay
             // AR canvas as well, so this works on Android AR.
@@ -797,25 +820,25 @@
             // Deform comes first because if a handle is grabbed AND the user is
             // dragging it, the underlying cost is dominated by mesh deformation,
             // not by view rotation.
+            const anyGrab = rightActive || sbGrabbing || sbGrabbingVR;
             let bucket;
-            if (rightActive || sbGrabbing) bucket = 'deform';
-            else if (leftActive)           bucket = 'rotation';
-            else if (recentMove)           bucket = 'rotation';
-            else if (recentCut)            bucket = 'postCut';
-            else                           bucket = 'idle';
+            if (anyGrab)         bucket = 'deform';
+            else if (leftActive) bucket = 'rotation';
+            else if (recentMove) bucket = 'rotation';
+            else if (recentCut)  bucket = 'postCut';
+            else                 bucket = 'idle';
 
             s.buckets[bucket].samples.push(+fps.toFixed(2));
             s.fpsRaw.push({ tMs: +(now - s.startAt).toFixed(0), fps: +fps.toFixed(2), bucket });
 
             // ---- grab transition counting ----
-            // grabCount.right covers both Quest3 right-hand and any-platform
-            // handle grab (the latter doesn't distinguish hands on touch input).
-            const rightOrSb = rightActive || sbGrabbing;
+            // grabCount.right covers Quest3 right-hand + desktop mouse grab +
+            // Android AR / Quest3 hand-tracking touch-grab (anyGrab from above).
             const prev = s._grabPrev;
-            if (leftActive   && !prev.left)  s.grabCount.left++;
-            if (rightOrSb    && !prev.right) s.grabCount.right++;
+            if (leftActive && !prev.left)   s.grabCount.left++;
+            if (anyGrab    && !prev.right)  s.grabCount.right++;
             prev.left  = leftActive;
-            prev.right = rightOrSb;
+            prev.right = anyGrab;
         },
 
         _onSessionEnd() {
