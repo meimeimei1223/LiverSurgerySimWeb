@@ -1,11 +1,18 @@
 /* benchmark.js — LiverSurgerySimWeb performance measurement
- * Version: 1.0.6
+ * Version: 1.0.7
  * Loaded via ?bench URL parameter only.
  * No external dependencies. No network. No persistence.
  * Phase 1 (MVP): platform, load times, FPS (idle/rotation), 4-cut logging,
- *                report UI. Phase 2/3 (XR sessions, memory) are stubs.
+ *                report UI.
+ * Phase 2 (1.0.7): XR session lifecycle + per-second vrFps sampling.
  *
  * Changelog:
+ *  1.0.7 — Phase 2: XRSessionProbe implemented.
+ *          Polls xrSession at 500ms cadence to detect session start/end.
+ *          During session, samples global `vrFps` (updated by renderXR at 1Hz
+ *          in index.html) into idle / rotation (left grab) / deform (right grab)
+ *          / postCut buckets. Records mode ('vr'/'ar'), environmentBlendMode,
+ *          duration, grab transition count. Renders 'XR Sessions' MD section.
  *  1.0.6 — Track input route as 'inputMethod' field per objDropEvent
  *          ('folder-drop' | 'folder-pick' | 'zip-drop'). Listens for
  *          'obj-input-detected' CustomEvent (dispatched by index.html v280).
@@ -21,7 +28,7 @@
     // Defense in depth: re-check URL param
     if (!new URLSearchParams(location.search).has('bench')) return;
 
-    const BENCH_VERSION = '1.0.6';
+    const BENCH_VERSION = '1.0.7';
     const BENCH_BOOT_AT = performance.now();
 
     // ============================================================
@@ -36,6 +43,8 @@
     function $gl()        { try { return (typeof gl        !== 'undefined') ? gl        : null; } catch { return null; } }
     function $xrSession() { try { return (typeof xrSession !== 'undefined') ? xrSession : null; } catch { return null; } }
     function $vrGrabs()   { try { return (typeof vrGrabs   !== 'undefined') ? vrGrabs   : null; } catch { return null; } }
+    function $xrMode()    { try { return (typeof xrMode    !== 'undefined') ? xrMode    : null; } catch { return null; } }
+    function $vrFps()     { try { return (typeof vrFps     !== 'undefined') ? vrFps     : null; } catch { return null; } }
 
     // ============================================================
     // Utility helpers
@@ -676,19 +685,169 @@
     };
 
     // ============================================================
-    // XRSessionProbe — Phase 2 stub
+    // XRSessionProbe — Phase 2 implementation
+    //   - Polls xrSession (let, accessed via $xrSession()) at 500ms.
+    //   - On session start: records mode + environmentBlendMode + startAt.
+    //     Starts 1Hz sampling of global vrFps (computed by renderXR loop in
+    //     index.html). First 1500ms skipped so vrFps is fresh.
+    //   - Bucket classification per sample:
+    //       deform   = right hand grab active (mesh manipulation)
+    //       rotation = left hand grab active  (model translate/rotate)
+    //       postCut  = within 1000ms after a cut (uses FPSSampler._lastCutAt)
+    //       idle     = none of the above
+    //   - On session end: finalize stats, push to sessions[].
     // ============================================================
     const XRSessionProbe = {
-        sessions: [],
-        activeSession: null,
+        sessions: [],          // completed sessions
+        activeSession: null,   // current in-flight session (internal form)
+        _pollTimer: null,
+        _sampleTimer: null,
+
         init() {
-            // TODO Phase 2: poll window.xrSession, record session lifecycles,
-            // sample vrFps every 1s during active session, compute fps stats.
+            this._poll();
         },
+
+        _poll() {
+            try {
+                const xs = $xrSession();
+                if (xs && !this.activeSession)        this._onSessionStart(xs);
+                else if (!xs && this.activeSession)   this._onSessionEnd();
+            } catch (e) { console.warn('[Bench] XR poll error:', e); }
+            this._pollTimer = setTimeout(() => this._poll(), 500);
+        },
+
+        _onSessionStart(xs) {
+            const startAt = performance.now();
+            const mode = $xrMode() || 'unknown';   // 'vr' | 'ar' | 'unknown'
+            let blendMode = null;
+            try { blendMode = xs.environmentBlendMode || null; } catch {}
+
+            this.activeSession = {
+                mode,
+                blendMode,                          // 'opaque' (VR) / 'alpha-blend' / 'additive' (AR)
+                startAt,
+                startIso: nowIso(),
+                _samplingStartAt: startAt + 1500,   // wait for renderXR to populate vrFps
+                endAt: null,
+                durationMs: null,
+                buckets: {
+                    idle:     { samples: [] },
+                    rotation: { samples: [] },   // left grab
+                    deform:   { samples: [] },   // right grab
+                    postCut:  { samples: [] },
+                },
+                grabCount: { left: 0, right: 0 },
+                _grabPrev: { left: false, right: false },
+                fpsRaw: [],                       // [{tMs, fps, bucket}] raw 1Hz trace for forensics
+            };
+
+            // Backup notification path (in case polling misses the transition)
+            try { xs.addEventListener('end', () => this._onSessionEnd()); } catch {}
+
+            this._startSampling();
+            console.log('[Bench] XR session started:', mode, 'blend:', blendMode);
+        },
+
+        _startSampling() {
+            clearTimeout(this._sampleTimer);
+            const tick = () => {
+                if (!this.activeSession) return;
+                try { this._sampleOnce(); }
+                catch (e) { console.warn('[Bench] XR sample error:', e); }
+                this._sampleTimer = setTimeout(tick, 1000);
+            };
+            this._sampleTimer = setTimeout(tick, 1000);
+        },
+
+        _sampleOnce() {
+            const s = this.activeSession;
+            if (!s) return;
+            const now = performance.now();
+            if (now < s._samplingStartAt) return;       // vrFps not yet fresh
+
+            const fpsRaw = $vrFps();
+            const fps = (fpsRaw != null && Number.isFinite(+fpsRaw) && +fpsRaw > 0) ? +fpsRaw : null;
+            if (fps == null) return;
+
+            const grabs = $vrGrabs();
+            const rightActive = !!(grabs && grabs.right && grabs.right.active);
+            const leftActive  = !!(grabs && grabs.left  && grabs.left.active);
+            const recentCut = (now - FPSSampler._lastCutAt) < 1000;
+
+            let bucket;
+            if (rightActive)      bucket = 'deform';
+            else if (leftActive)  bucket = 'rotation';
+            else if (recentCut)   bucket = 'postCut';
+            else                  bucket = 'idle';
+
+            s.buckets[bucket].samples.push(+fps.toFixed(2));
+            s.fpsRaw.push({ tMs: +(now - s.startAt).toFixed(0), fps: +fps.toFixed(2), bucket });
+
+            // grab transition counting
+            const prev = s._grabPrev;
+            if (leftActive  && !prev.left)  s.grabCount.left++;
+            if (rightActive && !prev.right) s.grabCount.right++;
+            prev.left  = leftActive;
+            prev.right = rightActive;
+        },
+
+        _onSessionEnd() {
+            if (!this.activeSession) return;
+            const s = this.activeSession;
+            s.endAt = performance.now();
+            s.durationMs = +(s.endAt - s.startAt).toFixed(0);
+
+            const fps = {};
+            const all = [];
+            for (const [name, b] of Object.entries(s.buckets)) {
+                fps[name] = { ...statsOf(b.samples), samples: b.samples.slice() };
+                for (const v of b.samples) all.push(v);
+            }
+            fps.overall = statsOf(all);
+            s.fps = fps;
+
+            // strip internal mutable state before publishing
+            delete s._grabPrev;
+            delete s._samplingStartAt;
+            delete s.buckets;
+
+            this.sessions.push(s);
+            this.activeSession = null;
+            clearTimeout(this._sampleTimer);
+            this._sampleTimer = null;
+            console.log('[Bench] XR session ended.', s.mode, 'duration:', s.durationMs, 'ms',
+                'samples:', { idle: fps.idle.count, rot: fps.rotation.count,
+                              def: fps.deform.count, cut: fps.postCut.count });
+        },
+
         report() {
-            return { sessions: this.sessions.slice(), activeSession: this.activeSession };
+            // Snapshot active session (without finalizing) for live preview
+            let active = null;
+            if (this.activeSession) {
+                const s = this.activeSession;
+                const buckets = {};
+                const all = [];
+                for (const [name, b] of Object.entries(s.buckets)) {
+                    buckets[name] = statsOf(b.samples);
+                    for (const v of b.samples) all.push(v);
+                }
+                active = {
+                    mode: s.mode,
+                    blendMode: s.blendMode,
+                    startIso: s.startIso,
+                    elapsedMs: +(performance.now() - s.startAt).toFixed(0),
+                    grabCount: { ...s.grabCount },
+                    fpsLive: { buckets, overall: statsOf(all) },
+                };
+            }
+            return { sessions: this.sessions.slice(), activeSession: active };
         },
-        reset() { this.sessions = []; this.activeSession = null; },
+
+        reset() {
+            // Wipe completed sessions; keep any in-progress session intact so
+            // the user can't accidentally lose an active recording.
+            this.sessions = [];
+        },
     };
 
     // ============================================================
@@ -928,8 +1087,36 @@
             lines.push('_Not implemented in Phase 1._');
             lines.push('');
 
-            lines.push('### XR Sessions (Phase 2 — stub)');
-            lines.push('_Not implemented in Phase 1._');
+            // ---- XR Sessions (Phase 2 / v1.0.7) ----
+            const xr = report.xr;
+            const xrSess = xr.sessions || [];
+            lines.push(`### XR Sessions (n=${xrSess.length})`);
+            if (xrSess.length === 0 && !xr.activeSession) {
+                lines.push('_No XR session recorded. Enter VR/AR via the in-app button to capture._');
+            } else {
+                lines.push('| # | Mode | Blend | Duration | idle FPS (mean/min) | rot FPS (mean/min) | deform FPS (mean/min) | postCut FPS (mean/min) | Grabs L/R |');
+                lines.push('|---|---|---|---|---|---|---|---|---|');
+                const fmtFpsCell = (b) => (b && b.count > 0)
+                    ? `${b.mean} / ${b.min} (n=${b.count})` : '—';
+                const fmtDur = (ms) => ms == null ? '—' : (ms / 1000).toFixed(1) + 's';
+                xrSess.forEach((s, i) => {
+                    const f = s.fps || {};
+                    lines.push(`| ${i + 1} | ${s.mode ?? '—'} | ${s.blendMode ?? '—'} | ${fmtDur(s.durationMs)} |` +
+                        ` ${fmtFpsCell(f.idle)} | ${fmtFpsCell(f.rotation)} | ${fmtFpsCell(f.deform)} | ${fmtFpsCell(f.postCut)} |` +
+                        ` ${s.grabCount?.left ?? 0} / ${s.grabCount?.right ?? 0} |`);
+                });
+                if (xr.activeSession) {
+                    const a = xr.activeSession;
+                    const fl = a.fpsLive || { buckets: {}, overall: {} };
+                    lines.push(`| * | ${a.mode} | ${a.blendMode ?? '—'} | ${fmtDur(a.elapsedMs)} (live) |` +
+                        ` ${fmtFpsCell(fl.buckets.idle)} | ${fmtFpsCell(fl.buckets.rotation)} |` +
+                        ` ${fmtFpsCell(fl.buckets.deform)} | ${fmtFpsCell(fl.buckets.postCut)} |` +
+                        ` ${a.grabCount?.left ?? 0} / ${a.grabCount?.right ?? 0} |`);
+                }
+                lines.push('');
+                lines.push('_Mode: vr / ar / unknown.  Blend: opaque=VR, alpha-blend/additive=AR passthrough._');
+                lines.push('_Rotation bucket = left-hand grab (model transform).  Deform bucket = right-hand grab (mesh manipulation)._');
+            }
             lines.push('');
 
             lines.push('---');
