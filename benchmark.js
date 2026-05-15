@@ -1,5 +1,5 @@
 /* benchmark.js — LiverSurgerySimWeb performance measurement
- * Version: 1.0.7
+ * Version: 1.0.8
  * Loaded via ?bench URL parameter only.
  * No external dependencies. No network. No persistence.
  * Phase 1 (MVP): platform, load times, FPS (idle/rotation), 4-cut logging,
@@ -7,6 +7,13 @@
  * Phase 2 (1.0.7): XR session lifecycle + per-second vrFps sampling.
  *
  * Changelog:
+ *  1.0.8 — Touch-aware XR bucket classifier.
+ *          v1.0.7 only checked vrGrabs.left/.right (Quest3 hand-tracking).
+ *          On Android AR (dom-overlay touch), those flags never flip → all
+ *          activity collapsed into 'idle'. Now also checks sb.isGrabbing()
+ *          for any-platform handle grab, and FPSSampler._lastPointerMoveAt
+ *          for touch/mouse drag (= rotation). grabCount.right also counts
+ *          touch-grab transitions.
  *  1.0.7 — Phase 2: XRSessionProbe implemented.
  *          Polls xrSession at 500ms cadence to detect session start/end.
  *          During session, samples global `vrFps` (updated by renderXR at 1Hz
@@ -28,7 +35,7 @@
     // Defense in depth: re-check URL param
     if (!new URLSearchParams(location.search).has('bench')) return;
 
-    const BENCH_VERSION = '1.0.7';
+    const BENCH_VERSION = '1.0.8';
     const BENCH_BOOT_AT = performance.now();
 
     // ============================================================
@@ -769,26 +776,46 @@
             const fps = (fpsRaw != null && Number.isFinite(+fpsRaw) && +fpsRaw > 0) ? +fpsRaw : null;
             if (fps == null) return;
 
+            // ---- input signals ----
+            // Quest3 hand-tracking (controller / hand-tracking sets vrGrabs flags)
             const grabs = $vrGrabs();
             const rightActive = !!(grabs && grabs.right && grabs.right.active);
             const leftActive  = !!(grabs && grabs.left  && grabs.left.active);
-            const recentCut = (now - FPSSampler._lastCutAt) < 1000;
+            // Cross-platform handle grab (touch on Android AR, mouse on desktop XR).
+            // sb.isGrabbing() reflects "user has currently grabbed a deform handle".
+            const sbRef = $sb();
+            let sbGrabbing = false;
+            try { sbGrabbing = !!(sbRef?.isGrabbing?.()); } catch {}
+            // Touch/mouse pointermove within last 500ms (= dragging = rotation, when
+            // not also grabbing a handle). pointermove fires for touch on dom-overlay
+            // AR canvas as well, so this works on Android AR.
+            const recentMove = (now - FPSSampler._lastPointerMoveAt) < 500;
+            const recentCut  = (now - FPSSampler._lastCutAt)         < 1000;
 
+            // ---- bucket classification ----
+            // Priority: deform (any grab) > rotation > postCut > idle.
+            // Deform comes first because if a handle is grabbed AND the user is
+            // dragging it, the underlying cost is dominated by mesh deformation,
+            // not by view rotation.
             let bucket;
-            if (rightActive)      bucket = 'deform';
-            else if (leftActive)  bucket = 'rotation';
-            else if (recentCut)   bucket = 'postCut';
-            else                  bucket = 'idle';
+            if (rightActive || sbGrabbing) bucket = 'deform';
+            else if (leftActive)           bucket = 'rotation';
+            else if (recentMove)           bucket = 'rotation';
+            else if (recentCut)            bucket = 'postCut';
+            else                           bucket = 'idle';
 
             s.buckets[bucket].samples.push(+fps.toFixed(2));
             s.fpsRaw.push({ tMs: +(now - s.startAt).toFixed(0), fps: +fps.toFixed(2), bucket });
 
-            // grab transition counting
+            // ---- grab transition counting ----
+            // grabCount.right covers both Quest3 right-hand and any-platform
+            // handle grab (the latter doesn't distinguish hands on touch input).
+            const rightOrSb = rightActive || sbGrabbing;
             const prev = s._grabPrev;
-            if (leftActive  && !prev.left)  s.grabCount.left++;
-            if (rightActive && !prev.right) s.grabCount.right++;
+            if (leftActive   && !prev.left)  s.grabCount.left++;
+            if (rightOrSb    && !prev.right) s.grabCount.right++;
             prev.left  = leftActive;
-            prev.right = rightActive;
+            prev.right = rightOrSb;
         },
 
         _onSessionEnd() {
