@@ -34,6 +34,8 @@ the snapshot will continue to evolve, but the snapshot URL is bit-frozen.
 > 
 ## Quick Start
 
+![LiverSurgerySimWeb main view with Volume panel](docs/screenshots/01_main_ui.png)
+
 1. **[Click → Launch Simulator](https://meimeimei1223.github.io/LiverSurgerySimWeb/)**
 2. The default liver model auto-loads (~10 s on desktop).
 3. **Mouse drag** to rotate, **scroll** to zoom, **right-drag** to pan.

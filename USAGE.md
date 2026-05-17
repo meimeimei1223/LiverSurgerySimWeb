@@ -26,10 +26,7 @@ For installation / launch / control reference: see [README.md](README.md).
 
 ## 1. Loading a model — full walkthrough
 
-> **📸 Screenshot needed — `docs/screenshots/01_main_ui.png`**
-> Desktop full-window view immediately after the default liver model finishes
-> loading. Show: liver mesh centered, top-left "Liver Simulation v287" label,
-> top-right mode buttons row (`Visibility | Volume | Reset`).
+![Main UI after loading: liver with Volume panel showing S1–S8 breakdown](docs/screenshots/01_main_ui.png)
 
 ### Default model
 
@@ -158,10 +155,7 @@ The Preset Seg button is **greyed out** if no `soft_S*.obj` files were loaded.
 
 ### Choosing a tetrahedralization preset
 
-> **📸 Screenshot needed — `docs/screenshots/02_load_dialog.png`**
-> The "OBJ Drop" modal showing detected files (liver, portal, vein, tumor, gb),
-> three preset buttons (`Low / Mid / High`), the grid value sliders, and the
-> **Generate** button.
+![OBJ Drop modal — detected files, preset buttons (HIGH selected), grid sliders, Generate button](docs/screenshots/02_load_dialog.png)
 
 | Preset | Sim tets | Visual tets | Tet generation time (desktop) | Recommended hardware |
 |---|---|---|---|---|
@@ -176,10 +170,7 @@ becomes interactive when "First interactable" appears in the console.
 
 ## 2. Deform workflow (handle drag)
 
-> **📸 Screenshot needed — `docs/screenshots/03_deform.png`**
-> Liver with 2–3 handle spheres placed (one on the top of the right lobe, one on
-> the inferior border). One handle being actively dragged, showing visible mesh
-> deformation. The Deform mode indicator should be highlighted in the UI.
+![Deform mode active: liver with handle spheres (green on the surface, red marker), Action panel showing Handle Place / Deform / Undo Handle / Clear All](docs/screenshots/03_deform.png)
 
 ### Steps
 
@@ -199,10 +190,7 @@ becomes interactive when "First interactable" appears in the console.
 
 ## 3. Free Cut workflow (3D cutter plane)
 
-> **📸 Screenshot needed — `docs/screenshots/04_freecut.png`**
-> Free Cut mode active. Show the green/blue translucent cutter quad intersecting
-> the liver mesh. The "Execute Cut" button should be visible. Camera angle should
-> make the intersection clear.
+![Free Cut mode: orange cutter quad pierces the liver, with CUT button anchored to it. Side panel shows Seg Overlay / Undo Cut / Size + Thickness sliders](docs/screenshots/04_freecut.png)
 
 ### Steps
 
@@ -226,10 +214,7 @@ While in Free Cut mode, press **`Q`** to toggle the **Seg Overlay**:
 
 ## 4. Segment Cut workflow (Couinaud anatomical resection)
 
-> **📸 Screenshot needed — `docs/screenshots/05_segcut.png`**
-> Liver in Couinaud segment color mode (S1–S8 as distinct colors). Two adjacent
-> segments highlighted as selected. Volume panel open on the side showing current
-> ml values.
+![Segment Cut mode (Preset Seg active): liver colored by Couinaud anatomy (purple, orange, green, yellow regions). Side panel shows Liver Select / Portal Select / Seg Cut / Seg Undo / Clear Selection](docs/screenshots/05_segcut.png)
 
 ### Steps
 
@@ -254,10 +239,7 @@ While in Free Cut mode, press **`Q`** to toggle the **Seg Overlay**:
 
 ## 5. Volume panel and tumor visualization
 
-> **📸 Screenshot needed — `docs/screenshots/06_volume_panel.png`**
-> Volume panel open showing: Total volume (e.g., "1966 ml"), S1–S8 rows with ml
-> + %, and Tumor row. Liver mesh visible with tumor inside (semi-transparent so
-> tumor is partially visible through liver surface).
+![Volume Monitor panel: Total 1615.8 ml, Original / Remnant 82.1%, S1–S8 breakdown with ml / % / remnant ratio. Liver mesh shown semi-transparent revealing portal vein (pink) and hepatic vein (cyan) inside, tumor (green sphere) visible](docs/screenshots/06_volume_panel.png)
 
 ### Opening
 
@@ -454,19 +436,18 @@ https://github.com/meimeimei1223/LiverSurgerySimWeb/issues
 
 ## Screenshots inventory (checklist for the maintainer)
 
-This file currently has **10 screenshot placeholders**:
+| # | File | Captures | Status |
+|---|---|---|---|
+| 01 | `01_main_ui.png` | Liver with Volume panel (S1–S8 + Remnant) | ✅ done |
+| 02 | `02_load_dialog.png` | OBJ Drop modal — file list, preset buttons (HIGH), grid sliders | ✅ done |
+| 03 | `03_deform.png` | Deform mode with handle spheres + Action panel | ✅ done |
+| 04 | `04_freecut.png` | Free Cut cutter intersecting liver + CUT button | ✅ done |
+| 05 | `05_segcut.png` | Preset Seg color mode (S1–S8 distinct colors) + Seg Cut panel | ✅ done |
+| 06 | `06_volume_panel.png` | Volume Monitor panel detailed view | ✅ done |
+| 07 | `07_mobile_ui.png` | Android landscape with mode toolbar | ⏳ needed |
+| 08 | `08_vr_view.png` | Quest3 VR view (hand tracking + panels behind objects) | ⏳ needed |
+| 09 | `09_ar_view.png` | Android AR with liver anchored on table | ⏳ needed |
+| 10 | `10_bench_panel.png` | Benchmark report panel (📊) open | ⏳ needed |
 
-| # | File | Captures |
-|---|---|---|
-| 01 | `01_main_ui.png` | Desktop fresh load, default model, labels visible |
-| 02 | `02_load_dialog.png` | OBJ Drop modal with preset buttons |
-| 03 | `03_deform.png` | Deform mode with handles + active drag |
-| 04 | `04_freecut.png` | Free Cut cutter intersecting liver |
-| 05 | `05_segcut.png` | Segment Cut with S1–S8 colors + selected segs |
-| 06 | `06_volume_panel.png` | Volume panel open with breakdown |
-| 07 | `07_mobile_ui.png` | Android landscape with mode toolbar |
-| 08 | `08_vr_view.png` | Quest3 VR view, hand tracking, panels |
-| 09 | `09_ar_view.png` | Android AR with liver on table |
-| 10 | `10_bench_panel.png` | Benchmark report panel |
-
-Put PNG files in `docs/screenshots/` (create folder). README and USAGE.md already reference the expected paths.
+PNG files live in `docs/screenshots/`. README and USAGE.md reference them via
+relative paths so they render in both GitHub web view and clones.
