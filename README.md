@@ -5,9 +5,29 @@ Real-time liver surgery simulation running in the browser via WebAssembly.
 ---
 ## Live Demo
 
-**[Launch Simulator](https://meimeimei1223.github.io/LiverSurgerySimWeb/)**
+**[Launch Simulator](https://meimeimei1223.github.io/LiverSurgerySimWeb/)** — latest version (continuously updated)
 
-[Benchmark mode](https://meimeimei1223.github.io/LiverSurgerySimWeb/?bench=1) — for performance measurement (paper data collection)
+[Benchmark mode](https://meimeimei1223.github.io/LiverSurgerySimWeb/?bench=1) — performance measurement panel enabled (current build)
+
+### 📄 Reproducibility — Frozen Snapshot for Paper
+
+The exact deployment used to collect the benchmark results reported in our
+AE-CAI 2026 paper is preserved at a separate, immutable URL:
+
+**[paper-benchmark-v1 (live snapshot)](https://meimeimei1223.github.io/LiverSurgerySimWeb/paper-benchmark-v1/?bench=1)**
+
+Equivalent references:
+
+| Resource | URL |
+|---|---|
+| Live snapshot (runnable) | https://meimeimei1223.github.io/LiverSurgerySimWeb/paper-benchmark-v1/ |
+| Source code (browsable) | https://github.com/meimeimei1223/LiverSurgerySimWeb/tree/paper-benchmark-v1 |
+| Git tag (commit `54c80b7`) | `git checkout paper-benchmark-v1` |
+| Snapshot README | [paper-benchmark-v1/README.md](paper-benchmark-v1/README.md) |
+
+The snapshot is `index.html v286` + `benchmark.js v1.0.9` + the
+`softbody.{js,wasm,data}` binaries built on 2026-04-30. The live URL above
+the snapshot will continue to evolve, but the snapshot URL is bit-frozen.
 
 > ⚠️ **Not for clinical use.** This is an educational demonstration only.
 > Do not upload identifiable patient data.
