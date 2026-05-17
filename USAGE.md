@@ -89,26 +89,54 @@ Only **liver.obj** is strictly required; the others enable different feature set
 - Without `tumor.obj` → Tumor row in Volume panel hidden
 - Without `vein.obj` / `gb.obj` → those layers omitted (no functional impact)
 
-#### Preset Seg meshes (fixed filenames)
+#### Preset Seg meshes (S/s + digit pattern)
 
 For **Preset Seg mode** (high-accuracy Couinaud segmentation), provide
-pre-segmented liver sub-meshes in the same folder with these exact names:
+pre-segmented liver sub-meshes in the same folder. The detection rule (from
+`MultiOBJTetrahedralizerWasm.cpp:186-191`) is simple:
+
+> A file is treated as a Couinaud segment if its filename starts with
+> **`S` or `s`** followed by a **digit (0–9)**.
+
+Recommended filenames and their anatomical correspondence:
 
 | Filename | Couinaud segment |
 |---|---|
-| `soft_S1.obj` | S1 (caudate lobe) |
-| `soft_S2.obj` | S2 (left lateral superior) |
-| `soft_S3.obj` | S3 (left lateral inferior) |
-| `soft_S4.obj` | S4 (left medial) |
-| `soft_S5.obj` | S5 (right anterior inferior) |
-| `soft_S6.obj` | S6 (right posterior inferior) |
-| `soft_S7.obj` | S7 (right posterior superior) |
-| `soft_S8.obj` | S8 (right anterior superior) |
+| `S1.obj` | S1 (caudate lobe) |
+| `S2.obj` | S2 (left lateral superior) |
+| `S3.obj` | S3 (left lateral inferior) |
+| `S4.obj` | S4 (left medial) |
+| `S5.obj` | S5 (right anterior inferior) |
+| `S6.obj` | S6 (right posterior inferior) |
+| `S7.obj` | S7 (right posterior superior) |
+| `S8.obj` | S8 (right anterior superior) |
 
-All 8 files (or as many as you have) are auto-loaded after the main liver is generated.
-The simulator reports `+ S1-S8` in the loading status when binding succeeds.
+Variants that also work:
 
-If `soft_S*.obj` files are not present, the simulator falls back to **Auto Seg**
+| Pattern | Example | Why it works |
+|---|---|---|
+| Lowercase | `s1.obj`, `s8.obj` | Either case is accepted |
+| Trailing suffix | `S1_lateral.obj`, `s8_extracted.obj` | Only the first two chars are checked |
+| Multi-digit | `S10.obj` | Second char is still a digit |
+
+Patterns that do **not** work (no segment detection):
+
+| Bad pattern | Why |
+|---|---|
+| `soft_S1.obj` | Starts with `s` but second char is `o`, not a digit |
+| `Segment1.obj` | Starts with `S` but second char is `e` |
+| `S_1.obj` | Second char is `_`, not a digit |
+| `liver_S1.obj` | Starts with `l` |
+
+> ℹ️ Internally, the simulator renames detected segment files to
+> `/tmp/soft_S*.obj` in the WASM virtual filesystem (the `soft_` prefix is added
+> automatically by the tetrahedralizer). You do **not** need to use this prefix
+> in your source filenames.
+
+All matched files are auto-loaded after the main liver is generated.
+The loading-status bar reports `+ S1-S8` when binding succeeds.
+
+If no segment files are detected, the simulator falls back to **Auto Seg**
 (skeleton-based segmentation from `portal.obj`), which is approximate.
 
 ### Two segmentation modes

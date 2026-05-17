@@ -70,20 +70,20 @@ A complete liver model consists of organ OBJ files + optional pre-segmented S1�
 
 ```
 my_patient/
-├── liver.obj             ← Parent mesh (REQUIRED)
-├── portal.obj            ← Portal vein (strongly recommended)
-├── vein.obj              ← Hepatic vein
-├── tumor.obj             ← Tumor lesion
-├── gb.obj                ← Gallbladder
+├── liver.obj      ← Parent mesh (REQUIRED)
+├── portal.obj     ← Portal vein (strongly recommended)
+├── vein.obj       ← Hepatic vein
+├── tumor.obj      ← Tumor lesion
+├── gb.obj         ← Gallbladder
 │
-├── soft_S1.obj           ← Couinaud segment 1 (optional, for Preset Seg mode)
-├── soft_S2.obj           ← Segment 2
-├── soft_S3.obj           ← Segment 3
-├── soft_S4.obj           ← Segment 4
-├── soft_S5.obj           ← Segment 5
-├── soft_S6.obj           ← Segment 6
-├── soft_S7.obj           ← Segment 7
-└── soft_S8.obj           ← Segment 8
+├── S1.obj         ← Couinaud segment 1 (optional, for Preset Seg mode)
+├── S2.obj         ← Segment 2
+├── S3.obj         ← Segment 3
+├── S4.obj         ← Segment 4
+├── S5.obj         ← Segment 5
+├── S6.obj         ← Segment 6
+├── S7.obj         ← Segment 7
+└── S8.obj         ← Segment 8
 ```
 
 ### Naming convention
@@ -98,8 +98,10 @@ Organ filenames are matched by **case-insensitive substring**:
 | Tumor | Optional | `tumor.obj`, `Tumor_1.obj`, `lesion_TUMOR.obj` |
 | GB | Optional | `gb.obj`, `GB.obj`, `gallbladder.obj` |
 
-The **Preset Seg** files use a fixed naming pattern: `soft_S1.obj` through `soft_S8.obj`.
-All 8 files (or as many as you have) are auto-loaded if present in the folder.
+Preset Seg files use a different rule: **first character `S` or `s`, second character a digit** (`0-9`).
+So `S1.obj`, `S2.obj` … `S8.obj` (or `s1.obj` … `s8.obj`) all work. Variants like
+`S1_lateral.obj` also match (only the first two chars are checked). All matching
+files are auto-loaded if present in the folder.
 
 ### Two segmentation modes
 
