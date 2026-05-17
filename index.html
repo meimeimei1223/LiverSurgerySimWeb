@@ -395,7 +395,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v286</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v287</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -3115,7 +3115,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v286</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v287</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -5303,7 +5303,11 @@ function renderXR(time, frame) {
         const cp = [viewerPos.x, viewerPos.y, viewerPos.z];
 
         // パネル描画（シーンより先に描画、深度テスト無効）
+        // v287: サイドパネルもメインパネルと同じタイミング (シーン前) に移動し、
+        //       liver/hand mesh が常にパネルの手前に見えるようにする。
+        //       両 panel とも DEPTH_TEST 無効なので、描画順がそのまま前後関係を決める。
         if (!isPhoneAR) drawTestCube(V, P, pose);
+        if (!isPhoneAR) drawSidePanel(V, P);
 
         // メインメッシュ + 子メッシュ描画
         drawSceneXR(M, V, P, cp);
@@ -5313,9 +5317,6 @@ function renderXR(time, frame) {
 
         // ハンドジョイント描画 (モバイル AR ではスキップ: hand/controller が無い)
         if (!isPhoneAR) drawVRHands(V, P);
-
-        // サイドパネル描画（メインパネル左側固定）
-        if (!isPhoneAR) drawSidePanel(V, P);
 
         // フラグメント選択ポップアップ（肝臓の上）
         if (vrFragmentPending) drawFragPopPanel(V, P);
