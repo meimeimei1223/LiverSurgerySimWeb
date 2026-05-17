@@ -12,7 +12,7 @@ Real-time liver surgery simulation running in the browser via WebAssembly.
 ### 📄 Reproducibility — Frozen Snapshot for Paper
 
 The exact deployment used to collect the benchmark results reported in our
-AE-CAI 2026 paper is preserved at a separate, immutable URL:
+paper is preserved at a separate, immutable URL:
 
 **[paper-benchmark-v1 (live snapshot)](https://meimeimei1223.github.io/LiverSurgerySimWeb/paper-benchmark-v1/?bench=1)**
 
