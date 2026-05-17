@@ -64,35 +64,59 @@ To load your own patient OBJ model, see [Loading Custom Models](#loading-custom-
 
 ## Loading Custom Models
 
-### Required folder structure
+### Folder structure
 
-A complete liver model consists of up to 5 OBJ files in one folder:
+A complete liver model consists of organ OBJ files + optional pre-segmented S1–S8 files:
 
 ```
 my_patient/
-├── liver.obj      ← Parent mesh (REQUIRED)
-├── portal.obj     ← Portal vein (optional but recommended)
-├── vein.obj       ← Hepatic vein
-├── tumor.obj      ← Tumor lesion
-└── gb.obj         ← Gallbladder
+├── liver.obj             ← Parent mesh (REQUIRED)
+├── portal.obj            ← Portal vein (strongly recommended)
+├── vein.obj              ← Hepatic vein
+├── tumor.obj             ← Tumor lesion
+├── gb.obj                ← Gallbladder
+│
+├── soft_S1.obj           ← Couinaud segment 1 (optional, for Preset Seg mode)
+├── soft_S2.obj           ← Segment 2
+├── soft_S3.obj           ← Segment 3
+├── soft_S4.obj           ← Segment 4
+├── soft_S5.obj           ← Segment 5
+├── soft_S6.obj           ← Segment 6
+├── soft_S7.obj           ← Segment 7
+└── soft_S8.obj           ← Segment 8
 ```
-
-The filenames are matched by substring (case-insensitive), so
-`patient001_liver.obj` etc. also work.
 
 ### Naming convention
 
-Filenames are matched by **case-insensitive substring**, so the following all work:
+Organ filenames are matched by **case-insensitive substring**:
 
-| Detected as | Patterns that match |
-|---|---|
-| Liver | `liver.obj`, `LIVER.obj`, `patient001_liver.obj`, `case_A_LIVER.obj` |
-| Portal | `portal.obj`, `portal_vein.obj`, `PORTAL_VEIN.obj` |
-| Vein | `vein.obj`, `hepatic_vein.obj`, `HV.obj` |
-| Tumor | `tumor.obj`, `Tumor_1.obj`, `lesion_TUMOR.obj` |
-| GB | `gb.obj`, `GB.obj`, `gallbladder.obj` |
+| Detected as | Required? | Patterns that match |
+|---|---|---|
+| Liver | **REQUIRED** | `liver.obj`, `LIVER.obj`, `patient001_liver.obj`, `case_A_LIVER.obj` |
+| Portal | Recommended (needed for Auto Seg) | `portal.obj`, `portal_vein.obj`, `PORTAL_VEIN.obj` |
+| Vein | Optional | `vein.obj`, `hepatic_vein.obj`, `HV.obj` |
+| Tumor | Optional | `tumor.obj`, `Tumor_1.obj`, `lesion_TUMOR.obj` |
+| GB | Optional | `gb.obj`, `GB.obj`, `gallbladder.obj` |
 
-Only **liver** is required; others are optional but recommended.
+The **Preset Seg** files use a fixed naming pattern: `soft_S1.obj` through `soft_S8.obj`.
+All 8 files (or as many as you have) are auto-loaded if present in the folder.
+
+### Two segmentation modes
+
+The simulator supports two distinct segmentation methods, switchable at runtime via the **Normal / Auto Seg / Preset Seg** buttons:
+
+| Mode | Source | Requires | Anatomical accuracy |
+|---|---|---|---|
+| **Normal** | No segmentation | — | — |
+| **Auto Seg** | Skeleton analysis of portal vein tree | `portal.obj` | Approximate (algorithmic) |
+| **Preset Seg** | Pre-segmented OBJ files | `soft_S1.obj` … `soft_S8.obj` | **High** (matches your input segmentation) |
+
+For published clinical accuracy, supply `soft_S*.obj` files exported from your
+segmentation software (e.g., 3D Slicer with the Liver Couinaud module).
+Auto Seg is convenient when only `portal.obj` is available.
+
+> ℹ️ **Volume panel S1–S8 breakdown is only meaningful in Preset Seg mode** —
+> the Auto Seg numbering does not necessarily match anatomical S1–S8.
 
 ### Drop method by platform
 

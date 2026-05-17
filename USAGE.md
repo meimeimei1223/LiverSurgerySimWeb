@@ -72,18 +72,61 @@ my_patient.zip
 
 ### Naming convention
 
-Filenames are matched by **case-insensitive substring**:
+#### Organ meshes (substring match, case-insensitive)
 
-| Detected as | Patterns that match |
-|---|---|
-| Liver | `liver.obj`, `LIVER.obj`, `patient001_liver.obj`, `case_A_LIVER.obj` |
-| Portal | `portal.obj`, `portal_vein.obj`, `patient001_PORTAL_VEIN.obj` |
-| Vein | `vein.obj`, `hepatic_vein.obj`, `HV.obj` (after `hv` matches) |
-| Tumor | `tumor.obj`, `Tumor_1.obj`, `lesion_TUMOR.obj` |
-| GB | `gb.obj`, `GB.obj`, `gallbladder.obj` (matches `gb`) |
+| Detected as | Required? | Patterns that match |
+|---|---|---|
+| Liver | **REQUIRED** | `liver.obj`, `LIVER.obj`, `patient001_liver.obj`, `case_A_LIVER.obj` |
+| Portal | Strongly recommended (needed for Auto Seg) | `portal.obj`, `portal_vein.obj`, `patient001_PORTAL_VEIN.obj` |
+| Vein | Optional | `vein.obj`, `hepatic_vein.obj`, `HV.obj` |
+| Tumor | Optional | `tumor.obj`, `Tumor_1.obj`, `lesion_TUMOR.obj` |
+| GB | Optional | `gb.obj`, `GB.obj`, `gallbladder.obj` |
 
 If the auto-match is wrong, the modal lets you manually assign files.
-Only **liver.obj** is strictly required; the others are optional but recommended.
+Only **liver.obj** is strictly required; the others enable different feature sets:
+
+- Without `portal.obj` → Auto Seg disabled (Segment Cut still works if Preset Seg files are provided)
+- Without `tumor.obj` → Tumor row in Volume panel hidden
+- Without `vein.obj` / `gb.obj` → those layers omitted (no functional impact)
+
+#### Preset Seg meshes (fixed filenames)
+
+For **Preset Seg mode** (high-accuracy Couinaud segmentation), provide
+pre-segmented liver sub-meshes in the same folder with these exact names:
+
+| Filename | Couinaud segment |
+|---|---|
+| `soft_S1.obj` | S1 (caudate lobe) |
+| `soft_S2.obj` | S2 (left lateral superior) |
+| `soft_S3.obj` | S3 (left lateral inferior) |
+| `soft_S4.obj` | S4 (left medial) |
+| `soft_S5.obj` | S5 (right anterior inferior) |
+| `soft_S6.obj` | S6 (right posterior inferior) |
+| `soft_S7.obj` | S7 (right posterior superior) |
+| `soft_S8.obj` | S8 (right anterior superior) |
+
+All 8 files (or as many as you have) are auto-loaded after the main liver is generated.
+The simulator reports `+ S1-S8` in the loading status when binding succeeds.
+
+If `soft_S*.obj` files are not present, the simulator falls back to **Auto Seg**
+(skeleton-based segmentation from `portal.obj`), which is approximate.
+
+### Two segmentation modes
+
+After loading, the **Visual Mode** toolbar (top-right) lets you switch between:
+
+| Button | Mode | Source | Anatomical accuracy |
+|---|---|---|---|
+| Normal | No segmentation | — | — |
+| Auto Seg | Auto segment from portal vein skeleton | `portal.obj` | Approximate (algorithmic) |
+| **Preset Seg** | Pre-segmented OBJ | `soft_S1.obj`–`soft_S8.obj` | **High** (matches input segmentation) |
+
+The Preset Seg button is **greyed out** if no `soft_S*.obj` files were loaded.
+
+> ⚠️ **Important for clinical / paper interpretation**: the S1–S8 labels in the
+> Volume panel correspond to **Preset Seg** anatomy only. Auto Seg's segment
+> numbering is geometric (based on portal branch counts), not Couinaud anatomy,
+> so do not interpret "Auto Seg S5" as anatomical Couinaud segment 5.
 
 ### Choosing a tetrahedralization preset
 
