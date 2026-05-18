@@ -395,7 +395,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v295</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v296</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2233,7 +2233,8 @@ function showFragmentPopup() {
     const count = sb.getPendingFragmentCount();
     // v252: AR モバイルでは画面はみ出し対策 + ar-cut-overlay (z=40) より上に表示
     //        デスクトップはタイトルバードラッグで動かせるので右上配置を維持
-    const inPhoneAR = (typeof xrSession !== 'undefined' && xrSession && xrMode === 'ar' && isMobile);
+    //        v295: タブレット AR も同じ画面 AR 経路なので isTouchDevice で判定
+    const inPhoneAR = (typeof xrSession !== 'undefined' && xrSession && xrMode === 'ar' && isTouchDevice);
     if (inPhoneAR) {
         popup.style.top = '60px';
         popup.style.left = '50%';
@@ -3123,7 +3124,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v295</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v296</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -4478,8 +4479,10 @@ async function startXR(mode) {
             vrSyncActionMode();
             vrUpdateVolume();
 
-            // モバイル AR: Phase 1.5 screen-locked + 既存モバイル UI 流用
-            if (isMobile) {
+            // モバイル AR / タブレット AR: Phase 1.5 screen-locked + 既存モバイル UI 流用
+            // v295: タブレット (DESKTOP判定だが isTouchDevice=true) も phone AR と同じ
+            //        画面タップ AR を使う (vr-panel は HMD ハンドコントローラ前提なので不適)
+            if (isTouchDevice) {
                 arMode = 'screen';
                 arPrevVRState = { scale: VR_SCALE, offset: { ...VR_OFFSET } };
                 arInitialPlacePending = true;  // 最初のフレームで配置
@@ -5250,8 +5253,8 @@ function renderXR(time, frame) {
     // AR Transform 用にカメラ姿勢を保存
     arLastViewOri = pose.views[0].transform.orientation;
 
-    // モバイル AR: 初回フレームでユーザーの正面に肝臓を配置 (screen-locked の初期位置)
-    const isPhoneAR = (xrMode === 'ar' && isMobile);
+    // モバイル AR / タブレット AR: 初回フレームでユーザーの正面に肝臓を配置 (screen-locked の初期位置)
+    const isPhoneAR = (xrMode === 'ar' && isTouchDevice);
     if (arInitialPlacePending && xrMode === 'ar') {
         const vp = pose.views[0].transform.position;
         const ori = pose.views[0].transform.orientation;
