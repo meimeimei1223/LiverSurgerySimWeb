@@ -395,7 +395,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v290</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v291</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -3115,7 +3115,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v290</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v291</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -3244,12 +3244,15 @@ function applyMobileLandscapeLayout() {
 
     if (useDesktopPanel) {
         if (ctrl) {
+            // 画面幅に応じて 240px (最小、ボタン視認性確保) 〜 310px (デスクトップ既定) でスケール
+            //   〜540px: 240px / 〜700px: 35% / 〜885px: 35% / それ以上: 310px キャップ
+            const w = Math.min(310, Math.max(240, Math.round(window.innerWidth * 0.35)));
             ctrl.style.display = 'block';
             ctrl.style.position = 'fixed';
             ctrl.style.top = '0';
             ctrl.style.right = '0';
             ctrl.style.bottom = '0';
-            ctrl.style.width = '310px';
+            ctrl.style.width = w + 'px';
             ctrl.style.zIndex = '50';
         }
         if (bar) bar.style.display = 'none';
@@ -3303,6 +3306,18 @@ function updateMobileBar() {
 function updateMobileSubPanel() {
     const panel = document.getElementById('mobile-sub-panel');
     if (!panel) return;
+
+    // v290 fix: mobile-sub-panel は body 直下 append のため mobile-bar を hidden に
+    //   しても独立して残る。landscape (非 XR) では右パネル (#ctrl) が出るので、
+    //   mobileVisExpanded/Volume 状態に関わらず強制的に隠す (状態は保存して portrait
+    //   復帰時に展開状態を復元する)。
+    const landscape = window.innerWidth > window.innerHeight;
+    let inXR = false;
+    try { inXR = !!xrSession; } catch (e) { /* TDZ safe */ }
+    if (isMobile && landscape && !inXR) {
+        panel.style.display = 'none';
+        return;
+    }
 
     // サブパネルの位置をバー実測高さに合わせる（重なり防止）
     const bar = document.getElementById('mobile-bar');
