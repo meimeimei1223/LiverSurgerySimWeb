@@ -395,7 +395,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v289</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v288</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2000,15 +2000,15 @@ function resize() {
     const ov = document.getElementById('handle-overlay');
     ov.width = vw; ov.height = vh;
     if (gl) gl.viewport(0, 0, vw, vh);
-    // モバイル: 回転時に orientation に応じて UI 切替 (v289)
+    // モバイル: 回転時にドロワーを閉じてUIを安定させる
     if (isMobile) {
-        if (typeof applyMobileLandscapeLayout === 'function') applyMobileLandscapeLayout();
+        const ctrl = document.getElementById('ctrl');
+        if (ctrl) ctrl.style.display = 'none';
         if (typeof updateMobileBar === 'function') updateMobileBar();
     }
 }
 resize();
 window.addEventListener('resize', resize);
-window.addEventListener('orientationchange', () => { setTimeout(resize, 100); });
 
 // view/projをC++に送るヘルパー（16個のfloat引数）
 function sendMatricesToCpp() {
@@ -3115,7 +3115,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v289</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v288</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -3225,38 +3225,6 @@ function moveFirebaseToMobileBar(dataBtns) {
     obs.observe(document.body, { childList: true, subtree: true });
     // セーフティネット: 10秒後に諦める
     setTimeout(() => obs.disconnect(), 10000);
-}
-
-// v289: モバイル landscape ではデスクトップ右パネル (#ctrl) を表示し、
-//        mobile-bar/sub-panel を隠してデスクトップと同じ UX を提供する。
-//        Portrait と AR/VR セッション中は従来通り mobile-bar を使う。
-function applyMobileLandscapeLayout() {
-    if (!isMobile) return;
-    const landscape = window.innerWidth > window.innerHeight;
-    const inXR = (typeof xrSession !== 'undefined' && xrSession);
-    const useDesktopPanel = landscape && !inXR;
-
-    const ctrl = document.getElementById('ctrl');
-    const bar = document.getElementById('mobile-bar');
-    const subPanel = document.getElementById('mobile-sub-panel');
-
-    if (useDesktopPanel) {
-        if (ctrl) {
-            ctrl.style.display = 'block';
-            ctrl.style.position = 'fixed';
-            ctrl.style.top = '0';
-            ctrl.style.right = '0';
-            ctrl.style.bottom = '0';
-            ctrl.style.width = '310px';
-            ctrl.style.zIndex = '50';
-        }
-        if (bar) bar.style.display = 'none';
-        if (subPanel) subPanel.style.display = 'none';
-    } else {
-        if (ctrl) ctrl.style.display = 'none';
-        if (bar) bar.style.display = '';
-        if (typeof updateMobileSubPanel === 'function') updateMobileSubPanel();
-    }
 }
 
 function updateMobileBar() {
@@ -3671,13 +3639,11 @@ async function initApp() {
 
         // v271: ロード画面はここでは消さない (全 child + skeleton 完了後に消す)
         if (isMobile) {
-            // スマホ: info + モバイルUI を初期化
-            // v289: landscape では desktop 右パネル (#ctrl) を採用するため、
-            //        ctrl の表示判定は applyMobileLandscapeLayout に委譲する
+            // スマホ: 右パネル・パラメータ非表示、info + モバイルUI表示
             document.getElementById('info').style.display = 'block';
+            document.getElementById('ctrl').style.display = 'none';
             document.getElementById('params').style.display = 'none';
             initMobileUI();
-            if (typeof applyMobileLandscapeLayout === 'function') applyMobileLandscapeLayout();
         } else {
             ['info','ctrl','params'].forEach(id=>document.getElementById(id).style.display='block');
         }
@@ -5117,13 +5083,12 @@ function onXREnd() {
     document.getElementById('btn-vr').textContent = 'VR';
     document.getElementById('btn-ar').textContent = 'AR';
     // v262: info / ctrl / params の復元はモバイル/デスクトップで分ける
-    //   - モバイル: params は隠す。ctrl は applyMobileLandscapeLayout に委譲 (v289: landscape では復活)。
+    //   - モバイル: ctrl/params は隠したまま、info だけ block で復活 (initMobileUI 初期状態と同じ)
     //   - デスクトップ: 全部 block 復活
     if (isMobile) {
         document.getElementById('info').style.display = 'block';
+        document.getElementById('ctrl').style.display = 'none';
         document.getElementById('params').style.display = 'none';
-        // v289: portrait → ctrl=none、landscape → ctrl=block (右パネル) を自動切替
-        if (typeof applyMobileLandscapeLayout === 'function') applyMobileLandscapeLayout();
     } else {
         document.getElementById('info').style.display = 'block';
         document.getElementById('ctrl').style.display = 'block';
