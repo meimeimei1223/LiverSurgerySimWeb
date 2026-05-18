@@ -395,7 +395,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v299</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v300</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -3133,7 +3133,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v299</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v300</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -4370,8 +4370,14 @@ async function initXR() {
         }
     }
     if (vrOk) {
-        btnVR.disabled = false;
-        btnVR.onclick = () => startXR('immersive-vr');
+        // v300: タッチ端末 (タブレット等で desktop UI 経由) は HMD を持たないので VR を disable
+        if (isTouchDevice) {
+            btnVR.disabled = true;
+            btnVR.title = 'VR は Quest 等の専用 HMD で利用可';
+        } else {
+            btnVR.disabled = false;
+            btnVR.onclick = () => startXR('immersive-vr');
+        }
     }
     if (arOk) {
         btnAR.disabled = false;
@@ -4416,7 +4422,17 @@ async function initMobileXR() {
         btn.textContent = 'VR';
         btn.style.cssText = 'padding:4px 12px;border-radius:5px;border:1px solid #4dc0e6;' +
             'background:transparent;color:#4dc0e6;font-size:11px;font-weight:bold;cursor:pointer;';
-        btn.onclick = () => startXR('immersive-vr');
+        // v300: タッチ端末 (phone / tablet) は HMD を持たないので VR を実質的に使えない。
+        //        ブラウザが immersive-vr=supported を返してきても disable + 視覚的にグレーアウト。
+        //        Quest 3 等 isTouchDevice=false の HMD では従来通り有効。
+        if (isTouchDevice) {
+            btn.disabled = true;
+            btn.style.opacity = '0.35';
+            btn.style.cursor = 'not-allowed';
+            btn.title = 'VR は Quest 等の専用 HMD で利用可';
+        } else {
+            btn.onclick = () => startXR('immersive-vr');
+        }
         container.appendChild(btn);
     }
     if (arOk) {
