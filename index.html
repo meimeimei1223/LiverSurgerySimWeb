@@ -395,7 +395,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v298</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v299</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -3133,7 +3133,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v298</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v299</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -4512,6 +4512,21 @@ async function startXR(mode) {
                 //  - OBJ ドロップ / Firebase / Canvas 直接タップは AR 不適のため無効化
                 document.getElementById('info').style.display = '';  // 上の共通 hide を打ち消す
                 document.getElementById('vr-panel').style.display = 'none';
+                // v298: タブレット AR (isMobile=false で mobile-bar が作られていない) は
+                //        右パネル #ctrl を AR 中も表示して Visibility/Deform 等にアクセス可能に。
+                //        Phone AR は mobile-bar が AR dom-overlay 経由で見えるのでスキップ。
+                if (!isMobile) {
+                    const ctrlAR = document.getElementById('ctrl');
+                    if (ctrlAR) {
+                        ctrlAR.style.display = 'block';
+                        ctrlAR.style.position = 'fixed';
+                        ctrlAR.style.top = '0';
+                        ctrlAR.style.right = '0';
+                        ctrlAR.style.bottom = '0';
+                        ctrlAR.style.width = '200px';
+                        ctrlAR.style.zIndex = '50';  // ar-panel (z=60) より下に
+                    }
+                }
                 // canvas DOM ポインタイベントを無効化 (XR select に流す)
                 const cv = document.getElementById('canvas');
                 if (cv) { cv.dataset.arPrevPE = cv.style.pointerEvents || ''; cv.style.pointerEvents = 'none'; }
@@ -5192,6 +5207,16 @@ function onXREnd() {
         document.getElementById('info').style.display = 'block';
         document.getElementById('ctrl').style.display = 'block';
         document.getElementById('params').style.display = 'block';
+        // v298: タブレット AR で設定した #ctrl のインライン幅/位置をクリアし、CSS 既定 (310px) に戻す
+        const ctrlEx = document.getElementById('ctrl');
+        if (ctrlEx) {
+            ctrlEx.style.width = '';
+            ctrlEx.style.position = '';
+            ctrlEx.style.top = '';
+            ctrlEx.style.right = '';
+            ctrlEx.style.bottom = '';
+            ctrlEx.style.zIndex = '';
+        }
     }
     console.log('[XR End] info display=', document.getElementById('info').style.display,
                 ' computed=', getComputedStyle(document.getElementById('info')).display,
