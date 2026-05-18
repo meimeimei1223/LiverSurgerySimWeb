@@ -395,7 +395,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v297</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v298</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -713,9 +713,15 @@ const isMobile = _uiOverride === 'mobile'  ? true
                : _uiOverride === 'desktop' ? false
                : _hasMM                    ? (_primaryCoarse && !_anyFine)
                : (isTouchDevice && (window.innerWidth <= 900 || window.innerHeight <= 500));
+// v298: 低スペック GPU 端末判定 (半透明 mesh 同時表示で FPS が落ちる端末群)
+//        - Touch device (phone / tablet / Surface 等) は GPU が discrete でないことが多い
+//        - Quest (OculusBrowser UA) は Adreno 740 で 3 半透明 mesh で重い
+//        - 該当端末では非 liver を 2-state (OFF/ON) に制限、liver は 3-state 維持
+const isQuest = /OculusBrowser|Quest/i.test(navigator.userAgent);
+const isLowPowerGPU = isTouchDevice || isQuest;
 console.log('[Device]', isMobile ? 'MOBILE' : 'DESKTOP',
     '| pointer:coarse=', _primaryCoarse, 'any-fine=', _anyFine,
-    '| touch=', isTouchDevice,
+    '| touch=', isTouchDevice, 'quest=', isQuest, 'lowGPU=', isLowPowerGPU,
     '| screen=', window.innerWidth + 'x' + window.innerHeight,
     '| override=', _uiOverride || 'none');
 
@@ -750,6 +756,12 @@ let transformDragging = false;
 const meshAlphaValues = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
 const organAlphaStates = [2, 2, 2, 2, 2, 1]; // 0=OFF, 1=50%, 2=ON
 const ORGAN_NUM_STATES = [3, 3, 3, 3, 3, 2];
+// v298: 低スペック GPU では非 liver (index 1-4) を 2-state (OFF/ON) に制限。
+//        Liver (0) は 3-state 維持。Sphere (5) は元々 2-state。
+//        対象: phone, tablet, Surface 等 touch device + Quest3 等 OculusBrowser
+if (isLowPowerGPU) {
+    for (let i = 1; i <= 4; i++) ORGAN_NUM_STATES[i] = 2;
+}
 let liverAlphaValue = 1.0;
 
 // スケルトン解析グリッドサイズ（大きいほど精度UP、処理時間増、60-120）
@@ -3008,10 +3020,7 @@ function drawHandleSpheres3D(M, V, P, cp) {
 function initMobileUI() {
     console.log('[Mobile] Initializing mobile UI');
 
-    // Liver以外は ON/OFF のみ（半透明はスマホで重い）
-    for (let i = 1; i < ORGAN_NUM_STATES.length; i++) {
-        if (i !== 5) ORGAN_NUM_STATES[i] = 2;  // Sphere は元々2
-    }
+    // v298: ORGAN_NUM_STATES の 2-state 化はグローバル初期化で isLowPowerGPU 判定で実施済
 
     // 縦向きメッセージ廃止（縦でも使いやすいUIに改善済み）
 
@@ -3124,7 +3133,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v297</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v298</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
