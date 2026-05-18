@@ -395,7 +395,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v292</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v293</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2059,7 +2059,14 @@ function buildVisibilityUI() {
             <div class="vis-card-status">${numStates===2 ? (state===0?'OFF':'ON') : ['OFF','50%','ON'][state]}</div>
         `;
         card.addEventListener('click', () => {
-            organAlphaStates[i] = (organAlphaStates[i]+1) % numStates;
+            // v292 fix: 2-state モード (スマホ非 liver 等) は (state+1)%2 だと 0↔1 (=OFF↔半透明)
+            //   に閉じてしまい完全 ON (=2) に到達しない。明示的に 0↔2 でトグルする。
+            //   3-state モード (デスクトップ既定) はそのまま 0→1→2→0 循環。
+            if (numStates === 2) {
+                organAlphaStates[i] = organAlphaStates[i] === 0 ? 2 : 0;
+            } else {
+                organAlphaStates[i] = (organAlphaStates[i]+1) % numStates;
+            }
             onAlphaChanged(i, organAlphaStates[i]);
             const s = organAlphaStates[i];
             card.className = `vis-card ${s===0?'state-off':s===1?'state-half':'state-on'}`;
@@ -3115,7 +3122,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v292</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v293</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
