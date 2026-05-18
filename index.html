@@ -395,7 +395,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v296</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v297</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -3124,7 +3124,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v296</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v297</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -4366,9 +4366,11 @@ async function initXR() {
     }
     if (arOk) {
         btnAR.disabled = false;
-        btnAR.onclick = () => {
-            document.getElementById('xr-status').style.display = 'block';
-            document.getElementById('xr-status').textContent = 'Starting AR...';
+        btnAR.onclick = async () => {
+            // v297: fullscreen 状態だと dom-overlay が機能しない (ar-panel ボタン消失バグ) → 先に抜ける
+            if (document.fullscreenElement) {
+                try { await document.exitFullscreen(); } catch (e) {}
+            }
             startXR('immersive-ar');
         };
     }
@@ -4414,9 +4416,11 @@ async function initMobileXR() {
         btn.textContent = 'AR';
         btn.style.cssText = 'padding:4px 12px;border-radius:5px;border:1px solid #7dff7d;' +
             'background:transparent;color:#7dff7d;font-size:11px;font-weight:bold;cursor:pointer;';
-        btn.onclick = () => {
-            document.getElementById('xr-status').style.display = 'block';
-            document.getElementById('xr-status').textContent = 'Starting AR...';
+        btn.onclick = async () => {
+            // v297: fullscreen 状態だと dom-overlay が機能しない (mobile-bar / ar-panel 消失バグ) → 先に抜ける
+            if (document.fullscreenElement) {
+                try { await document.exitFullscreen(); } catch (e) {}
+            }
             startXR('immersive-ar');
         };
         container.appendChild(btn);
@@ -4467,9 +4471,11 @@ async function startXR(mode) {
         document.getElementById('ctrl').style.display = 'none';
         document.getElementById('info').style.display = 'none';
         document.getElementById('params').style.display = 'none';
+        // v297: "AR active" / "VR active" の小文字ステータスを非表示にする (ユーザーに邪魔)。
+        //        エラー時のみ errDiv 経由で表示される (line 5571 以降)。
         const xrSt = document.getElementById('xr-status');
-        xrSt.style.display = 'block';
-        xrSt.textContent = xrMode.toUpperCase() + ' active';
+        xrSt.style.display = 'none';
+        xrSt.textContent = '';
         document.getElementById('btn-' + xrMode).textContent = 'Exit ' + xrMode.toUpperCase();
 
         if (xrMode === 'ar') {
