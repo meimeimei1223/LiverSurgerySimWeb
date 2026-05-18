@@ -395,7 +395,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v294</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v295</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -1505,7 +1505,8 @@ canvas.addEventListener('touchmove', e=>e.preventDefault(), {passive:false});
 let touchState = { active: false, count: 0, prevDist: 0, prevMidX: 0, prevMidY: 0 };
 
 canvas.addEventListener('touchstart', e => {
-    if (!isMobile || e.touches.length < 2) return;
+    // v295: タブレット (iPad Pro + Pencil 等で DESKTOP 判定だがタッチ可能) でも pinch/pan を動かす
+    if (!isTouchDevice || e.touches.length < 2) return;
     // 2本指タッチ開始 → 1本指の操作をキャンセル
     if (activePointerId >= 0) {
         if (grab && sb) { sb.endGrab(); grab = false; }
@@ -1527,7 +1528,7 @@ canvas.addEventListener('touchstart', e => {
 });
 
 canvas.addEventListener('touchmove', e => {
-    if (!isMobile || !touchState.active || e.touches.length < 2) return;
+    if (!isTouchDevice || !touchState.active || e.touches.length < 2) return;
     const t0 = e.touches[0], t1 = e.touches[1];
     const dx = t1.clientX - t0.clientX, dy = t1.clientY - t0.clientY;
     const dist = Math.sqrt(dx*dx + dy*dy);
@@ -1562,7 +1563,7 @@ canvas.addEventListener('touchmove', e => {
 });
 
 canvas.addEventListener('touchend', e => {
-    if (!isMobile) return;
+    if (!isTouchDevice) return;
     if (e.touches.length < 2) {
         touchState.active = false;
         touchState.count = 0;
@@ -3122,7 +3123,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v294</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v295</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
