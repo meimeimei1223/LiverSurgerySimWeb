@@ -395,7 +395,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v311</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v310</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -557,8 +557,8 @@
 </div>
 
 <!-- ボリューム表示パネル (main.cpp drawVolumeWindow 準拠) -->
-<div class="overlay" id="volume-panel" style="top:160px; left:12px; display:none; min-width:200px; font-size:12px; line-height:1.6; cursor:move; touch-action:none; user-select:none;">
-    <div id="vol-title" style="color:#4dc0e6;font-weight:bold;margin-bottom:6px;user-select:none;">Volume Monitor <span style="float:right;color:#556;font-size:10px;">drag</span></div>
+<div class="overlay" id="volume-panel" style="top:160px; left:12px; display:none; min-width:200px; font-size:12px; line-height:1.6; cursor:default;">
+    <div id="vol-title" style="color:#4dc0e6;font-weight:bold;margin-bottom:6px;cursor:move;user-select:none;touch-action:none;">Volume Monitor <span style="float:right;color:#556;font-size:10px;">drag</span></div>
     <div id="vol-content"></div>
 </div>
 
@@ -600,7 +600,7 @@ window.Module = {
     locateFile: function(path) { return path; }
 };
 </script>
-<script src="softbody.js?v=311"></script>
+<script src="softbody.js?v=310"></script>
 <script src="fflate.min.js?v=283"></script>
 <script>
 'use strict';
@@ -2418,31 +2418,25 @@ function completeFragment(rank) {
     titleBar.addEventListener('lostpointercapture', () => { dragging = false; });
 }
 
-// v311: Volume パネル ドラッグ移動 — パネル全体をドラッグ可能化 (モバイル UX 改善)
-//   従来は #vol-title (タイトルバー) のみドラッグ可だったが、タッチ端末でその範囲が狭く
-//   操作しにくい。Export JSON ボタン等の interactive 要素を押した時は drag させない。
+// Volume パネル ドラッグ移動
 {
+    const titleBar = document.getElementById('vol-title');
     const popup = document.getElementById('volume-panel');
-    let dragOfs = {x:0, y:0}, dragging = false, activePointerId = null;
-    popup.addEventListener('pointerdown', e => {
-        // ボタン・input 等の interactive 要素では drag させず、本来のクリック動作を通す
-        if (e.target.closest('button, input, select, textarea, a, label')) return;
+    let dragOfs = {x:0, y:0}, dragging = false;
+    titleBar.addEventListener('pointerdown', e => {
         dragging = true;
-        activePointerId = e.pointerId;
         dragOfs.x = e.clientX - popup.offsetLeft;
         dragOfs.y = e.clientY - popup.offsetTop;
-        try { popup.setPointerCapture(e.pointerId); } catch (err) {}
+        titleBar.setPointerCapture(e.pointerId);
         e.stopPropagation();
     });
-    popup.addEventListener('pointermove', e => {
-        if (!dragging || e.pointerId !== activePointerId) return;
+    titleBar.addEventListener('pointermove', e => {
+        if (!dragging) return;
         popup.style.left = (e.clientX - dragOfs.x) + 'px';
         popup.style.top = (e.clientY - dragOfs.y) + 'px';
     });
-    popup.addEventListener('pointerup', e => {
-        if (e.pointerId === activePointerId) { dragging = false; activePointerId = null; }
-    });
-    popup.addEventListener('lostpointercapture', () => { dragging = false; activePointerId = null; });
+    titleBar.addEventListener('pointerup', () => { dragging = false; });
+    titleBar.addEventListener('lostpointercapture', () => { dragging = false; });
 }
 
 function cancelFragment() {
@@ -3352,7 +3346,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v311</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v310</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
