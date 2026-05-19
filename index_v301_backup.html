@@ -395,7 +395,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v302</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v301</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -598,7 +598,7 @@ window.Module = {
     locateFile: function(path) { return path; }
 };
 </script>
-<script src="softbody.js?v=302"></script>
+<script src="softbody.js?v=301"></script>
 <script src="fflate.min.js?v=283"></script>
 <script>
 'use strict';
@@ -2458,12 +2458,11 @@ function updateVolumePanel() {
         html += '<div style="margin-top:6px;border-top:1px solid #333;padding-top:4px;font-size:11px;">';
         html += '<div style="font-size:10px;color:#888;margin-bottom:2px;">Other Organs</div>';
         // main.cpp の表示順 (Portal → Vein → Tumor → Liver(exclude tumor) → GB) を踏襲
-        // v302: < 0.01 閾値は撤去。C++ desktop (ImGuiManager.h:717-734) は無条件に
-        // 全 otherOrgans を表示する。閾値で sklp すると児臓器が消えるバグの原因に。
         const orgOrder = ['Portal', 'Vein', 'Tumor'];
         for (const name of orgOrder) {
             if (_otherOrgansInitial && _otherOrgansInitial[name] !== undefined) {
                 const v = _otherOrgansInitial[name];
+                if (v < 0.01) continue;
                 html += `<div style="display:flex;justify-content:space-between;line-height:1.6;">`;
                 html += `<span style="color:#aab;">${name}</span>`;
                 html += `<span style="color:#ccc;">${v.toFixed(1)} ml</span>`;
@@ -2482,7 +2481,7 @@ function updateVolumePanel() {
             html += `<span><span style="color:#ccc;">${cur.toFixed(1)} ml</span> <span style="color:${ratioColor(pct)};">(${pct.toFixed(1)}%)</span></span>`;
             html += `</div>`;
         }
-        if (_otherOrgansInitial && _otherOrgansInitial['GB'] !== undefined) {
+        if (_otherOrgansInitial && _otherOrgansInitial['GB'] !== undefined && _otherOrgansInitial['GB'] >= 0.01) {
             html += `<div style="display:flex;justify-content:space-between;line-height:1.6;">`;
             html += `<span style="color:#aab;">GB</span>`;
             html += `<span style="color:#ccc;">${_otherOrgansInitial['GB'].toFixed(1)} ml</span>`;
@@ -3218,7 +3217,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v302</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v301</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
