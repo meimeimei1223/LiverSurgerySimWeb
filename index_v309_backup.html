@@ -395,7 +395,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v310</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v309</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -600,7 +600,7 @@ window.Module = {
     locateFile: function(path) { return path; }
 };
 </script>
-<script src="softbody.js?v=310"></script>
+<script src="softbody.js?v=309"></script>
 <script src="fflate.min.js?v=283"></script>
 <script>
 'use strict';
@@ -2540,86 +2540,7 @@ function updateVolumePanel() {
         html += '</div>';
     }
 
-    // v310: Export JSON ボタン (paper 20 case 集計用)
-    html += '<div style="margin-top:8px;border-top:1px solid #333;padding-top:6px;">';
-    html += '<button onclick="exportVolumeData()" ' +
-        'style="width:100%;border:1px solid #4dc0e6;background:rgba(77,192,230,0.10);' +
-        'color:#4dc0e6;padding:6px 10px;border-radius:4px;font-size:11px;cursor:pointer;' +
-        'font-weight:bold;">Export JSON</button>';
-    html += '</div>';
-
     document.getElementById('vol-content').innerHTML = html;
-}
-
-// v310: Volume data を JSON にして download (論文 20 case 集計用)
-// 出力構造は paper-volume-v1 計測項目に準拠 ([[project_plan_volume]] 参照):
-//   meta (version, exportedAt, useOBJSegmentation, hasTumorMask),
-//   liver (total, originalTotal, remnantPct, excludeTumor*),
-//   segments (S1-S8: current/original/ratio/pctOfLiver),
-//   otherOrgans (Portal/Vein/Tumor/GB の initial ml)
-function exportVolumeData() {
-    if (!sb || !sb.areVolumesCaptured()) {
-        alert('Volumes not yet captured. Load a model first.');
-        return;
-    }
-    const useOBJ = typeof sb.isOBJSegmentsBound === 'function' && sb.isOBJSegmentsBound();
-    const totalCur = sb.calculateTotalVolume();
-    const totalOrig = sb.getOriginalTotalVolume();
-    const data = {
-        meta: {
-            exportedAt: new Date().toISOString(),
-            appVersion: 'v310',
-            useOBJSegmentation: useOBJ,
-            hasTumorMask: typeof sb.hasTumorOverlapMask === 'function' && sb.hasTumorOverlapMask(),
-        },
-        liver: {
-            total_ml: totalCur,
-            originalTotal_ml: totalOrig,
-            remnantPct: totalOrig > 0 ? totalCur / totalOrig * 100 : null,
-        },
-        segments: {},
-        otherOrgans: {},
-    };
-    if (data.meta.hasTumorMask) {
-        const cur = sb.calculateTotalVolumeExcludingMask();
-        const org = sb.getOriginalTotalVolumeExcludingTumor();
-        data.liver.excludeTumor_ml = cur;
-        data.liver.excludeTumor_original_ml = org;
-        data.liver.excludeTumor_pct = org > 0 ? cur / org * 100 : null;
-    }
-    if (useOBJ) {
-        for (let id = 1; id <= 8; id++) {
-            const cur = sb.calculateSegmentVolume(id, useOBJ);
-            const org = sb.getOriginalSegmentVolume(id, useOBJ);
-            data.segments['S' + id] = {
-                current_ml: cur,
-                original_ml: org,
-                ratioToOriginal_pct: org > 0.01 ? cur / org * 100 : null,
-                pctOfLiverOriginal: totalOrig > 0 ? cur / totalOrig * 100 : null,
-            };
-        }
-    }
-    if (_otherOrgansInitial) {
-        for (const name of ['Portal', 'Vein', 'Tumor', 'GB']) {
-            if (_otherOrgansInitial[name] !== undefined) {
-                data.otherOrgans[name + '_ml'] = _otherOrgansInitial[name];
-            }
-        }
-    }
-    const json = JSON.stringify(data, null, 2);
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'volume_' + ts + '.json';
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => {
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-    }, 100);
-    console.log('[Volume] exported', a.download);
 }
 
 // v301: Volume cache invalidation helper (cut/undo 後に呼ぶ)
@@ -3346,7 +3267,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v310</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v309</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
