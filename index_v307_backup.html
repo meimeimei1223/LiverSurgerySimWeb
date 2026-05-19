@@ -395,7 +395,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v308</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v307</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -600,7 +600,7 @@ window.Module = {
     locateFile: function(path) { return path; }
 };
 </script>
-<script src="softbody.js?v=308"></script>
+<script src="softbody.js?v=307"></script>
 <script src="fflate.min.js?v=283"></script>
 <script>
 'use strict';
@@ -3267,7 +3267,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v308</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v307</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -4648,9 +4648,9 @@ function showFullscreenARWarning() {
             'max-width:85vw;box-shadow:0 4px 20px rgba(0,0,0,0.85);';
         document.body.appendChild(hint);
     }
-    hint.innerHTML = '⚠️ Please exit fullscreen first<br>' +
+    hint.innerHTML = '⚠️ 全画面モードを解除してください<br>' +
         '<span style="font-size:12px;color:#ddd;font-weight:normal;">' +
-        'Tap the ⛶ button to exit, then tap AR</span>';
+        '⛶ ボタンで解除してから AR を押してください</span>';
     hint.style.display = 'block';
     clearTimeout(showFullscreenARWarning._t);
     showFullscreenARWarning._t = setTimeout(() => {
@@ -4664,7 +4664,7 @@ document.addEventListener('fullscreenchange', () => {
     if (!arBtn) return;
     if (document.fullscreenElement) {
         arBtn.style.opacity = '0.45';
-        arBtn.title = 'Exit fullscreen before tapping AR';
+        arBtn.title = '全画面を解除してから AR を押してください';
     } else {
         arBtn.style.opacity = '';
         arBtn.title = '';
