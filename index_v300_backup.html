@@ -395,7 +395,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v301</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v300</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -598,7 +598,7 @@ window.Module = {
     locateFile: function(path) { return path; }
 };
 </script>
-<script src="softbody.js?v=301"></script>
+<script src="softbody.js?v=288"></script>
 <script src="fflate.min.js?v=283"></script>
 <script>
 'use strict';
@@ -762,14 +762,6 @@ const ORGAN_NUM_STATES = [3, 3, 3, 3, 3, 2];
 if (isLowPowerGPU) {
     for (let i = 1; i <= 4; i++) ORGAN_NUM_STATES[i] = 2;
 }
-
-// v301: Volume panel cache (Liver exclude tumor は lazy 計算)
-//  - Open 時: cache が null なら calculateTotalVolumeExcludingMask()
-//  - Cut 後: invalidate (各 cut/undo 呼出点で null 化)
-//  - Close 時: invalidate (再 Open でまた計算が走る)
-// Other Organs (Portal/Vein/Tumor/GB) は initial 値を起動時 1 回キャプチャ。
-let _excludeTumorCache = null;
-let _otherOrgansInitial = null;  // {Portal, Vein, Tumor, GB, ...} → 初期 ml
 let liverAlphaValue = 1.0;
 
 // スケルトン解析グリッドサイズ（大きいほど精度UP、処理時間増、60-120）
@@ -1265,7 +1257,7 @@ function doReset() {
     // モードリセット
     setActionMode('none');
     setVisualMode(false);
-    invalidateVolumeCache(); updateVolumePanel();
+    updateVolumePanel();
     document.getElementById('handle-count').textContent = '';
     console.log('[Reset] All reset complete');
 }
@@ -1324,7 +1316,7 @@ document.getElementById('cut-popup-btn').addEventListener('click', ()=>{
     cutterPlaced = false;
     document.getElementById('cut-popup').style.display = 'none';
     document.getElementById('cut-status').textContent = count > 0 ? count + ' tets cut' : 'No intersection';
-    if (count > 0) { invalidateVolumeCache(); updateVolumePanel(); syncHandlesAfterCut(); }
+    if (count > 0) { updateVolumePanel(); syncHandlesAfterCut(); }
 });
 
 // Seg Overlay トグル (Q key, main.cpp cycleCutMode 準拠)
@@ -1495,7 +1487,7 @@ document.getElementById('btn-undo-cut').addEventListener('click', ()=>{
     }
     numHighlightIdx = 0;
     document.getElementById('cut-status').textContent = 'Undo done';
-    invalidateVolumeCache(); updateVolumePanel();
+    updateVolumePanel();
 });
 document.getElementById('cut-scale').addEventListener('input', function(){
     const val = parseFloat(this.value);
@@ -2229,18 +2221,13 @@ function updateSegSelectBtns() {
 }
 
 // Volume パネルトグル (main.cpp: B キー, drawSubToggle("Volume") 準拠)
-// v301: close で _excludeTumorCache を invalidate (再 Open でまた計算)。
 function toggleVolumePanel() {
     const panel = document.getElementById('volume-panel');
     const btn = document.getElementById('btn-volume');
     const show = panel.style.display === 'none';
     panel.style.display = show ? 'block' : 'none';
     btn.style.background = show ? '#1a6b8a' : '#555';
-    if (show) {
-        updateVolumePanel();
-    } else {
-        _excludeTumorCache = null;
-    }
+    if (show) updateVolumePanel();
 }
 
 // Fragment Selection ポップアップ (main.cpp drawFragmentChoicePopup 準拠)
@@ -2350,7 +2337,7 @@ function completeFragment(rank) {
     cutterPlaced = false;
     document.getElementById('cut-popup').style.display = 'none';
     document.getElementById('cut-status').textContent = 'Fragment ' + (rank+1) + ' kept';
-    invalidateVolumeCache(); updateVolumePanel();
+    updateVolumePanel();
     syncHandlesAfterCut();
 }
 
@@ -2407,7 +2394,7 @@ function cancelFragment() {
     updateMesh();
     if (wireOn) updateWire();
     document.getElementById('cut-status').textContent = 'Cut cancelled';
-    invalidateVolumeCache(); updateVolumePanel();
+    updateVolumePanel();
 }
 
 // ボリューム表示パネル更新 (main.cpp renderVolumeOverlay 準拠)
@@ -2447,78 +2434,7 @@ function updateVolumePanel() {
         }
         html += '</div>';
     }
-
-    // v301: Cut Selection セクション (cut 中のみ表示) — main.cpp:2154-2167 準拠
-    // ※ 現状 cut selection の C++ 側 embind が未公開のため、別途実装時に追加
-
-    // v301: Other Organs セクション (main.cpp:2170-2191 準拠)
-    // Portal/Vein/Tumor/GB は initial 値 (起動時キャプチャ済)
-    // Liver (exclude tumor) のみ live + lazy cache
-    if (_otherOrgansInitial || sb.hasTumorOverlapMask()) {
-        html += '<div style="margin-top:6px;border-top:1px solid #333;padding-top:4px;font-size:11px;">';
-        html += '<div style="font-size:10px;color:#888;margin-bottom:2px;">Other Organs</div>';
-        // main.cpp の表示順 (Portal → Vein → Tumor → Liver(exclude tumor) → GB) を踏襲
-        const orgOrder = ['Portal', 'Vein', 'Tumor'];
-        for (const name of orgOrder) {
-            if (_otherOrgansInitial && _otherOrgansInitial[name] !== undefined) {
-                const v = _otherOrgansInitial[name];
-                if (v < 0.01) continue;
-                html += `<div style="display:flex;justify-content:space-between;line-height:1.6;">`;
-                html += `<span style="color:#aab;">${name}</span>`;
-                html += `<span style="color:#ccc;">${v.toFixed(1)} ml</span>`;
-                html += `</div>`;
-            }
-        }
-        if (sb.hasTumorOverlapMask()) {
-            if (_excludeTumorCache === null) {
-                _excludeTumorCache = sb.calculateTotalVolumeExcludingMask();
-            }
-            const cur = _excludeTumorCache;
-            const org = sb.getOriginalTotalVolumeExcludingTumor();
-            const pct = org > 0 ? (cur / org * 100) : 0;
-            html += `<div style="display:flex;justify-content:space-between;line-height:1.6;">`;
-            html += `<span style="color:#aab;">Liver (exclude tumor)</span>`;
-            html += `<span><span style="color:#ccc;">${cur.toFixed(1)} ml</span> <span style="color:${ratioColor(pct)};">(${pct.toFixed(1)}%)</span></span>`;
-            html += `</div>`;
-        }
-        if (_otherOrgansInitial && _otherOrgansInitial['GB'] !== undefined && _otherOrgansInitial['GB'] >= 0.01) {
-            html += `<div style="display:flex;justify-content:space-between;line-height:1.6;">`;
-            html += `<span style="color:#aab;">GB</span>`;
-            html += `<span style="color:#ccc;">${_otherOrgansInitial['GB'].toFixed(1)} ml</span>`;
-            html += `</div>`;
-        }
-        html += '</div>';
-    }
-
     document.getElementById('vol-content').innerHTML = html;
-}
-
-// v301: Volume cache invalidation helper (cut/undo 後に呼ぶ)
-function invalidateVolumeCache() { _excludeTumorCache = null; }
-
-// v301: 起動時 / OBJ drop 後の Volume 初期化共通処理
-//   captureOriginalVolumes() の後に呼び、Other Organs initial 値 + tumor mask 構築。
-function initVolumeAfterCapture() {
-    _otherOrgansInitial = {};
-    let tumorChildIdx = -1;
-    for (let i = 0; i < childBuffers.length; i++) {
-        const label = childBuffers[i].label;
-        try {
-            const v = sb.getChildTotalVolume(i);
-            if (label && label !== 'liver') _otherOrgansInitial[label] = v;
-        } catch (e) { console.warn('[Volume] getChildTotalVolume', i, e); }
-        if (label && label.toLowerCase() === 'tumor') tumorChildIdx = i;
-    }
-    if (tumorChildIdx >= 0) {
-        const t0 = performance.now();
-        try {
-            sb.buildTumorOverlapMaskFromChild(tumorChildIdx);
-            console.log('[Volume] tumor mask built in',
-                (performance.now() - t0).toFixed(1), 'ms; original exclude-tumor =',
-                sb.getOriginalTotalVolumeExcludingTumor().toFixed(1), 'ml');
-        } catch (e) { console.warn('[Volume] buildTumorOverlapMaskFromChild failed', e); }
-    }
-    _excludeTumorCache = null;
 }
 
 // Seg Cut 実行
@@ -2565,7 +2481,7 @@ function doSegCut() {
             gl.bufferData(gl.ARRAY_BUFFER, segColors, gl.DYNAMIC_DRAW);
         }
         document.getElementById('seg-select-status').textContent = count + ' tets cut';
-        invalidateVolumeCache(); updateVolumePanel();
+        updateVolumePanel();
         syncHandlesAfterCut();
     } else {
         document.getElementById('seg-select-status').textContent = 'No segments selected';
@@ -2606,7 +2522,7 @@ function doSegUndo() {
         gl.bufferData(gl.ARRAY_BUFFER, segColors, gl.DYNAMIC_DRAW);
     }
     document.getElementById('seg-select-status').textContent = 'Undo done';
-    invalidateVolumeCache(); updateVolumePanel();
+    updateVolumePanel();
     // mobile/AR サブパネル再描画 (Liver/Portal ボタンのハイライトを segSelectMode=null に同期)
     if (typeof updateMobileSubPanel === 'function') updateMobileSubPanel();
 }
@@ -3217,7 +3133,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v301</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v300</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -3904,7 +3820,6 @@ async function initApp() {
                 console.log('[Volume] scaleFactor from transform_info.txt:', scaleFactor);
                 sb.setVolumeScaleFactor(scaleFactor);
                 sb.captureOriginalVolumes();
-                initVolumeAfterCapture();  // v301: Other Organs initial + tumor mask
                 updateVolumePanel();
                 document.getElementById('btn-volume').style.display = 'inline-block';
             }
@@ -4273,7 +4188,6 @@ async function runTetrahedralization(classified) {
         console.log('[Volume] scaleFactor from tet:', dropScale);
         sb.setVolumeScaleFactor(dropScale);
         sb.captureOriginalVolumes();
-        initVolumeAfterCapture();  // v301: Other Organs initial + tumor mask
         updateVolumePanel();
         document.getElementById('btn-volume').style.display = 'inline-block';
 
@@ -7900,7 +7814,6 @@ function vrExecuteCut() {
     }
     if (count > 0) {
         if (wireOn) updateWire();
-        invalidateVolumeCache();
         if (typeof updateVolumePanel === 'function') updateVolumePanel();
         if (typeof syncHandlesAfterCut === 'function') syncHandlesAfterCut();
     }
@@ -7929,7 +7842,6 @@ function vrCompleteFragment(rank) {
     }
     cutterPlaced = false;
     vrCutterPlaced = false;
-    invalidateVolumeCache();
     if (typeof updateVolumePanel === 'function') updateVolumePanel();
     if (typeof syncHandlesAfterCut === 'function') syncHandlesAfterCut();
 }
@@ -7974,7 +7886,6 @@ function vrUndoCut() {
             extUint ? new Uint32Array(cidx) : new Uint16Array(cidx), gl.STATIC_DRAW);
     }
     if (wireOn) updateWire();
-    invalidateVolumeCache();
     if (typeof updateVolumePanel === 'function') updateVolumePanel();
     if (typeof syncHandlesAfterCut === 'function') syncHandlesAfterCut();
     cutterPlaced = false;
