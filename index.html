@@ -395,7 +395,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v311</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v312</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -574,7 +574,7 @@ window.onerror = function(msg, url, line, col, err) {
         msg + '\n' + url + ':' + line + ':' + col + '\n' + (err&&err.stack||'');
 };
 
-// v307: v305 で入れた画面内 LOG overlay は不要になったので削除。
+// v307: Removed the in-page LOG overlay that was added in v305 (no longer needed).
 // v268: 起動時間計測 (Quest3 でローディング 16秒問題の調査用)
 window._tStart = performance.now();
 window._perf = {
@@ -600,7 +600,7 @@ window.Module = {
     locateFile: function(path) { return path; }
 };
 </script>
-<script src="softbody.js?v=311"></script>
+<script src="softbody.js?v=312"></script>
 <script src="fflate.min.js?v=283"></script>
 <script>
 'use strict';
@@ -765,17 +765,18 @@ if (isLowPowerGPU) {
     for (let i = 1; i <= 4; i++) ORGAN_NUM_STATES[i] = 2;
 }
 
-// v301: Volume panel cache (Liver exclude tumor は lazy 計算)
-//  - Open 時: cache が null なら calculateTotalVolumeExcludingMask()
-//  - Cut 後: invalidate (各 cut/undo 呼出点で null 化)
-//  - Close 時: invalidate (再 Open でまた計算が走る)
-// Other Organs (Portal/Vein/Tumor/GB) は initial 値を起動時 1 回キャプチャ。
+// v301: Volume panel cache ("Liver excluding tumor" is computed lazily).
+//   - On open:  recompute via calculateTotalVolumeExcludingMask() if the cache is null.
+//   - After cut: invalidate at every cut/undo call site so the next render recomputes.
+//   - On close: invalidate (so the next open recomputes from scratch).
+// Other Organs (Portal/Vein/Tumor/GB) are captured once at startup as initial values.
 let _excludeTumorCache = null;
-let _otherOrgansInitial = null;  // {Portal, Vein, Tumor, GB, ...} → 初期 ml
+let _otherOrgansInitial = null;  // {Portal, Vein, Tumor, GB, ...} -> initial volume (ml)
 
-// v303: S1-S8 と Liver の色定数。C++ palette (VoxelSkeletonSegmentation.cpp:28-44 の
-// palette[segmentId % 12]) と Liver の base color (index.html:2623 solidColor) と一致。
-//   palette[0] は予約 (unused)、S1=palette[1] ... S8=palette[8]
+// v303: Colour palette for S1-S8 and Liver. Matches the C++ palette in
+// VoxelSkeletonSegmentation.cpp:28-44 (palette[segmentId % 12]) and the Liver
+// base colour at index.html:2623 (solidColor).
+//   palette[0] is reserved (unused); S1 = palette[1], ..., S8 = palette[8].
 const SEG_PALETTE = [
     null,                          // 0: unused
     [0.20, 0.70, 0.90],            // S1
@@ -2250,9 +2251,9 @@ function updateSegSelectBtns() {
     document.getElementById('seg-select-status').textContent = segSelectMode ? (segSelectMode + ' select active') : '';
 }
 
-// Volume パネルトグル (main.cpp: B キー, drawSubToggle("Volume") 準拠)
-// v301: close で _excludeTumorCache を invalidate (再 Open でまた計算)。
-// v304: isTouchDevice では panel を小さめに描画 (open のたびにスタイル適用)。
+// Volume panel toggle (mirrors main.cpp: B key, drawSubToggle("Volume")).
+// v301: invalidate _excludeTumorCache on close so the next open recomputes.
+// v304: shrink the panel on touch devices (style applied on each open).
 function toggleVolumePanel() {
     const panel = document.getElementById('volume-panel');
     const btn = document.getElementById('btn-volume');
@@ -2260,7 +2261,7 @@ function toggleVolumePanel() {
     panel.style.display = show ? 'block' : 'none';
     if (btn) btn.style.background = show ? '#1a6b8a' : '#555';
     if (show) {
-        // v304: タッチ端末 (mobile/tablet) は font/min-width を縮小
+        // v304: shrink font / min-width on touch devices (mobile/tablet)
         if (isTouchDevice) {
             panel.style.minWidth = '160px';
             panel.style.fontSize = '11px';
@@ -2273,7 +2274,7 @@ function toggleVolumePanel() {
     }
 }
 
-// v304: 強制 close (orientation 変化 / AR 起動 時に呼ぶ)
+// v304: Force-close the Volume panel (called on orientation change and on AR/VR start).
 function forceCloseVolumePanel() {
     const panel = document.getElementById('volume-panel');
     if (panel && panel.style.display !== 'none') {
@@ -2418,14 +2419,15 @@ function completeFragment(rank) {
     titleBar.addEventListener('lostpointercapture', () => { dragging = false; });
 }
 
-// v311: Volume パネル ドラッグ移動 — パネル全体をドラッグ可能化 (モバイル UX 改善)
-//   従来は #vol-title (タイトルバー) のみドラッグ可だったが、タッチ端末でその範囲が狭く
-//   操作しにくい。Export JSON ボタン等の interactive 要素を押した時は drag させない。
+// v311: Volume panel drag — make the whole panel draggable (mobile UX improvement).
+//   Originally only #vol-title (the title bar) was draggable, but on touch
+//   devices that strip is too narrow to grab. Tapping interactive elements
+//   such as the Export JSON button does NOT start a drag.
 {
     const popup = document.getElementById('volume-panel');
     let dragOfs = {x:0, y:0}, dragging = false, activePointerId = null;
     popup.addEventListener('pointerdown', e => {
-        // ボタン・input 等の interactive 要素では drag させず、本来のクリック動作を通す
+        // Skip drag on buttons / inputs / etc. so their normal click action fires.
         if (e.target.closest('button, input, select, textarea, a, label')) return;
         dragging = true;
         activePointerId = e.pointerId;
@@ -2483,7 +2485,7 @@ function updateVolumePanel() {
             const curVol = sb.calculateSegmentVolume(id, useOBJ);
             const pct = totalOrig > 0 ? (curVol / totalOrig * 100) : 0;
             const ratio = origVol > 0.01 ? (curVol / origVol * 100) : 100;
-            // v303: ラベル色を C++ palette[segmentId] と一致 (3D 表示と同じ色)
+            // v303: Match the label colour to the C++ palette[segmentId] (same as the 3D view).
             const segColor = SEG_PALETTE[id] ? _rgbCss(SEG_PALETTE[id]) : '#aab';
             html += `<div style="display:flex;gap:4px;line-height:1.6;">`;
             html += `<span style="color:${segColor};min-width:22px;font-weight:bold;">S${id}</span>`;
@@ -2497,18 +2499,18 @@ function updateVolumePanel() {
         html += '</div>';
     }
 
-    // v301: Cut Selection セクション (cut 中のみ表示) — main.cpp:2154-2167 準拠
-    // ※ 現状 cut selection の C++ 側 embind が未公開のため、別途実装時に追加
+    // v301: Cut Selection section (visible only during an active cut) — mirrors main.cpp:2154-2167.
+    //       NOTE: the C++ embind for cut selection is not yet exposed; deferred until then.
 
-    // v303: Other Organs セクション
-    // 表示順 (ユーザ指定): Liver (exclude tumor) → Portal → Vein → Tumor → GB
-    // 各ラベルに 3D 表示と同じ色を付与。childBuffers[i].color から取得。
-    // Liver (exclude tumor) のみ live + lazy cache、他は initial 起動時キャプチャ。
+    // v303: Other Organs section.
+    // Display order (user-specified): Liver (exclude tumor) -> Portal -> Vein -> Tumor -> GB.
+    // Each label inherits the colour of the 3D mesh, pulled from childBuffers[i].color.
+    // Only "Liver (exclude tumor)" is live + lazy-cached; the rest are captured once at startup.
     if (_otherOrgansInitial || sb.hasTumorOverlapMask()) {
         html += '<div style="margin-top:6px;border-top:1px solid #333;padding-top:4px;font-size:11px;">';
         html += '<div style="font-size:10px;color:#888;margin-bottom:2px;">Other Organs</div>';
 
-        // childBuffers から label → color map を構築
+        // Build a label -> color map from childBuffers.
         const childColorByLabel = {};
         for (let i = 0; i < childBuffers.length; i++) {
             const lbl = childBuffers[i].label;
@@ -2530,7 +2532,7 @@ function updateVolumePanel() {
             html += `</div>`;
         }
 
-        // (2)-(5) Portal → Vein → Tumor → GB の順
+        // (2)-(5) Portal -> Vein -> Tumor -> GB, in that order.
         const orgOrder = ['Portal', 'Vein', 'Tumor', 'GB'];
         for (const name of orgOrder) {
             if (_otherOrgansInitial && _otherOrgansInitial[name] !== undefined) {
@@ -2546,7 +2548,7 @@ function updateVolumePanel() {
         html += '</div>';
     }
 
-    // v310: Export JSON ボタン (paper 20 case 集計用)
+    // v310: Export JSON button (used to aggregate the 20-case paper measurements).
     html += '<div style="margin-top:8px;border-top:1px solid #333;padding-top:6px;">';
     html += '<button onclick="exportVolumeData()" ' +
         'style="width:100%;border:1px solid #4dc0e6;background:rgba(77,192,230,0.10);' +
@@ -2557,11 +2559,11 @@ function updateVolumePanel() {
     document.getElementById('vol-content').innerHTML = html;
 }
 
-// v310: Volume data を JSON にして download (論文 20 case 集計用)
-// 出力構造は paper-volume-v1 計測項目に準拠 ([[project_plan_volume]] 参照):
-//   meta (version, exportedAt, useOBJSegmentation, hasTumorMask),
-//   liver (total, originalTotal, remnantPct, excludeTumor*),
-//   segments (S1-S8: current/original/ratio/pctOfLiver),
+// v310: Download the current Volume data as JSON (for 20-case paper aggregation).
+// Output schema follows the paper-volume-v1 measurement contract (see project_plan_volume memory):
+//   meta       (appVersion, exportedAt, useOBJSegmentation, hasTumorMask)
+//   liver      (total, originalTotal, remnantPct, excludeTumor*)
+//   segments   (S1-S8: current/original/ratio/pctOfLiver)
 //   otherOrgans (Portal/Vein/Tumor/GB の initial ml)
 function exportVolumeData() {
     if (!sb || !sb.areVolumesCaptured()) {
@@ -2574,7 +2576,7 @@ function exportVolumeData() {
     const data = {
         meta: {
             exportedAt: new Date().toISOString(),
-            appVersion: 'v310',
+            appVersion: 'v312',
             useOBJSegmentation: useOBJ,
             hasTumorMask: typeof sb.hasTumorOverlapMask === 'function' && sb.hasTumorOverlapMask(),
         },
@@ -2628,11 +2630,12 @@ function exportVolumeData() {
     console.log('[Volume] exported', a.download);
 }
 
-// v301: Volume cache invalidation helper (cut/undo 後に呼ぶ)
+// v301: Volume cache invalidation helper (call after every cut / undo).
 function invalidateVolumeCache() { _excludeTumorCache = null; }
 
-// v301: 起動時 / OBJ drop 後の Volume 初期化共通処理
-//   captureOriginalVolumes() の後に呼び、Other Organs initial 値 + tumor mask 構築。
+// v301: Common Volume initialisation invoked after captureOriginalVolumes()
+//   (both at default-model load and at OBJ drop). Captures Other Organs
+//   initial values and builds the tumor overlap mask.
 function initVolumeAfterCapture() {
     _otherOrgansInitial = {};
     let tumorChildIdx = -1;
@@ -3352,7 +3355,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v311</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v312</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -3502,10 +3505,9 @@ function applyMobileLandscapeLayout() {
         if (bar) bar.style.display = '';
         if (typeof updateMobileSubPanel === 'function') updateMobileSubPanel();
         ensureMobileLandFsBtn(false);
-        // v304: landscape → portrait (or XR 入る) に切り替わった瞬間、
-        // landscape で開いた volume-panel が portrait に残らないよう強制 close。
-        // この panel が DOM overlay として body 直下にあるため、AR 起動時に
-        // カメラ描画と干渉してしまうバグ対策。
+        // v304: On the landscape -> portrait transition (or when entering XR),
+        // force-close the Volume panel so it doesn't linger as a body-level
+        // DOM overlay. Without this it would interfere with the AR camera feed.
         if (typeof forceCloseVolumePanel === 'function') forceCloseVolumePanel();
     }
 }
@@ -3719,7 +3721,7 @@ function updateMobileSubPanel() {
                 const sp = totalOrig > 0 ? (cv/totalOrig*100) : 0;
                 const ratio = origV > 0.01 ? (cv/origV*100) : 100;
                 const rCol = (ratio >= 80 && ratio <= 120) ? '#7dff7d' : ratio >= 60 ? '#ffcc33' : '#ff5555';
-                // v304: ラベル色を desktop volume-panel と同じ SEG_PALETTE に統一
+                // v304: Match label colour to SEG_PALETTE (same as the desktop Volume panel).
                 const segCol = (typeof SEG_PALETTE !== 'undefined' && SEG_PALETTE[id])
                     ? _rgbCss(SEG_PALETTE[id]) : '#4dc0e6';
                 html += `<span style="color:${segCol};font-weight:bold;">S${id}</span>:${cv.toFixed(0)}ml(${sp.toFixed(1)}%)`;
@@ -3729,8 +3731,8 @@ function updateMobileSubPanel() {
             }
             html += '<br>';
         }
-        // v304: portrait モバイルでも Other Organs (Liver excl + Portal/Vein/Tumor/GB)
-        //        コンパクト 1 行で表示。色は 3D 表示と同じ。
+        // v304: Also show Other Organs (Liver-excl + Portal/Vein/Tumor/GB) on mobile portrait
+        //        as a single compact row, using the same colours as the 3D view.
         const hasMask = typeof sb.hasTumorOverlapMask === 'function' && sb.hasTumorOverlapMask();
         if (hasMask || _otherOrgansInitial) {
             const childColorByLabel = {};
@@ -4627,7 +4629,7 @@ async function initXR() {
         }
     }
     if (vrOk) {
-        // v300: タッチ端末 (タブレット等で desktop UI 経由) は HMD を持たないので VR を disable
+        // v300: Touch devices (e.g. tablets routed through the desktop UI) have no HMD, so disable VR.
         if (isTouchDevice) {
             btnVR.disabled = true;
             btnVR.title = 'VR は Quest 等の専用 HMD で利用可';
@@ -4639,10 +4641,12 @@ async function initXR() {
     if (arOk) {
         btnAR.disabled = false;
         btnAR.onclick = () => {
-            // v306: 全画面 + AR の組み合わせは fullscreen-API と dom-overlay の競合で
-            // 「ことがある」レベルで intermittent fail する (ブラウザ実装依存)。
-            // v297 で auto-exitFullscreen を入れたが silent failure を完全には防げないため、
-            // v306 で「全画面中は AR を起動させず、明示的に警告」に変更。
+            // v306: Combining fullscreen with AR causes intermittent failures
+            // ("ことがある" / "sometimes") because the Fullscreen API and the WebXR
+            // dom-overlay conflict in a browser-dependent way. v297 added
+            // auto-exitFullscreen, but that did not fully prevent silent failures.
+            // v306 changes the behaviour to: do not start AR while fullscreen is
+            // active, and show an explicit warning instead.
             if (document.fullscreenElement) {
                 console.warn('[AR-btn DESKTOP] blocked: fullscreen active');
                 showFullscreenARWarning();
@@ -4685,14 +4689,14 @@ async function initMobileXR() {
         btn.textContent = 'VR';
         btn.style.cssText = 'padding:4px 12px;border-radius:5px;border:1px solid #4dc0e6;' +
             'background:transparent;color:#4dc0e6;font-size:11px;font-weight:bold;cursor:pointer;';
-        // v300: タッチ端末 (phone / tablet) は HMD を持たないので VR を実質的に使えない。
-        //        ブラウザが immersive-vr=supported を返してきても disable + 視覚的にグレーアウト。
-        //        Quest 3 等 isTouchDevice=false の HMD では従来通り有効。
+        // v300: Touch devices (phones / tablets) have no HMD, so VR cannot really be used.
+        //       Even if the browser reports immersive-vr=supported, disable the button and
+        //       grey it out. HMDs such as Quest 3 (isTouchDevice=false) remain enabled.
         if (isTouchDevice) {
             btn.disabled = true;
             btn.style.opacity = '0.35';
             btn.style.cursor = 'not-allowed';
-            btn.title = 'VR は Quest 等の専用 HMD で利用可';
+            btn.title = 'VR requires a dedicated HMD such as Quest';
         } else {
             btn.onclick = () => startXR('immersive-vr');
         }
@@ -4705,8 +4709,9 @@ async function initMobileXR() {
         btn.style.cssText = 'padding:4px 12px;border-radius:5px;border:1px solid #7dff7d;' +
             'background:transparent;color:#7dff7d;font-size:11px;font-weight:bold;cursor:pointer;';
         btn.onclick = () => {
-            // v306: 全画面中の AR 起動は intermittent fail するため明示的に警告。
-            //        (v297 の auto-exit は silent failure を完全には防げなかった)
+            // v306: Starting AR while fullscreen is active fails intermittently,
+            //        so block it and show an explicit warning.
+            //        (The v297 auto-exit could not fully prevent silent failures.)
             if (document.fullscreenElement) {
                 console.warn('[AR-btn MOBILE] blocked: fullscreen active');
                 showFullscreenARWarning();
@@ -4720,7 +4725,7 @@ async function initMobileXR() {
     console.log('[XR Mobile] VR:', vrOk, 'AR:', arOk);
 }
 
-// v306: 全画面中に AR ボタン押された時の警告バナー
+// v306: Warning banner shown when the AR button is tapped while fullscreen is active.
 function showFullscreenARWarning() {
     let hint = document.getElementById('ar-fs-warning');
     if (!hint) {
@@ -4743,7 +4748,7 @@ function showFullscreenARWarning() {
     }, 4000);
 }
 
-// v306: 全画面中は AR ボタンを視覚的に dim + ツールチップでヒント
+// v306: While fullscreen is active, dim the AR button and set a tooltip hint.
 document.addEventListener('fullscreenchange', () => {
     const arBtn = document.getElementById('btn-ar');
     if (!arBtn) return;
@@ -4759,9 +4764,9 @@ document.addEventListener('fullscreenchange', () => {
 async function startXR(mode) {
     if (xrSession) { await xrSession.end(); return; }
     xrMode = mode === 'immersive-ar' ? 'ar' : 'vr';
-    // v304: AR/VR 起動前に volume-panel を強制 close。
-    // dom-overlay (body) 経路で AR を起動する際、開いたままの volume-panel が
-    // カメラ描画と干渉する不具合の対策。
+    // v304: Force-close the Volume panel before AR/VR starts. Without this,
+    // an open panel sitting in the body-level dom-overlay would interfere
+    // with the AR camera feed.
     if (typeof forceCloseVolumePanel === 'function') forceCloseVolumePanel();
 
     // AR/VR で opts を分岐
