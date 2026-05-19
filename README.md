@@ -9,14 +9,14 @@ Real-time liver surgery simulation running in the browser via WebAssembly.
 
 [Benchmark mode](https://meimeimei1223.github.io/LiverSurgerySimWeb/?bench=1) — performance measurement panel enabled (current build)
 
-### 📄 Reproducibility — Frozen Snapshot for Paper
+### 📄 Reproducibility — Frozen Snapshots for Paper
 
-The exact deployment used to collect the benchmark results reported in our
-paper is preserved at a separate, immutable URL:
+Two immutable snapshots are preserved at separate URLs, one for each
+experimental category reported in the paper:
+
+#### 1. Performance benchmark (FPS, cut latency, tetGen time)
 
 **[paper-benchmark-v1 (live snapshot)](https://meimeimei1223.github.io/LiverSurgerySimWeb/paper-benchmark-v1/?bench=1)**
-
-Equivalent references:
 
 | Resource | URL |
 |---|---|
@@ -26,8 +26,27 @@ Equivalent references:
 | Snapshot README | [paper-benchmark-v1/README.md](paper-benchmark-v1/README.md) |
 
 The snapshot is `index.html v286` + `benchmark.js v1.0.9` + the
-`softbody.{js,wasm,data}` binaries built on 2026-04-30. The live URL above
-the snapshot will continue to evolve, but the snapshot URL is bit-frozen.
+`softbody.{js,wasm,data}` binaries built on 2026-04-30. Add `?bench=1` to
+the URL to activate the floating performance measurement panel (📊).
+
+#### 2. Anatomical volume measurement (20 cases × liver / tumor / S1–S8 / Other Organs)
+
+**[paper-volume-v1 (live snapshot)](https://meimeimei1223.github.io/LiverSurgerySimWeb/paper-volume-v1/)**
+
+| Resource | URL |
+|---|---|
+| Live snapshot (runnable) | https://meimeimei1223.github.io/LiverSurgerySimWeb/paper-volume-v1/ |
+| Source code (browsable) | https://github.com/meimeimei1223/LiverSurgerySimWeb/tree/paper-volume-v1 |
+| Git tag (commit `8fc9977`) | `git checkout paper-volume-v1` |
+| Snapshot README | [paper-volume-v1/README.md](paper-volume-v1/README.md) |
+
+The snapshot is `index.html v311` + the `softbody.{js,wasm,data}` binaries
+built on 2026-05-19 (includes tumor-mask embind for live "Liver excluding
+tumor" volume). The Volume panel's **Export JSON** button produces a
+machine-readable record per case for offline aggregation.
+
+Both snapshot URLs are **bit-frozen**; the live URL at the repository root
+continues to evolve.
 
 > ⚠️ **Not for clinical use.** This is an educational demonstration only.
 > Do not upload identifiable patient data.
@@ -245,7 +264,8 @@ Measured idle FPS at the standardized benchmark workflow
 - **Quest3**: ZIP drop only (folder drop unsupported in Meta Browser)
 - **Firefox**: GPU and CPU threads spoofed by Resist Fingerprinting (same RTX 4070 hardware, same performance as Chrome)
 - **iOS Safari**: Not officially tested (WebGL2 + WebXR incomplete)
-- **"Liver (exclude tumor)" volume**: Desktop C++ only; WASM port deferred (post-paper)
+- **AR + fullscreen (mobile)**: Browser fullscreen and WebXR `dom-overlay` are mutually exclusive on Android Chrome. The AR button is intentionally blocked while fullscreen is active; tap the ⛶ button to exit fullscreen first.
+- **Volume panel in VR (Quest3)**: Not yet ported to VR-native 3D panel — deferred (desktop / mobile / AR all supported)
 
 ➡ Full limitations + troubleshooting table: **[USAGE.md §10](USAGE.md#10-troubleshooting-extended)**.
 
