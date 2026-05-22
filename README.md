@@ -14,7 +14,7 @@ Real-time liver surgery simulation running in the browser via WebAssembly.
 Two immutable snapshots are preserved at separate URLs, one for each
 experimental category reported in the paper:
 
-#### 1. Performance benchmark (FPS, cut latency, tetGen time)
+#### 1. Performance benchmark (FPS, cut latency, tetragedral mesh generation time)
 
 **[paper-benchmark-v1 (live snapshot)](https://meimeimei1223.github.io/LiverSurgerySimWeb/paper-benchmark-v1/?bench=1)**
 
