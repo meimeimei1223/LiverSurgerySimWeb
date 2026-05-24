@@ -395,7 +395,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v312</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v313</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -754,7 +754,11 @@ let transformMode = false;
 let transformDragging = false;
 
 // 臓器アルファ管理 (C++ meshAlphaValues 準拠)
-// index: 0=Liver, 1=Portal, 2=Vein, 3=Tumor, 4=GB, 5=Sphere
+// v313 fix: slot semantics is by physical child order, NOT by fixed organ kind.
+//   index 0    = Liver (always)
+//   index 1..4 = childBuffers[0..3] (loaded order; vein 等が無いと詰まる)
+//   index 5    = Sphere (always)
+// The UI must map labels (portal/vein/tumor/gb) -> childBuffers index dynamically.
 const meshAlphaValues = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
 const organAlphaStates = [2, 2, 2, 2, 2, 1]; // 0=OFF, 1=50%, 2=ON
 const ORGAN_NUM_STATES = [3, 3, 3, 3, 3, 2];
@@ -2076,23 +2080,42 @@ function buildVisibilityUI() {
     const grid = document.getElementById('organ-grid');
     if (!grid) return;
     grid.innerHTML = '';
+    // v313 fix: childBuffers の order は loaded order (drop で欠落があると詰まる)。
+    //   CARDS の child index を固定値ではなく label → 物理 index で動的解決する。
+    //   例: LIVER+PORTAL+TUMOR (vein 無し) → childIdxByLabel = {portal:0, tumor:1}。
+    //   該当 child が無いカード (vein, gb) は表示しない。
+    const childIdxByLabel = {};
+    for (let bi = 0; bi < childBuffers.length; bi++) {
+        const lbl = (childBuffers[bi].label || '').toLowerCase();
+        if (lbl) childIdxByLabel[lbl] = bi;
+    }
     const CARDS = [
-        ['liver',  'Liver',   '#cc3333', 'data/liver_icon.png',  '🫀', -1],
-        ['portal', 'Portal',  '#cc3399', 'data/portal_icon.png', '🩸',  0],
-        ['vein',   'H.Vein',  '#00cccc', 'data/vein_icon.png',   '💧',  1],
-        ['tumor',  'Tumor',   '#cc8800', 'data/tumor_icon.png',  '🟡',  2],
-        ['gb',     'Gallbldr','#33bb33', 'data/gb_icon.png',     '🟢',  3],
+        ['liver',  'Liver',   '#cc3333', 'data/liver_icon.png',  '🫀', 'liver'],
+        ['portal', 'Portal',  '#cc3399', 'data/portal_icon.png', '🩸', 'child'],
+        ['vein',   'H.Vein',  '#00cccc', 'data/vein_icon.png',   '💧', 'child'],
+        ['tumor',  'Tumor',   '#cc8800', 'data/tumor_icon.png',  '🟡', 'child'],
+        ['gb',     'Gallbldr','#33bb33', 'data/gb_icon.png',     '🟢', 'child'],
         ['sphere', 'Sphere',  '#4488cc', 'data/handleSphere_icon.png','⚪', 'sphere'],
     ];
-    CARDS.forEach(([key, name, color, iconSrc, emoji, cbIdx], i) => {
-        if (cbIdx !== -1 && cbIdx !== 'sphere' && cbIdx >= childBuffers.length) return;
-        const numStates = ORGAN_NUM_STATES[i];
-        const state = organAlphaStates[i];
+    CARDS.forEach(([key, name, color, iconSrc, emoji, kind]) => {
+        // stateIdx = meshAlphaValues / organAlphaStates / ORGAN_NUM_STATES の slot.
+        //   liver=0, sphere=5, child kind は childBuffers[ci] + 1.
+        let stateIdx;
+        if (kind === 'liver') stateIdx = 0;
+        else if (kind === 'sphere') stateIdx = 5;
+        else {
+            const ci = childIdxByLabel[key];
+            if (ci === undefined) return;  // この organ は読み込まれていない → カード非表示
+            stateIdx = ci + 1;
+            if (stateIdx >= meshAlphaValues.length) return;  // slot 上限超過 (theoretical)
+        }
+        const numStates = ORGAN_NUM_STATES[stateIdx];
+        const state = organAlphaStates[stateIdx];
         const stateClass = state === 0 ? 'state-off' : state === 1 ? 'state-half' : 'state-on';
         const card = document.createElement('div');
         card.className = `vis-card ${stateClass}`;
         card.style.setProperty('--card-color', color);
-        card.id = 'organ-card-' + i;
+        card.id = 'organ-card-' + stateIdx;
         card.innerHTML = `
             <div class="vis-card-top">
                 <img src="${iconSrc}" style="width:26px;height:26px;object-fit:contain;border-radius:4px;flex-shrink:0;"
@@ -2107,12 +2130,12 @@ function buildVisibilityUI() {
             //   に閉じてしまい完全 ON (=2) に到達しない。明示的に 0↔2 でトグルする。
             //   3-state モード (デスクトップ既定) はそのまま 0→1→2→0 循環。
             if (numStates === 2) {
-                organAlphaStates[i] = organAlphaStates[i] === 0 ? 2 : 0;
+                organAlphaStates[stateIdx] = organAlphaStates[stateIdx] === 0 ? 2 : 0;
             } else {
-                organAlphaStates[i] = (organAlphaStates[i]+1) % numStates;
+                organAlphaStates[stateIdx] = (organAlphaStates[stateIdx]+1) % numStates;
             }
-            onAlphaChanged(i, organAlphaStates[i]);
-            const s = organAlphaStates[i];
+            onAlphaChanged(stateIdx, organAlphaStates[stateIdx]);
+            const s = organAlphaStates[stateIdx];
             card.className = `vis-card ${s===0?'state-off':s===1?'state-half':'state-on'}`;
             card.querySelector('.vis-card-status').textContent =
                 numStates===2 ? (s===0?'OFF':'ON') : ['OFF','50%','ON'][s];
@@ -2576,7 +2599,7 @@ function exportVolumeData() {
     const data = {
         meta: {
             exportedAt: new Date().toISOString(),
-            appVersion: 'v312',
+            appVersion: 'v313',
             useOBJSegmentation: useOBJ,
             hasTumorMask: typeof sb.hasTumorOverlapMask === 'function' && sb.hasTumorOverlapMask(),
         },
@@ -3355,7 +3378,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v312</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v313</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -3627,27 +3650,49 @@ function updateMobileSubPanel() {
     if (mobileVisExpanded) {
         const visRow = document.createElement('div');
         visRow.style.cssText = 'display:flex;gap:3px;margin-bottom:3px;';
-        const organs = ['Liver','Portal','Vein','Tumor','GB','Sphere'];
-        const colors = ['#cc3333','#cc3399','#00cccc','#cc8800','#33bb33','#4488cc'];
-        for (let i = 0; i < organs.length; i++) {
-            const alpha = meshAlphaValues[i];
+        // v313 fix: childBuffers の order は loaded order なので label → 物理 index を動的解決。
+        //   該当 child が無い organ (例: vein 欠落時の Vein) はボタン非表示。
+        const childIdxByLabel = {};
+        for (let bi = 0; bi < childBuffers.length; bi++) {
+            const lbl = (childBuffers[bi].label || '').toLowerCase();
+            if (lbl) childIdxByLabel[lbl] = bi;
+        }
+        const ORGAN_DEFS = [
+            { key:'liver',  label:'Liver',  color:'#cc3333', kind:'liver' },
+            { key:'portal', label:'Portal', color:'#cc3399', kind:'child' },
+            { key:'vein',   label:'Vein',   color:'#00cccc', kind:'child' },
+            { key:'tumor',  label:'Tumor',  color:'#cc8800', kind:'child' },
+            { key:'gb',     label:'GB',     color:'#33bb33', kind:'child' },
+            { key:'sphere', label:'Sphere', color:'#4488cc', kind:'sphere' },
+        ];
+        for (const o of ORGAN_DEFS) {
+            let stateIdx;
+            if (o.kind === 'liver') stateIdx = 0;
+            else if (o.kind === 'sphere') stateIdx = 5;
+            else {
+                const ci = childIdxByLabel[o.key];
+                if (ci === undefined) continue;  // organ 不在 → ボタン非表示
+                stateIdx = ci + 1;
+                if (stateIdx >= meshAlphaValues.length) continue;
+            }
+            const alpha = meshAlphaValues[stateIdx];
             const on = alpha > 0;
             const b = document.createElement('button');
-            b.textContent = organs[i];
+            b.textContent = o.label;
             b.style.cssText = `flex:1;min-width:0;padding:4px 2px;border-radius:4px;font-size:9px;font-weight:bold;
                 cursor:pointer;text-align:center;
-                border:1px solid ${on ? colors[i] : '#333'};
-                background:${on ? colors[i]+'33' : 'rgba(30,30,30,0.6)'};
-                color:${on ? colors[i] : '#555'};`;
+                border:1px solid ${on ? o.color : '#333'};
+                background:${on ? o.color+'33' : 'rgba(30,30,30,0.6)'};
+                color:${on ? o.color : '#555'};`;
             b.addEventListener('click', () => {
                 // Liver=3状態、他=2状態(ON/OFF)
-                const numSt = (i === 0) ? 3 : 2;
+                const numSt = (stateIdx === 0) ? 3 : 2;
                 if (numSt === 2) {
-                    organAlphaStates[i] = organAlphaStates[i] === 0 ? 2 : 0;
+                    organAlphaStates[stateIdx] = organAlphaStates[stateIdx] === 0 ? 2 : 0;
                 } else {
-                    organAlphaStates[i] = (organAlphaStates[i] + 1) % numSt;
+                    organAlphaStates[stateIdx] = (organAlphaStates[stateIdx] + 1) % numSt;
                 }
-                onAlphaChanged(i, organAlphaStates[i]);
+                onAlphaChanged(stateIdx, organAlphaStates[stateIdx]);
                 updateMobileSubPanel();
             });
             visRow.appendChild(b);
@@ -6290,14 +6335,34 @@ function drawPanelCanvas() {
     c.textAlign = 'left';
     c.fillText('VISIBILITY', 16, y + 18);
 
-    const organs = [
-        { name:'Liver',   color:'#e04040', icon:'liver' },
-        { name:'Portal',  color:'#cc44cc', icon:'portal' },
-        { name:'H.Vein',  color:'#4488ff', icon:'vein' },
-        { name:'Tumor',   color:'#ddaa22', icon:'tumor' },
-        { name:'Gallbldr',color:'#44bb88', icon:'gb' },
-        { name:'Sphere',  color:'#aaaaaa', icon:'sphere' },
+    // v313 fix: childBuffers の order は loaded order (vein 欠落時に詰まる) なので、
+    //   各 grid マスの stateIdx (= meshAlphaValues の slot) を label → 物理 index で動的解決。
+    //   該当 child が無い organ は disabled (N/A) として薄く描画 + ヒットテスト skip。
+    const _childIdxByLabel = {};
+    for (let bi = 0; bi < childBuffers.length; bi++) {
+        const lbl = (childBuffers[bi].label || '').toLowerCase();
+        if (lbl) _childIdxByLabel[lbl] = bi;
+    }
+    const ORGAN_DEFS = [
+        { key:'liver',  name:'Liver',   color:'#e04040', icon:'liver',  kind:'liver' },
+        { key:'portal', name:'Portal',  color:'#cc44cc', icon:'portal', kind:'child' },
+        { key:'vein',   name:'H.Vein',  color:'#4488ff', icon:'vein',   kind:'child' },
+        { key:'tumor',  name:'Tumor',   color:'#ddaa22', icon:'tumor',  kind:'child' },
+        { key:'gb',     name:'Gallbldr',color:'#44bb88', icon:'gb',     kind:'child' },
+        { key:'sphere', name:'Sphere',  color:'#aaaaaa', icon:'sphere', kind:'sphere' },
     ];
+    const organs = ORGAN_DEFS.map(d => {
+        let stateIdx = -1;
+        if (d.kind === 'liver') stateIdx = 0;
+        else if (d.kind === 'sphere') stateIdx = 5;
+        else {
+            const ci = _childIdxByLabel[d.key];
+            if (ci !== undefined && (ci + 1) < (typeof meshAlphaValues !== 'undefined' ? meshAlphaValues.length : 6)) {
+                stateIdx = ci + 1;
+            }
+        }
+        return Object.assign({}, d, { stateIdx, available: stateIdx >= 0 });
+    });
     const cardStartY = 50;
     const cardCols = 3, cardGap = 12;
     const cardSize = Math.floor((W - 32 - cardGap * (cardCols - 1)) / cardCols);
@@ -6306,10 +6371,28 @@ function drawPanelCanvas() {
         const col = i % cardCols, row = Math.floor(i / cardCols);
         const bx = 16 + col * (cardSize + cardGap);
         const by = cardStartY + row * (cardSize + cardGap);
-        const alpha = (typeof meshAlphaValues !== 'undefined') ? meshAlphaValues[i] : 1;
+        // v313: disabled (N/A) のマスは薄く描画してヒットテストも skip
+        if (!o.available) {
+            c.fillStyle = 'rgba(255,255,255,0.02)';
+            c.fillRect(bx, by, cardSize, cardSize);
+            c.strokeStyle = 'rgba(255,255,255,0.06)';
+            c.lineWidth = 1;
+            c.strokeRect(bx, by, cardSize, cardSize);
+            c.fillStyle = '#444';
+            c.font = 'bold 14px Arial';
+            c.textAlign = 'center';
+            c.fillText(o.name, bx + cardSize/2, by + cardSize/2 - 4);
+            c.fillStyle = '#333';
+            c.font = 'bold 11px Arial';
+            c.fillText('N/A', bx + cardSize/2, by + cardSize/2 + 14);
+            c.textAlign = 'left';
+            continue;
+        }
+        const alpha = (typeof meshAlphaValues !== 'undefined') ? meshAlphaValues[o.stateIdx] : 1;
         const on = alpha > 0;
         // カード背景（ホバー中は元の色の枠を太く強調）
-        const hovered = (panelHoveredBtn === i);
+        const _hb = (panelHoveredBtn >= 0) ? panelBtnWorldPos[panelHoveredBtn] : null;
+        const hovered = !!(_hb && _hb.action === 'vis' && _hb.idx === o.stateIdx);
         c.fillStyle = hovered ? 'rgba(255,255,255,0.15)' :
                       on ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.02)';
         c.fillRect(bx, by, cardSize, cardSize);
@@ -6660,7 +6743,8 @@ function drawPanelCanvas() {
     const hb = (panelHoveredBtn >= 0 && panelBtnWorldPos[panelHoveredBtn]) ? panelBtnWorldPos[panelHoveredBtn] : null;
     c.fillText('hover=' + panelHoveredBtn + ' pre=' + panelPrePinchBtn
         + (hb ? ' [' + hb.action + ':' + (hb.mode||hb.idx) + ']' : ''), 10, H - 30);
-    const cutTgt = VR_CUT_TARGETS[vrCutTargetIdx];
+    const _vrCT = getVrCutTargets();
+    const cutTgt = _vrCT[vrCutTargetIdx % Math.max(_vrCT.length, 1)];
     c.fillText('active=' + vrActiveAction + ' cut=' + (cutTgt?cutTgt.label:'?') + ' released=' + panelPinchReleased
         + ' btns=' + panelBtnWorldPos.length, 10, H - 12);
 
@@ -6794,13 +6878,26 @@ let vrCutterLastQuat = null;
 let vrMiddlePinchDone = false;   // 中指サイクル済み（開き直すまでロック）
 let vrLeftMode = 'transform';       // 'transform' | 'deform' — 左手の現在アクション
 let vrGrabOwner = null;             // null | 'left' | 'right' — グラブ所有者追跡
-// カットターゲットサイクル: -1=Liver, 0=Portal, 1=Vein
-const VR_CUT_TARGETS = [
-    { meshIdx:-1, label:'Liver',  scale:'liver',  color:'-1' },
-    { meshIdx:0,  label:'Portal', scale:'vessel', color:'0'  },
-    { meshIdx:1,  label:'Vein',   scale:'vessel', color:'1'  },
-];
-let vrCutTargetIdx = 0;  // VR_CUT_TARGETS のインデックス
+// カットターゲットサイクル: Liver + childBuffers の Portal/Vein
+// v313 fix: childBuffers の order は loaded order (vein 欠落で詰まる) なので、
+//   meshIdx を固定 0/1 ではなく label → 物理 index で動的解決する。
+//   vein が無ければ Liver と Portal の 2 通りだけになる。
+function getVrCutTargets() {
+    const targets = [{ meshIdx:-1, label:'Liver', scale:'liver', color:'-1' }];
+    for (let bi = 0; bi < childBuffers.length; bi++) {
+        const lbl = (childBuffers[bi].label || '').toLowerCase();
+        if (lbl === 'portal' || lbl === 'vein') {
+            targets.push({
+                meshIdx: bi,
+                label: childBuffers[bi].label,
+                scale: 'vessel',
+                color: String(bi),
+            });
+        }
+    }
+    return targets;
+}
+let vrCutTargetIdx = 0;  // getVrCutTargets() の長さに対するインデックス
 
 function getPanelLayout() {
     const cardCols = 3, cardGap = 12;
@@ -6832,12 +6929,34 @@ function getPanelLayout() {
 function getPanelButtons() {
     const L = getPanelLayout();
     const btns = [];
-    // VISIBILITY カード（6個）
+    // VISIBILITY カード（6個）— v313 fix: idx は固定 0..5 ではなく
+    //   各 grid マスに対応する stateIdx (= meshAlphaValues の slot) を動的に解決。
+    //   該当 child が無いマスはヒットテストから除外 (描画側も N/A 表示)。
+    const _childIdxByLabelVis = {};
+    for (let bi = 0; bi < childBuffers.length; bi++) {
+        const lbl = (childBuffers[bi].label || '').toLowerCase();
+        if (lbl) _childIdxByLabelVis[lbl] = bi;
+    }
+    const _ORGAN_VIS_KIND = [
+        {key:'liver',kind:'liver'}, {key:'portal',kind:'child'}, {key:'vein',kind:'child'},
+        {key:'tumor',kind:'child'}, {key:'gb',kind:'child'},     {key:'sphere',kind:'sphere'},
+    ];
     for (let i = 0; i < 6; i++) {
+        const d = _ORGAN_VIS_KIND[i];
+        let stateIdx = -1;
+        if (d.kind === 'liver') stateIdx = 0;
+        else if (d.kind === 'sphere') stateIdx = 5;
+        else {
+            const ci = _childIdxByLabelVis[d.key];
+            if (ci !== undefined && (ci + 1) < (typeof meshAlphaValues !== 'undefined' ? meshAlphaValues.length : 6)) {
+                stateIdx = ci + 1;
+            }
+        }
+        if (stateIdx < 0) continue;  // 該当 organ 不在 → ヒットテスト skip
         const col = i % L.cardCols, row = Math.floor(i / L.cardCols);
         const cx = 16 + col * (L.cardSize + L.cardGap) + L.cardSize / 2;
         const cy = L.cardStartY + row * (L.cardSize + L.cardGap) + L.cardSize / 2;
-        btns.push({ cx, cy, action: 'vis', idx: i });
+        btns.push({ cx, cy, action: 'vis', idx: stateIdx });
     }
     // スライダーは3D競合から除外（別ロジックで処理）
     // DISPLAY ボタン（3個）
@@ -7501,11 +7620,12 @@ function processHandTracking(frame, src, hand) {
                 sb.setCutterPosition(simPos[0], simPos[1], simPos[2]);
                 cutterPlaced = true;
             }
-            // 中指ピンチ = 臓器サイクル（Liver→Portal→Vein→Liver）
+            // 中指ピンチ = 臓器サイクル（Liver→Portal→Vein→Liver、vein 欠落時は Liver→Portal）
             if (middleDist < 0.025 && !vrMiddlePinchDone && !vrCutterDragging) {
                 vrMiddlePinchDone = true;
-                vrCutTargetIdx = (vrCutTargetIdx + 1) % VR_CUT_TARGETS.length;
-                const tgt = VR_CUT_TARGETS[vrCutTargetIdx];
+                const _vrCT = getVrCutTargets();
+                vrCutTargetIdx = (vrCutTargetIdx + 1) % _vrCT.length;
+                const tgt = _vrCT[vrCutTargetIdx];
                 cutTargetMeshIdx = tgt.meshIdx;
                 sb.setCutterScale(cutterTargetScales[tgt.scale]);
             }
@@ -7513,7 +7633,8 @@ function processHandTracking(frame, src, hand) {
             // 人差指ピンチ = カッター配置+移動+回転
             if (isPinching && !vrCutterDragging && panelPinchReleased) {
                 // ピンチ開始 → カッター配置（現在のターゲット臓器）
-                const tgt = VR_CUT_TARGETS[vrCutTargetIdx];
+                const _vrCT2 = getVrCutTargets();
+                const tgt = _vrCT2[vrCutTargetIdx % Math.max(_vrCT2.length, 1)];
                 cutTargetMeshIdx = tgt.meshIdx;
                 const simPos = vrToSim(midX, midY, midZ);
                 sb.setCutterPosition(simPos[0], simPos[1], simPos[2]);
@@ -8218,23 +8339,39 @@ function vrBuildVisibilityCards() {
     const grid = document.getElementById('vr-vis-grid');
     if (!grid) return;
     grid.innerHTML = '';
+    // v313 fix: childBuffers の order は loaded order なので label → 物理 index を動的解決。
+    //   該当 child が無い organ (vein 等) は card を作らない (= 非表示)。
+    const _childIdxByLabel = {};
+    for (let bi = 0; bi < childBuffers.length; bi++) {
+        const lbl = (childBuffers[bi].label || '').toLowerCase();
+        if (lbl) _childIdxByLabel[lbl] = bi;
+    }
     const ORGAN_DEFS = [
-        { label:'Liver',   color:'#e04040' },
-        { label:'Portal',  color:'#cc44cc' },
-        { label:'H.Vein',  color:'#4488ff' },
-        { label:'Tumor',   color:'#ddaa22' },
-        { label:'Gallbldr',color:'#44bb88' },
-        { label:'Sphere',  color:'#aaaaaa' },
+        { key:'liver',  label:'Liver',   color:'#e04040', kind:'liver' },
+        { key:'portal', label:'Portal',  color:'#cc44cc', kind:'child' },
+        { key:'vein',   label:'H.Vein',  color:'#4488ff', kind:'child' },
+        { key:'tumor',  label:'Tumor',   color:'#ddaa22', kind:'child' },
+        { key:'gb',     label:'Gallbldr',color:'#44bb88', kind:'child' },
+        { key:'sphere', label:'Sphere',  color:'#aaaaaa', kind:'sphere' },
     ];
-    ORGAN_DEFS.forEach((def, i) => {
+    ORGAN_DEFS.forEach(def => {
+        let stateIdx;
+        if (def.kind === 'liver') stateIdx = 0;
+        else if (def.kind === 'sphere') stateIdx = 5;
+        else {
+            const ci = _childIdxByLabel[def.key];
+            if (ci === undefined) return;
+            stateIdx = ci + 1;
+            if (typeof meshAlphaValues !== 'undefined' && stateIdx >= meshAlphaValues.length) return;
+        }
         const card = document.createElement('div');
         card.className = 'vr-vis-card on';
-        card.dataset.organIdx = i;
+        card.dataset.organIdx = stateIdx;
         card.innerHTML = `
             <div class="vr-dot" style="background:${def.color};"></div>
             <span class="vr-name">${def.label}</span>
             <span class="vr-state">ON</span>`;
-        card.addEventListener('click', () => vrToggleVis(card, i));
+        card.addEventListener('click', () => vrToggleVis(card, stateIdx));
         grid.appendChild(card);
     });
 }
