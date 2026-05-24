@@ -395,7 +395,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v313</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v314</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2596,11 +2596,19 @@ function exportVolumeData() {
     const useOBJ = typeof sb.isOBJSegmentsBound === 'function' && sb.isOBJSegmentsBound();
     const totalCur = sb.calculateTotalVolume();
     const totalOrig = sb.getOriginalTotalVolume();
+    // v314: displayMode を追加。
+    //   'normal' / 'auto-seg' (skeleton-based portal territory) / 'preset-seg' (OBJ S1-S8).
+    //   Note: これは export 時点の現在の表示モード。export 直前にユーザーが切り替えると、
+    //         実際のカット時モードと一致しない可能性あり。論文では運用記述で補完する。
+    const displayMode = (typeof segmentColorMode !== 'undefined' && segmentColorMode === 'obj') ? 'preset-seg'
+                      : (typeof segmentColorMode !== 'undefined' && segmentColorMode === 'skeleton') ? 'auto-seg'
+                      : 'normal';
     const data = {
         meta: {
             exportedAt: new Date().toISOString(),
-            appVersion: 'v313',
+            appVersion: 'v314',
             useOBJSegmentation: useOBJ,
+            displayMode,
             hasTumorMask: typeof sb.hasTumorOverlapMask === 'function' && sb.hasTumorOverlapMask(),
         },
         liver: {
@@ -3378,7 +3386,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v313</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v314</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
