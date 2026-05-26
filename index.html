@@ -395,7 +395,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v314</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v315</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2606,7 +2606,7 @@ function exportVolumeData() {
     const data = {
         meta: {
             exportedAt: new Date().toISOString(),
-            appVersion: 'v314',
+            appVersion: 'v315',
             useOBJSegmentation: useOBJ,
             displayMode,
             hasTumorMask: typeof sb.hasTumorOverlapMask === 'function' && sb.hasTumorOverlapMask(),
@@ -2866,10 +2866,18 @@ function buildDrawList(fragPending, fragChildIdx) {
     if (liverAlpha > 0 && liverVisible) {
         const liverHL = sb.isHighlightActive() && (!fragPending || fragChildIdx === -1);
         let colBuf = null, useSeg = false;
-        if ((segmentColorMode || liverHL) && sb.isSkeletonAnalyzed()) {
+        // v315: Fragment highlight (cut preview colours) is purely geometric and does
+        //       NOT need a portal skeleton. Previously the whole branch was gated on
+        //       isSkeletonAnalyzed(), so a liver-only load (no portal) never showed the
+        //       per-fragment preview colours during the cut-side choice popup. Split the
+        //       condition: liverHL uses bLiverHL unconditionally; segment colouring still
+        //       requires skeleton analysis. bLiverHL is allocated at init (see ~L3989).
+        if (liverHL) {
             useSeg = true;
-            if (liverHL) colBuf = bLiverHL;
-            else if (segmentColorMode === 'obj' && sb.isOBJSegmentsBound()) colBuf = bOBJSegCol;
+            colBuf = bLiverHL;
+        } else if (segmentColorMode && sb.isSkeletonAnalyzed()) {
+            useSeg = true;
+            if (segmentColorMode === 'obj' && sb.isOBJSegmentsBound()) colBuf = bOBJSegCol;
             else colBuf = bSegCol;
         }
         list.push({ bPos:bHiPos, bNrm:bHiNrm, bIdx:bHiIdx, numIdx:numHiIdx,
@@ -3386,7 +3394,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v314</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v315</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
