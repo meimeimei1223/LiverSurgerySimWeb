@@ -395,7 +395,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v315</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v316</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2606,7 +2606,7 @@ function exportVolumeData() {
     const data = {
         meta: {
             exportedAt: new Date().toISOString(),
-            appVersion: 'v315',
+            appVersion: 'v316',
             useOBJSegmentation: useOBJ,
             displayMode,
             hasTumorMask: typeof sb.hasTumorOverlapMask === 'function' && sb.hasTumorOverlapMask(),
@@ -3394,7 +3394,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v315</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v316</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -4691,7 +4691,9 @@ async function initXR() {
     }
     if (vrOk) {
         // v300: Touch devices (e.g. tablets routed through the desktop UI) have no HMD, so disable VR.
-        if (isTouchDevice) {
+        // v316: Quest 3 browser updates now report touch (maxTouchPoints>0), so isTouchDevice can be
+        //       true on a real HMD. Exempt Quest (UA-based) so its VR button stays enabled.
+        if (isTouchDevice && !isQuest) {
             btnVR.disabled = true;
             btnVR.title = 'VR は Quest 等の専用 HMD で利用可';
         } else {
@@ -4753,7 +4755,9 @@ async function initMobileXR() {
         // v300: Touch devices (phones / tablets) have no HMD, so VR cannot really be used.
         //       Even if the browser reports immersive-vr=supported, disable the button and
         //       grey it out. HMDs such as Quest 3 (isTouchDevice=false) remain enabled.
-        if (isTouchDevice) {
+        // v316: Quest browser updates can now report touch, so gate on !isQuest to keep VR
+        //       enabled on the real HMD while still disabling it on phones/tablets.
+        if (isTouchDevice && !isQuest) {
             btn.disabled = true;
             btn.style.opacity = '0.35';
             btn.style.cursor = 'not-allowed';
