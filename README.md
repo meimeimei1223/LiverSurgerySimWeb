@@ -7,8 +7,6 @@ Real-time liver surgery simulation running in the browser via WebAssembly.
 
 **[Launch Simulator](https://meimeimei1223.github.io/LiverSurgerySimWeb/)** — latest version (continuously updated)
 
-[Benchmark mode](https://meimeimei1223.github.io/LiverSurgerySimWeb/?bench=1) — performance measurement panel enabled (current build)
-
 ### 🎓 Guided Demo — start here if it is your first visit
 
 **[demo-tutorial-v1 (guided snapshot)](https://meimeimei1223.github.io/LiverSurgerySimWeb/demo-tutorial-v1/)**
