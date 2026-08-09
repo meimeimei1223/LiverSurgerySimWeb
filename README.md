@@ -9,6 +9,26 @@ Real-time liver surgery simulation running in the browser via WebAssembly.
 
 [Benchmark mode](https://meimeimei1223.github.io/LiverSurgerySimWeb/?bench=1) — performance measurement panel enabled (current build)
 
+### 🎓 Guided Demo — start here if it is your first visit
+
+**[demo-tutorial-v1 (guided snapshot)](https://meimeimei1223.github.io/LiverSurgerySimWeb/demo-tutorial-v1/)**
+
+A frozen copy of the simulator whose tutorial menu opens automatically. Five
+lessons (Camera & Controls / Display & Organs / Deform / Cut / Select & Cut)
+guide you through the real interface: a ring points at the button to press and
+advances when you press it, alongside a worked example built from screenshots.
+
+| Resource | URL |
+|---|---|
+| Guided demo (runnable) | https://meimeimei1223.github.io/LiverSurgerySimWeb/demo-tutorial-v1/ |
+| Git tag | `git checkout demo-tutorial-v1` |
+| Snapshot README | [demo-tutorial-v1/README.md](demo-tutorial-v1/README.md) |
+
+The same tutorial is available on the live demo above from the **🎓 Tutorial**
+pill in the bottom-right corner; there it stays closed until you ask for it.
+Best on desktop — phones get the worked-example panel only, and it is hidden
+while immersed in VR/AR.
+
 ### 📄 Reproducibility — Frozen Snapshots for Paper
 
 Two immutable snapshots are preserved at separate URLs, one for each

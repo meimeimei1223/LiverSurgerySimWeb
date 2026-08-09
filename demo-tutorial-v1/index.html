@@ -9375,7 +9375,7 @@ if ('serviceWorker' in navigator) {
   // v317: auto-open policy. The frozen snapshot (demo-tutorial-v1) sets TUT_AUTO_DEFAULT=true so the
   // menu opens on every load; the live root keeps it false and only shows the "Tutorial" pill.
   // ?tut=1 / ?tut=0 override it on any build.
-  var TUT_AUTO_DEFAULT = false;
+  var TUT_AUTO_DEFAULT = true;
   var tutParam = new URLSearchParams(location.search).get('tut');
   var TUT_AUTO = tutParam === '1' ? true : (tutParam === '0' ? false : TUT_AUTO_DEFAULT);
 

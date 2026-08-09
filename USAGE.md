@@ -7,6 +7,13 @@ explains common workflows step by step.
 
 For installation / launch / control reference: see [README.md](README.md).
 
+> 🎓 **Prefer to be shown rather than to read?** The
+> [guided demo](https://meimeimei1223.github.io/LiverSurgerySimWeb/demo-tutorial-v1/)
+> teaches the same workflows inside the running application: pick a lesson and a
+> ring points at each button as you go. On the live demo the same tutorial waits
+> behind the **🎓 Tutorial** pill in the bottom-right corner. Desktop browsers get
+> the full guidance; phones show the worked-example panel only.
+
 ---
 
 ## Table of Contents
