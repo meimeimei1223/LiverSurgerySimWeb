@@ -164,11 +164,16 @@ The Preset Seg button is **greyed out** if no `soft_S*.obj` files were loaded.
 
 ![OBJ Drop modal — detected files, preset buttons (HIGH selected), grid sliders, Generate button](docs/screenshots/02_load_dialog.png)
 
-| Preset | Sim tets | Visual tets | Tet generation time (desktop) | Recommended hardware |
-|---|---|---|---|---|
-| **Low** | ~3,665 | ~22,975 | ~5 s | Mobile, low-end laptops |
-| **Mid** | ~6,485 | ~42,070 | ~10 s | Modern desktop, Quest3 |
-| **High** | ~42,070 | ~300,780 | ~40 s | Desktop with discrete GPU only |
+| Preset | Liver grid (low / high) | Sim tets | Visual tets | Tet generation time (desktop) | Recommended hardware |
+|---|---|---|---|---|---|
+| **Low** | 16 / 32 | ~3,665 | ~22,975 | ~5 s | Mobile, low-end laptops, Quest 3, AR |
+| **Mid** | 20 / 40 | ~6,485 | ~42,070 | ~10 s | Modern desktop |
+| **High** | 40 / 80 | ~42,070 | ~300,780 | ~40 s | Desktop with discrete GPU only |
+
+> The preset buttons only move the **Liver / Vessel / Skeleton grid sliders** shown in the
+> same dialog — they set a voxel grid resolution, not a tetrahedron count. Because the grid
+> is fitted to each mesh's bounding box, the tet counts above are those of the benchmark
+> model; the exact number varies with the size and shape of the loaded liver.
 
 Click **Generate**. Progress is shown in the loading bar. The simulation
 becomes interactive when "First interactable" appears in the console.
@@ -335,7 +340,8 @@ Toggle tumor opacity via the **Visibility** button (top-right) → tumor slider.
 
 - Hand tracking is preferred over controllers (more intuitive for surgical gestures).
 - The side panel is anchored to the left of the main panel. Both follow your head.
-- For comfortable use, sit and keep movements small. The simulation runs at 30 FPS on Mid preset.
+- For comfortable use, sit and keep movements small.
+- **Use the Low preset here.** Measured in immersive VR: Low ~27–30 FPS, Mid ~19–21 FPS.
 - High preset on Quest3 VR is ~5 FPS — usable for static observation only.
 
 ### Exit

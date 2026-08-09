@@ -187,15 +187,23 @@ After dropping, choose a [tetrahedralization preset](#tet-density-presets) and c
 
 The tetrahedral grid resolution controls simulation accuracy vs. performance:
 
-| Preset | Sim tets | Visual tets | Recommended hardware |
-|---|---|---|---|
-| **Low** | ~3,665 | ~22,975 | Mobile phones, low-end laptops, AR mode |
-| **Mid** | ~6,485 | ~42,070 | Modern desktop, Quest3 VR |
-| **High** | ~42,070 | ~300,780 | Desktop with discrete GPU only |
+| Preset | Liver grid (low / high) | Sim tets | Visual tets | Recommended hardware |
+|---|---|---|---|---|
+| **Low** | 16 / 32 | ~3,665 | ~22,975 | Mobile phones, low-end laptops, Quest 3, AR mode |
+| **Mid** | 20 / 40 | ~6,485 | ~42,070 | Modern desktop |
+| **High** | 40 / 80 | ~42,070 | ~300,780 | Desktop with discrete GPU only |
+
+> A preset sets the **voxel grid resolution, not a tetrahedron count**. The grid is fitted
+> to each mesh's bounding box, so the counts above are for the benchmark model; the exact
+> number varies with the size and shape of the loaded liver.
 
 Higher density → smoother deformation and finer cuts, but proportionally more
 CPU (physics) and GPU (rendering) load. See [Performance by Platform](#performance-by-platform)
 for measured FPS on each preset.
+
+On Quest 3 in immersive VR, **Low is the comfortable preset** (~27–30 FPS measured);
+Mid drops to ~19–21 FPS and High to ~5 FPS. The same holds for Android AR, where Low
+(~25–27 FPS) is the practical ceiling.
 
 ---
 
