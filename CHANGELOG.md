@@ -15,6 +15,10 @@ never change; this log tracks the live root only.
   undo): the bbox-based smoothing size adjustment rescaled around a center
   that jumps when a cut changes the surface bounding box. The adjustment is
   now disabled.
+- Follow-up (same day): default liver substeps returned to 3 — the value 7
+  introduced in v318 cost too much frame rate at the HIGH preset. The stiffer
+  desktop-equivalent setting remains available from the Substeps slider
+  (range now 1–20).
 
 ## v319 — 2026-08-15
 
