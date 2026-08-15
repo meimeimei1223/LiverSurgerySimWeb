@@ -38,7 +38,7 @@ For installation / launch / control reference: see [README.md](README.md).
 ### Default model
 
 When you visit the simulator URL for the first time without dropping anything,
-a small **built-in liver model** is loaded automatically (~3 s on desktop).
+a small **built-in liver model** is loaded automatically (~10 s on desktop).
 This is suitable for trying out the controls but is smaller and lower-resolution
 than typical patient data.
 
@@ -232,9 +232,11 @@ While in Free Cut mode, press **`Q`** to toggle the **Seg Overlay**:
 ### Steps
 
 1. Press **`Q`** to enter Segment Cut mode (when not already in Free Cut).
-2. The liver re-colors to show **S1–S8** segments. Segmentation is automatic:
-   - If your portal.obj contains pre-segmented sub-meshes (e.g., from 3D Slicer), those are used.
-   - Otherwise, a voxel-based skeleton analysis assigns each tet to the nearest portal branch.
+2. The liver re-colors to show **S1–S8** segments. Which segmentation is used depends
+   on the files you loaded (see [Two segmentation modes](#two-segmentation-modes)):
+   - If `S1.obj` … `S8.obj` files were loaded, **Preset Seg** shows that anatomy.
+   - Otherwise **Auto Seg** applies: a voxel-based skeleton analysis of `portal.obj`
+     assigns each tet to the nearest portal branch.
 3. **Click** on a segment to **select** it (it brightens). Click again to deselect.
 4. Multi-select is supported — typically you select adjacent segments for an anatomical resection (e.g., S5+S6+S7+S8 = right hepatectomy).
 5. Press **`Z`** to execute the cut. Selected segments are removed.
@@ -245,7 +247,8 @@ While in Free Cut mode, press **`Q`** to toggle the **Seg Overlay**:
 ### Tips
 
 - Auto-segmentation quality depends on portal vein mesh completeness.
-- For published anatomical accuracy, use a pre-segmented portal.obj from clinical segmentation software.
+- For published anatomical accuracy, supply pre-segmented `S1.obj` … `S8.obj` files
+  exported from clinical segmentation software and use **Preset Seg**.
 - Use Free Cut for non-anatomical cuts (wedge resections, etc.).
 
 ---
@@ -266,7 +269,8 @@ Press **`B`** or click the **Volume** button. The panel is draggable.
 | **Original** | Liver volume at load (snapshot) |
 | **Remnant** | Current / Original × 100% |
 | **S1–S8** | Per-segment volume + percentage |
-| **Portal / Vein / Tumor / GB** | Initial volume of other organs |
+| **Liver (excl. tumor)** | Live liver volume minus the tumor-overlap volume (shown when a tumor mesh overlaps the liver) |
+| **Portal / Vein / Tumor / GB** | Initial volume of other organs (captured once at load) |
 
 ### Color coding
 
@@ -278,10 +282,10 @@ Press **`B`** or click the **Volume** button. The panel is draggable.
 
 Toggle tumor opacity via the **Visibility** button (top-right) → tumor slider.
 
-> **Coming soon**: "Liver (exclude tumor)" row — the C++ desktop version
-> calculates this (liver − tumor overlap volume), but the WASM port is
-> deferred until after paper submission. See `project_plan_volume.md` in
-> the source repository for the implementation plan.
+> The **Liver (excl. tumor)** row appears whenever a loaded tumor mesh overlaps
+> the liver: a voxel mask of the overlap is built at load time, and the row shows
+> the live liver volume minus that overlap. It updates lazily while the panel is
+> open, so it stays correct after cuts and deformation.
 
 ---
 
@@ -420,7 +424,8 @@ For exact paper reproducibility, use the frozen snapshot URL:
 https://meimeimei1223.github.io/LiverSurgerySimWeb/paper-benchmark-v1/?bench=1
 ```
 
-This is the bit-frozen v286 deployment used to collect the data in the AE-CAI 2026 paper.
+This is the bit-frozen v286 deployment used to collect the data in the paper
+presented at the AE-CAI | CARE | OR 2.0 | PRiSM Workshop (MICCAI 2026).
 
 ---
 
@@ -439,7 +444,7 @@ This is the bit-frozen v286 deployment used to collect the data in the AE-CAI 20
 | Service Worker stuck on old version | DevTools → Application → Service Workers → Unregister → reload. |
 | HIGH preset crashes Quest3 | Adreno 740 may run out of GPU memory at ~300K visual tets. Use Mid instead. |
 | OBJ drop modal doesn't appear | Open DevTools console — check for "Failed to load OBJ" errors. Some OBJ exporters (e.g., Blender with grouping options) produce non-standard files. |
-| Firebase login fails | Optional feature; not required for benchmarking. Sign-in is for cloud model storage. |
+| Firebase / cloud model loading fails | The optional cloud model storage is **currently suspended**. Load models by local folder / ZIP drop instead — no feature in this guide requires it. |
 | Tet generation hangs >60 s | HIGH preset on slow CPU. Lower to Mid or wait. WASM lacks threads, so it's single-threaded. |
 
 If you encounter an issue not listed here, please open an issue at:
