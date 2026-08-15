@@ -9,6 +9,39 @@ never change; this log tracks the live root only.
 
 ---
 
+## v320 — 2026-08-15
+
+- Fixed the whole mesh shifting sideways after a cut (and snapping back on
+  undo): the bbox-based smoothing size adjustment rescaled around a center
+  that jumps when a cut changes the surface bounding box. The adjustment is
+  now disabled.
+
+## v319 — 2026-08-15
+
+- Fixed intermittent spikes on the unanchored portal trunk: a fast liver
+  motion concentrates displacement into the few free vessel vertices, and a
+  single constraint projection could overshoot. Each projection's vertex
+  displacement is now clamped to half the constraint's rest length
+  (kill-switchable, tunable from the dev panel).
+
+## v318 — 2026-08-15
+
+- **Cutting a vessel now physically severs it.** Previously a cut child organ
+  (portal/hepatic vein) only looked separated; its physics constraints still
+  spanned the cut, so the pieces stayed tethered. Child cuts now invalidate
+  the child's low-res physics too, and undo restores it.
+- Physics/performance port from the GPU research branch: cut-aware constraint
+  caches, a tet→edge table replacing five hash-set rebuilds, faster mesh
+  parsing and surface mapping — cuts, undos, and startup are all faster.
+- Child organ motion now matches the desktop reference: XPBD plus weak shape
+  matching for vessels (rigid follow of the liver), XPBD only for tumor and
+  gallbladder.
+- Liver solver substeps raised 3 → 7 on desktop, matching the desktop build's
+  effective stiffness (mobile and low-power GPUs keep 3 for frame rate).
+- New developer tuning panel behind `?dev=1` (hidden otherwise): per-organ
+  solver iterations, shape-matching blend/velKill, liver substeps, spike
+  clamp, with live anchored/free counts and presets.
+
 ## v317 — 2026-08-09
 
 - Interactive tutorial shipped on the live site: five lessons (Deform, Cut,

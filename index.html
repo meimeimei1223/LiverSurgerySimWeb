@@ -395,7 +395,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v317</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v320</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -542,8 +542,8 @@
     <label>Damping: <span id="dv">0.980</span></label>
     <input type="range" id="ds" min="0.90" max="1.00" step="0.005" value="0.98"
            oninput="updateDamp(this.value)">
-    <label>Substeps: <span id="sv">3</span></label>
-    <input type="range" id="ss" min="1" max="12" step="1" value="3"
+    <label>Substeps: <span id="sv">7</span></label>
+    <input type="range" id="ss" min="1" max="20" step="1" value="7"
            oninput="updateSubsteps(this.value)">
     <label>Gravity X: <span id="gxv">0.0</span></label>
     <input type="range" id="gxs" min="-20" max="20" step="0.5" value="0"
@@ -2606,7 +2606,7 @@ function exportVolumeData() {
     const data = {
         meta: {
             exportedAt: new Date().toISOString(),
-            appVersion: 'v317',
+            appVersion: 'v320',
             useOBJSegmentation: useOBJ,
             displayMode,
             hasTumorMask: typeof sb.hasTumorOverlapMask === 'function' && sb.hasTumorOverlapMask(),
@@ -3394,7 +3394,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v317</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v320</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -4014,6 +4014,14 @@ async function initApp() {
         );
         window._perf.log('createSoftBody (liver)');
 
+        // v318: substeps 既定は C++ 側 7 (デスクトップ版と一致)。
+        // モバイル/低スペック GPU は従来値 3 に落として FPS を守る。
+        if (isMobile || isLowPowerGPU) sb.setNumSubsteps(3);
+        console.log('[APP] numSubsteps =', sb.getNumSubsteps());
+        // スライダ表示を実エンジン値に同期 (従来は HTML 固定値 3 のままだった)
+        { const _ss=document.getElementById('ss'), _sv=document.getElementById('sv');
+          if(_ss){_ss.value=sb.getNumSubsteps();} if(_sv){_sv.textContent=sb.getNumSubsteps();} }
+
         // FullSphereCamera 初期化
         sb.cameraSetWindowSize(canvas.width, canvas.height);
         sb.cameraUpdate();
@@ -4449,6 +4457,9 @@ async function runTetrahedralization(classified) {
         // 新パスでsb再作成
         Module.initGL();
         sb = Module.createSoftBody(tet.getLiverLowPath(), tet.getLiverHighPath(), 1.0, 0.0);
+        if (isMobile || isLowPowerGPU) sb.setNumSubsteps(3);   // v318: デバイス別 substeps (初回ロードと同じ)
+        { const _ss=document.getElementById('ss'), _sv=document.getElementById('sv');
+          if(_ss){_ss.value=sb.getNumSubsteps();} if(_sv){_sv.textContent=sb.getNumSubsteps();} }
         sb.cameraSetWindowSize(canvas.width, canvas.height);
         sb.cameraUpdate();
 
@@ -9386,6 +9397,160 @@ if ('serviceWorker' in navigator) {
   function boot(){ if(started) return; started=true; buildFab(); if(TUT_AUTO){ showMenu(); } else { showFab(); } }
   var pollId=setInterval(function(){ if(appReady()){ clearInterval(pollId); boot(); } }, 200);
   setTimeout(function(){ if(!started){ clearInterval(pollId); boot(); } }, 35000);
+})();
+</script>
+<script>
+// ===== v318 dev: child shape-matching tuning panel (open with ?dev=1) =====
+(function(){
+  if (!/[?&]dev=1/.test(location.search)) return;
+  var css = 'position:fixed;right:8px;bottom:8px;z-index:99999;background:rgba(15,20,28,.93);'
+    + 'color:#cde;font:11px/1.5 monospace;padding:8px 10px;border:1px solid #345;border-radius:8px;'
+    + 'min-width:330px;max-height:60vh;overflow:auto;';
+  var box = document.createElement('div');
+  box.id = 'sm-dev'; box.style.cssText = css;
+  box.innerHTML = '<div id="smdev-head" style="cursor:move;user-select:none;margin:-8px -10px 4px;padding:6px 10px;'
+    + 'background:rgba(40,60,80,.6);border-radius:8px 8px 0 0">'
+    + '<b style="color:#7fd">Child Motion Debug</b>'
+    + '<button id="smdev-close" style="float:right">×</button></div>'
+    + '<div style="margin:4px 0"><button id="smdev-exe">exe v317</button> '
+    + '<button id="smdev-gpu">GPU prod</button> '
+    + '<button id="smdev-v10">vessels10/liver3</button></div>'
+    + '<div id="smdev-liver" style="border-top:1px solid #345;padding-top:4px">'
+    + '<b style="color:#7af">Liver</b> substeps '
+    + '<input type="range" id="smls" min="1" max="20" step="1" style="width:90px;vertical-align:middle">'
+    + '<span id="smlsv">?</span></div>'
+    + '<div style="padding-top:2px"><b style="color:#f88">Spike clamp</b> '
+    + '<label><input type="checkbox" id="smcl" checked> on</label> '
+    + 'scale <input type="range" id="smcs" min="0.05" max="2" step="0.05" value="0.5" style="width:80px;vertical-align:middle">'
+    + '<span id="smcsv">0.50</span></div>'
+    + '<div id="smdev-rows">waiting for sb...</div>';
+  document.body.appendChild(box);
+  document.getElementById('smdev-close').onclick = function(){ box.remove(); };
+
+  // ヘッダドラッグで移動 (pointer capture でスライダ操作とは干渉しない)
+  (function(){
+    var head = document.getElementById('smdev-head');
+    var dx = 0, dy = 0, dragging = false;
+    head.addEventListener('pointerdown', function(e){
+      if (e.target.id === 'smdev-close') return;
+      dragging = true;
+      var r = box.getBoundingClientRect();
+      dx = e.clientX - r.left; dy = e.clientY - r.top;
+      // right/bottom 固定を解除して left/top 駆動へ
+      box.style.left = r.left + 'px'; box.style.top = r.top + 'px';
+      box.style.right = 'auto'; box.style.bottom = 'auto';
+      head.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+    head.addEventListener('pointermove', function(e){
+      if (!dragging) return;
+      var x = Math.max(0, Math.min(window.innerWidth  - 60, e.clientX - dx));
+      var y = Math.max(0, Math.min(window.innerHeight - 24, e.clientY - dy));
+      box.style.left = x + 'px'; box.style.top = y + 'px';
+    });
+    head.addEventListener('pointerup', function(){ dragging = false; });
+    head.addEventListener('pointercancel', function(){ dragging = false; });
+  })();
+
+  function S(){ try { return sb; } catch(e){ return null; } }
+  function lbl(i){ try { return childBuffers[i].label || ('child'+i); } catch(e){ return 'child'+i; } }
+  function info(i){ try { return JSON.parse(S().getChildMotionInfo(i)); } catch(e){ return null; } }
+  function apply(i){
+    var x = document.getElementById('smx'+i).checked;
+    var it = parseInt(document.getElementById('smit'+i).value);
+    var b = parseFloat(document.getElementById('smb'+i).value);
+    var v = parseFloat(document.getElementById('smv'+i).value);
+    S().setChildMotionParams(i, x, it, b, v);
+    document.getElementById('smitl'+i).textContent = it;
+    document.getElementById('smbl'+i).textContent = b.toFixed(2);
+    document.getElementById('smvl'+i).textContent = v.toFixed(2);
+  }
+  function setLiverSub(n){
+    var s = S(); if (!s) return;
+    s.setNumSubsteps(n);
+    var e=document.getElementById('smls'), t=document.getElementById('smlsv');
+    if(e) e.value=s.getNumSubsteps(); if(t) t.textContent=s.getNumSubsteps();
+    var ss=document.getElementById('ss'), sv=document.getElementById('sv');
+    if(ss) ss.value=s.getNumSubsteps(); if(sv) sv.textContent=s.getNumSubsteps();
+  }
+  function preset(cfg){
+    var s = S(); if (!s) return;
+    if (cfg.liver) setLiverSub(cfg.liver);
+    var n = s.getNumChildren();
+    for (var i=0;i<n;i++){
+      var name = lbl(i).toLowerCase();
+      var p = (name.indexOf('tumor')>=0 || name.indexOf('gb')>=0) ? cfg.tg : cfg.pv;
+      s.setChildMotionParams(i, p[0], p[1], p[2], p[3]);
+    }
+    build();
+  }
+  // p = [useXpbd, iters, blend, velKill]
+  document.getElementById('smdev-exe').onclick = function(){
+    preset({liver:7, pv:[true,3,0.03,0.0], tg:[true,3,0.0,0.0]});   // XPBD+applySMC(0.03) / XPBDのみ
+  };
+  document.getElementById('smdev-gpu').onclick = function(){
+    preset({liver:7, pv:[true,3,0.03,1.0], tg:[false,3,0.5,1.0]});  // 擬似静的 / SMのみ
+  };
+  document.getElementById('smdev-v10').onclick = function(){
+    preset({liver:3, pv:[true,10,0.03,1.0], tg:[true,3,0.0,1.0]});  // 実験: 血管厚め・肝臓薄め
+  };
+  function build(){
+    var s = S(); if (!s || !s.getNumChildren) return;
+    var n = s.getNumChildren(); if (n <= 0) return;
+    var h = '';
+    for (var i=0;i<n;i++){
+      var q = info(i); if (!q) continue;
+      h += '<div style="border-top:1px solid #345;margin-top:4px;padding-top:4px">'
+        + '<b style="color:#fd7">'+lbl(i)+'</b> '
+        + '<span id="smi'+i+'" style="color:#8a9">anch '+q.anchored+' / free '+q.free+'</span><br>'
+        + '<label><input type="checkbox" id="smx'+i+'" '+(q.useXpbd?'checked':'')+'> XPBD</label> '
+        + 'iters <input type="range" id="smit'+i+'" min="1" max="20" step="1" value="'+(q.iters||3)+'" style="width:60px;vertical-align:middle">'
+        + '<span id="smitl'+i+'">'+(q.iters||3)+'</span><br>'
+        + 'blend <input type="range" id="smb'+i+'" min="0" max="1" step="0.01" value="'+q.blend+'" style="width:70px;vertical-align:middle">'
+        + '<span id="smbl'+i+'">'+(+q.blend).toFixed(2)+'</span> '
+        + 'velKill <input type="range" id="smv'+i+'" min="0" max="1" step="0.05" value="'+q.velKill+'" style="width:60px;vertical-align:middle">'
+        + '<span id="smvl'+i+'">'+(+q.velKill).toFixed(2)+'</span>'
+        + '</div>';
+    }
+    document.getElementById('smdev-rows').innerHTML = h || 'no children';
+    for (var j=0;j<n;j++){
+      (function(i){
+        ['smx','smit','smb','smv'].forEach(function(pref){
+          var el = document.getElementById(pref+i);
+          if (el) el.oninput = function(){ apply(i); };
+        });
+      })(j);
+    }
+    // Liver substeps 行の初期化
+    var s2 = S();
+    if (s2 && s2.getNumSubsteps){
+      var e=document.getElementById('smls'), t=document.getElementById('smlsv');
+      if(e){ e.value=s2.getNumSubsteps(); e.oninput=function(){ setLiverSub(parseInt(e.value)); }; }
+      if(t) t.textContent=s2.getNumSubsteps();
+    }
+    // Spike clamp 行の配線
+    (function(){
+      var cb=document.getElementById('smcl'), sl=document.getElementById('smcs'),
+          tv=document.getElementById('smcsv');
+      function push(){
+        var s3=S(); if(!s3 || !s3.setSpikeClamp) return;
+        s3.setSpikeClamp(cb.checked, parseFloat(sl.value));
+        tv.textContent=parseFloat(sl.value).toFixed(2);
+      }
+      if(cb) cb.oninput=push;
+      if(sl) sl.oninput=push;
+    })();
+  }
+  var t = setInterval(function(){
+    var s = S();
+    if (s && s.getNumChildren && s.getNumChildren() > 0){ clearInterval(t); build();
+      setInterval(function(){   // anchored/free を2秒ごとに更新 (カットで変わる)
+        var n = s.getNumChildren();
+        for (var i=0;i<n;i++){ var q = info(i); var el = document.getElementById('smi'+i);
+          if (q && el) el.textContent = 'anch '+q.anchored+' / free '+q.free; }
+      }, 2000);
+    }
+  }, 500);
 })();
 </script>
 </body>
