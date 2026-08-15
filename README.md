@@ -1,6 +1,7 @@
 # Liver Surgery Simulator (Web)
 
-This repository (`LiverSurgerySimWeb`) is the deployment of **BLISS**, the system described in the paper
+This repository (`LiverSurgerySimWeb`) is the deployment of **BLISS** — the
+**B**rowser-based **LI**ver **S**urgery **S**imulator — the system described in the paper
 *BLISS: A Browser-Based Cross-Platform Patient-Specific Liver Surgery Simulator with AR/VR Support*,
 to be presented at the joint workshop on **Augmented Environments for Computer-Assisted Interventions**,
 **Computer-Assisted Robotic Endoscopy**, **Context Aware Operating Theaters**, and
