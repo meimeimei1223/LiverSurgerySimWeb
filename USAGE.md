@@ -96,8 +96,7 @@ Only **liver.obj** is strictly required; the others enable different feature set
 #### Preset Seg meshes (S/s + digit pattern)
 
 For **Preset Seg mode** (high-accuracy Couinaud segmentation), provide
-pre-segmented liver sub-meshes in the same folder. The detection rule (from
-`MultiOBJTetrahedralizerWasm.cpp:186-191`) is simple:
+pre-segmented liver sub-meshes in the same folder. The detection rule is simple:
 
 > A file is treated as a Couinaud segment if its filename starts with
 > **`S` or `s`** followed by a **digit (0–9)**.
@@ -121,7 +120,6 @@ Variants that also work:
 |---|---|---|
 | Lowercase | `s1.obj`, `s8.obj` | Either case is accepted |
 | Trailing suffix | `S1_lateral.obj`, `s8_extracted.obj` | Only the first two chars are checked |
-| Multi-digit | `S10.obj` | Second char is still a digit |
 
 Patterns that do **not** work (no segment detection):
 
@@ -291,10 +289,6 @@ Toggle tumor opacity via the **Visibility** button (top-right) → tumor slider.
 
 ## 6. Mobile / Tablet usage
 
-> **📸 Screenshot needed — `docs/screenshots/07_mobile_ui.png`**
-> Android phone screenshot in landscape mode showing the simulator with the
-> bottom mode toolbar visible (Deform / Free Cut / Seg Cut / Transform buttons).
-
 ### Touch reference
 
 | Touch | Action |
@@ -317,11 +311,6 @@ Toggle tumor opacity via the **Visibility** button (top-right) → tumor slider.
 ---
 
 ## 7. Quest3 VR immersive
-
-> **📸 Screenshot needed — `docs/screenshots/08_vr_view.png`**
-> Quest3 in-VR screenshot showing: liver mesh with handle spheres, side panel
-> floating in 3D space (now properly behind objects after v287 fix), hand
-> tracking skeleton visualization, FPS / control info panel.
 
 ### Entry
 
@@ -357,11 +346,6 @@ The benchmark report button (📊) reappears in flat-screen mode after exit.
 ---
 
 ## 8. Android AR passthrough
-
-> **📸 Screenshot needed — `docs/screenshots/09_ar_view.png`**
-> Android phone AR passthrough screenshot: liver model anchored on a real-world
-> surface (e.g., desk), with DOM overlay UI buttons at the top. Show some
-> real-world background visible (table, hand, etc.).
 
 ### Requirements
 
@@ -399,10 +383,6 @@ The benchmark report button (📊) reappears in flat-screen mode after exit.
 
 When the URL has `?bench=1`, a floating **📊 Bench** button appears at the bottom-right corner.
 
-> **📸 Screenshot needed — `docs/screenshots/10_bench_panel.png`**
-> The benchmark report panel open, showing the Markdown report with sections:
-> Platform, Model, Initial load, OBJ drop history, FPS, Cut operations, XR Sessions.
-
 ### Workflow
 
 1. Append `?bench=1` to the URL: `https://.../LiverSurgerySimWeb/?bench=1`
@@ -425,7 +405,7 @@ https://meimeimei1223.github.io/LiverSurgerySimWeb/paper-benchmark-v1/?bench=1
 ```
 
 This is the bit-frozen v286 deployment used to collect the data in the paper
-presented at the AE-CAI | CARE | OR 2.0 | PRiSM Workshop (MICCAI 2026).
+to be presented at the AE-CAI | CARE | OR 2.0 | PRiSM Workshop (MICCAI 2026).
 
 ---
 
