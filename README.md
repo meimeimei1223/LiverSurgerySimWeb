@@ -360,10 +360,11 @@ This software is released under the **LiverSurgerySimWeb License**, a proprietar
 | ✅ | Personal academic study is permitted |
 | ✅ | Loading your own patient-derived meshes for research or educational review is permitted |
 | ✅ | Citation is required in academic publications |
-| ❌ | No copying, forking, cloning, or re-hosting |
-| ❌ | No modifications or derivative works |
+| ❌ | No copying, forking, cloning, or re-hosting — one personal backup copy excepted |
+| ❌ | No derivative works |
 | ❌ | No reverse engineering or decompilation |
 | ❌ | No use as AI / machine learning training data |
+| ⚠️ | Modification of the software, by prior written permission |
 | ⚠️ | Commercial use, and clinical use on human patients, by prior written arrangement (see below) |
 | ❌ | Not a medical device — not for clinical decision making |
 
