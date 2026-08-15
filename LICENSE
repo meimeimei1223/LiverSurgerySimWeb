@@ -12,6 +12,13 @@ software is subject to the strict terms below.
    a) Accessing and using the hosted web application at its
       official public URL for personal academic study,
       education, and non-commercial research evaluation.
+      This includes loading the user's own patient-derived
+      anatomical meshes for research or educational review,
+      provided that the data is de-identified, that the
+      user's institutional and legal obligations under
+      Section 10 are met, and that the resulting output is
+      not used for any purpose described in Section 2(f) or
+      Section 5(b).
 
    b) Viewing the publicly accessible source code (HTML,
       JavaScript) for the sole purpose of understanding the
@@ -57,10 +64,15 @@ software is subject to the strict terms below.
       demonstration.
 
    f) Using this software or any derivative for clinical
-      diagnosis, treatment, surgical planning, intraoperative
-      guidance, surgical training for academic credit, or any
-      form of medical decision making involving human
-      patients.
+      diagnosis, treatment, intraoperative guidance, or any
+      other form of medical decision making involving human
+      patients. Loading patient-derived anatomy for research
+      or educational review is not prohibited by this
+      subsection and is permitted under Section 1(a); the
+      uses enumerated in Section 5(b), including surgical
+      planning and surgical training for academic credit,
+      are governed by Section 5 and require prior written
+      permission.
 
    g) Reverse engineering, decompiling, disassembling,
       extracting intermediate representations, lifting to
@@ -144,6 +156,10 @@ software is subject to the strict terms below.
       limited to diagnosis, surgical planning, intraoperative
       guidance, surgical training programs that result in
       clinical credentialing, or post-operative evaluation.
+      This subsection does not cover the loading of
+      patient-derived anatomy for research or educational
+      review, which is permitted under Section 1(a) without
+      separate permission.
 
    c) Use in the development, testing, validation,
       verification, or regulatory submission of any medical
@@ -298,13 +314,13 @@ software is subject to the strict terms below.
 
 10. USER DATA AND PRIVACY
 
-    This software processes user-uploaded OBJ files entirely
+    This software processes user-supplied OBJ files entirely
     within the user's browser. The author does not collect,
-    transmit, or store user-uploaded medical or anatomical
+    transmit, or store user-supplied medical or anatomical
     data on any server operated by the author.
 
     Users are solely responsible for ensuring that any data
-    they upload or process using this software complies with
+    they load or process using this software complies with
     applicable privacy and data protection laws, including
     but not limited to:
 
@@ -316,8 +332,13 @@ software is subject to the strict terms below.
     - Any other applicable regional, national, or
       institutional regulations.
 
-    USERS MUST NOT UPLOAD IDENTIFIABLE PATIENT DATA TO THIS
-    SOFTWARE.
+    BECAUSE ALL PROCESSING OCCURS LOCALLY IN THE USER'S
+    BROWSER, NO ANATOMICAL DATA LOADED BY THE USER IS
+    TRANSMITTED TO THE AUTHOR OR TO ANY THIRD PARTY. USERS
+    MUST NEVERTHELESS LOAD ONLY DE-IDENTIFIED DATA, AND
+    REMAIN SOLELY RESPONSIBLE FOR COMPLIANCE WITH THE
+    REGULATIONS LISTED ABOVE AND WITH THEIR OWN
+    INSTITUTIONAL REQUIREMENTS.
 
     The author disclaims all liability for any privacy
     violations, data breaches, or regulatory non-compliance

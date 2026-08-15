@@ -151,9 +151,10 @@ After loading, the **Visual Mode** toolbar (top-right) lets you switch between:
 |---|---|---|---|
 | Normal | No segmentation | — | — |
 | Auto Seg | Auto segment from portal vein skeleton | `portal.obj` | Approximate (algorithmic) |
-| **Preset Seg** | Pre-segmented OBJ | `soft_S1.obj`–`soft_S8.obj` | **High** (matches input segmentation) |
+| **Preset Seg** | Pre-segmented OBJ | `S1.obj`–`S8.obj` | **High** (matches input segmentation) |
 
-The Preset Seg button is **greyed out** if no `soft_S*.obj` files were loaded.
+The Preset Seg button is **greyed out** if no `S*.obj` files were detected
+(remember: name them `S1.obj`, not `soft_S1.obj` — see the tables above).
 
 > ⚠️ **Important for clinical / paper interpretation**: the S1–S8 labels in the
 > Volume panel correspond to **Preset Seg** anatomy only. Auto Seg's segment

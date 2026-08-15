@@ -1,5 +1,7 @@
 # Liver Surgery Simulator (Web)
 
+**BLISS** is the system name used in the paper; this repository (`LiverSurgerySimWeb`) is its deployment.
+
 Real-time liver surgery simulation running in the browser via WebAssembly.
 
 ---
@@ -39,7 +41,7 @@ experimental category reported in the paper:
 | Resource | URL |
 |---|---|
 | Live snapshot (runnable) | https://meimeimei1223.github.io/LiverSurgerySimWeb/paper-benchmark-v1/ |
-| Source code (browsable) | https://github.com/meimeimei1223/LiverSurgerySimWeb/tree/paper-benchmark-v1 |
+| Deployed files (browsable) | https://github.com/meimeimei1223/LiverSurgerySimWeb/tree/paper-benchmark-v1 |
 | Git tag (commit `54c80b7`) | `git checkout paper-benchmark-v1` |
 | Snapshot README | [paper-benchmark-v1/README.md](paper-benchmark-v1/README.md) |
 
@@ -54,7 +56,7 @@ the URL to activate the floating performance measurement panel (📊).
 | Resource | URL |
 |---|---|
 | Live snapshot (runnable) | https://meimeimei1223.github.io/LiverSurgerySimWeb/paper-volume-v1/ |
-| Source code (browsable) | https://github.com/meimeimei1223/LiverSurgerySimWeb/tree/paper-volume-v1 |
+| Deployed files (browsable) | https://github.com/meimeimei1223/LiverSurgerySimWeb/tree/paper-volume-v1 |
 | Git tag (commit `8fc9977`) | `git checkout paper-volume-v1` |
 | Snapshot README | [paper-volume-v1/README.md](paper-volume-v1/README.md) |
 
@@ -66,9 +68,14 @@ machine-readable record per case for offline aggregation.
 Both snapshot URLs are **bit-frozen**; the live URL at the repository root
 continues to evolve.
 
-> ⚠️ **Not for clinical use.** This is an educational demonstration only.
-> Do not upload identifiable patient data.
-> 
+> ⚠️ **Research and educational use only — not a medical device.**
+> This software has not been reviewed, cleared, or approved by any regulatory
+> authority, and nothing it produces may be used to make a treatment decision.
+> Loading your own patient-derived anatomy for research or educational review
+> *is* supported: everything runs locally in your browser and the files you load
+> are never transmitted anywhere — see
+> [Using your own patient data](#using-your-own-patient-data).
+
 ## Quick Start
 
 ![LiverSurgerySimWeb main view with Volume panel](docs/screenshots/01_main_ui.png)
@@ -102,6 +109,32 @@ To load your own patient OBJ model, see [Loading Custom Models](#loading-custom-
 ---
 
 ## Loading Custom Models
+
+### Using your own patient data
+
+Loading a real patient's anatomy for research or educational review is a supported
+use of this software. Two properties make it practical in a hospital setting:
+
+- **Nothing is uploaded.** Tetrahedralization, physics, and volume computation all
+  run inside your browser through WebAssembly. The OBJ files you drop onto the page
+  are read locally and are never transmitted to the author or to any third party;
+  the application has no upload path for them.
+- **Any segmentation software works.** Organs are recognised by filename (see
+  [Naming convention](#naming-convention) below), so meshes exported from 3D Slicer,
+  MeshLab, or a clinical workstation are all accepted. `liver.obj` and `portal.obj`
+  alone are enough to begin. If your workstation exports STL rather than OBJ,
+  3D Slicer or MeshLab converts it in one step.
+
+Please observe the following when you do:
+
+| | |
+|---|---|
+| ✅ | Use de-identified meshes — remove patient identifiers from file and folder names |
+| ✅ | Follow your institution's rules for handling patient-derived data |
+| ✅ | Treat computed volumes and segment boundaries as approximate, and check them against your own segmentation |
+| ❌ | Do not let any output of this software inform a diagnosis, an operative plan, or a treatment decision |
+
+Questions and academic collaboration are welcome — **meidai1223@gmail.com**.
 
 ### Folder structure
 
@@ -150,11 +183,16 @@ The simulator supports two distinct segmentation methods, switchable at runtime 
 |---|---|---|---|
 | **Normal** | No segmentation | — | — |
 | **Auto Seg** | Skeleton analysis of portal vein tree | `portal.obj` | Approximate (algorithmic) |
-| **Preset Seg** | Pre-segmented OBJ files | `soft_S1.obj` … `soft_S8.obj` | **High** (matches your input segmentation) |
+| **Preset Seg** | Pre-segmented OBJ files | `S1.obj` … `S8.obj` | **High** (matches your input segmentation) |
 
-For published clinical accuracy, supply `soft_S*.obj` files exported from your
+For published anatomical accuracy, supply `S*.obj` files exported from your
 segmentation software (e.g., 3D Slicer with the Liver Couinaud module).
 Auto Seg is convenient when only `portal.obj` is available.
+
+> ℹ️ Name the files `S1.obj` … `S8.obj`, as described under
+> [Naming convention](#naming-convention). Do **not** add a `soft_` prefix: that
+> prefix is applied internally by the tetrahedralizer after a file is recognised
+> as a segment, and a file actually named `soft_S1.obj` is *not* detected as one.
 
 > ℹ️ **Volume panel S1–S8 breakdown is only meaningful in Preset Seg mode** —
 > the Auto Seg numbering does not necessarily match anatomical S1–S8.
@@ -280,7 +318,7 @@ Measured idle FPS at the standardized benchmark workflow
 | Android Browser | Adreno 710 | 34 | 32 | 9 |
 | Android AR immersive | Adreno 710 | 27 | 15 | **3.5** |
 
-➡ Cut compute times, mean ± std, full benchmark methodology: **[USAGE.md §9](USAGE.md#9-benchmark-mode-for-paper-measurement)** and paper supplementary material.
+➡ Cut compute times, mean ± std, full benchmark methodology: **[USAGE.md §9](USAGE.md#9-benchmark-mode-for-paper-measurement)**.
 
 ---
 
@@ -307,19 +345,20 @@ Measured idle FPS at the standardized benchmark workflow
 
 ## License
 
-This software is released under the **LiverSurgerySimWeb License**, a proprietary source-available license with all rights reserved. See [LICENSE](LICENSE) for the complete terms.
+This software is released under the **LiverSurgerySimWeb License**, a proprietary license with all rights reserved. The deployed HTML and JavaScript are readable in the browser and may be inspected to understand the interface; the C++ solver is distributed only as a compiled WebAssembly binary and its source is not published. See [LICENSE](LICENSE) for the complete terms.
 
 ### Key Points
 
 | | |
 |---|---|
 | ✅ | Personal academic study is permitted |
+| ✅ | Loading your own patient-derived meshes for research or educational review is permitted |
 | ✅ | Citation is required in academic publications |
 | ❌ | No copying, forking, cloning, or re-hosting |
 | ❌ | No modifications or derivative works |
 | ❌ | No reverse engineering or decompilation |
 | ❌ | No use as AI / machine learning training data |
-| ❌ | No commercial or clinical use without written permission |
+| ⚠️ | Commercial use, and clinical use on human patients, by prior written arrangement (see below) |
 | ❌ | Not a medical device — not for clinical decision making |
 
 ### Commercial Licensing
@@ -337,7 +376,11 @@ For licensing inquiries, please contact: **meidai1223@gmail.com**
 
 ## Citation
 
-If you reference this work in academic publications, please cite:
+If you reference this work in academic publications, please cite the paper:
+
+> Kasai, M. (2026). *BLISS: A Browser-Based Cross-Platform Patient-Specific Liver Surgery Simulator with AR/VR Support.* To be presented at the AE-CAI | CARE | OR 2.0 | PRiSM Workshop, MICCAI 2026, Strasbourg, France, 27 September 2026.
+
+To cite the implementation itself:
 
 > Kasai, M. (2026). *LiverSurgerySimWeb: A browser-based liver surgery simulator with soft-body physics and segment-aware cutting.* [Software]. https://github.com/meimeimei1223/LiverSurgerySimWeb
 
@@ -345,7 +388,7 @@ If you reference this work in academic publications, please cite:
 
 This software is provided "as is" without warranty of any kind. It has not been reviewed, cleared, or approved by the PMDA, FDA, EMA, or any other regulatory authority. The soft-body physics simulation is a simplified model for educational and demonstrative purposes and does not accurately represent the biomechanical behavior of real human liver tissue.
 
-**This software must not be used for any clinical decision making, surgical planning, or treatment of human patients.**
+**This software must not be used for clinical decision making or for the treatment of human patients.** Patient-derived anatomy may be loaded for research and educational review — see [Using your own patient data](#using-your-own-patient-data) — but nothing the software computes or displays may inform an operative plan or any other treatment decision.
 
 ---
 
