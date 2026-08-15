@@ -90,7 +90,7 @@ continues to evolve.
 2. The default liver model auto-loads (~10 s on desktop).
 3. **Mouse drag** to rotate, **scroll** to zoom, **right-drag** to pan.
 4. Press **`D`** → click the surface to place a handle → drag to deform.
-5. Press **`X`** → drag to position the cutter → click **Execute Cut** to slice.
+5. Press **`X`** → click the liver to place the cutter → press the floating **CUT** button to slice.
 6. Press **`B`** to open the Volume panel (S1–S8 ml breakdown).
 
 ➡ For detailed step-by-step tutorials with screenshots, see **[USAGE.md](USAGE.md)**.
@@ -275,7 +275,7 @@ Mid drops to ~19–21 FPS and High to ~5 FPS. The same holds for Android AR, whe
 | Scroll | Camera zoom |
 | **D** | Deform mode (Handle Place) |
 | **X** | Free Cut mode |
-| **Q** | Seg Overlay (in Free Cut) / Segment Cut mode |
+| **Q** | Toggle Seg Overlay (in Free Cut) |
 | **T** | Transform mode |
 | **F** | Liver Select |
 | **G** | Portal Select |

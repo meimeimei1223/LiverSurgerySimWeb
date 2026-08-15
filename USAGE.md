@@ -189,7 +189,9 @@ becomes interactive when "First interactable" appears in the console.
 2. The mode has two sub-modes: **Handle Place** (default) and **Deform**.
 3. **Handle Place**: click anywhere on the liver surface — a colored handle sphere appears at that point. Place as many as you want.
 4. **Deform**: click on a handle and drag — the surrounding mesh deforms in real time using XPBD soft-body physics.
-5. Press **`K`** to clear all handles.
+5. To remove handles, use the Action panel: **Undo Handle** removes the last one,
+   **Clear All** removes every handle. (The **`K`** key clears the *segment
+   selection* used in Segment Cut mode, not handles.)
 
 ### Tips
 
@@ -206,11 +208,12 @@ becomes interactive when "First interactable" appears in the console.
 ### Steps
 
 1. Press **`X`** to enter Free Cut mode.
-2. A semi-transparent **cutter quad** appears in the center of the scene.
-3. Position the cutter:
-   - Drag the cutter itself to move it.
-   - Rotate the camera to align it with the desired cut plane.
-4. Click the **Execute Cut** button. The liver is sliced along the cutter plane.
+2. **Click the liver** where you want to cut — a semi-transparent **cutter quad**
+   is placed there, with a floating **CUT** button next to it.
+3. Adjust the cut:
+   - Drag the cutter itself to move it; rotate the camera to align the plane.
+   - The **Size** and **Thickness** sliders in the side panel adjust the blade.
+4. Press the floating **CUT** button. The liver is sliced along the cutter plane.
 5. If the cut produces multiple disconnected fragments, a **Fragment Selection** popup appears:
    - Each fragment is highlighted with a number.
    - Click the fragment you want to **keep** (the others are discarded).
@@ -229,7 +232,9 @@ While in Free Cut mode, press **`Q`** to toggle the **Seg Overlay**:
 
 ### Steps
 
-1. Press **`Q`** to enter Segment Cut mode (when not already in Free Cut).
+1. Click the **Seg Cut** button in the toolbar, or press **`F`** (Liver Select) /
+   **`G`** (Portal Select) — either selection shortcut switches to Segment Cut
+   mode automatically.
 2. The liver re-colors to show **S1–S8** segments. Which segmentation is used depends
    on the files you loaded (see [Two segmentation modes](#two-segmentation-modes)):
    - If `S1.obj` … `S8.obj` files were loaded, **Preset Seg** shows that anatomy.
