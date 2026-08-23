@@ -67,13 +67,15 @@ experimental category reported in the paper:
 | Resource | URL |
 |---|---|
 | Live snapshot (runnable) | https://meimeimei1223.github.io/LiverSurgerySimWeb/paper-benchmark-v1/ |
+| ↳ same snapshot, layout forced | https://meimeimei1223.github.io/LiverSurgerySimWeb/paper-benchmark-v1/?ui=desktop |
 | Deployed files (browsable) | https://github.com/meimeimei1223/LiverSurgerySimWeb/tree/paper-benchmark-v1 |
 | Git tag (commit `54c80b7`) | `git checkout paper-benchmark-v1` |
 | Snapshot README | [paper-benchmark-v1/README.md](paper-benchmark-v1/README.md) |
 
 The snapshot is `index.html v286` + `benchmark.js v1.0.9` + the
 `softbody.{js,wasm,data}` binaries built on 2026-04-30. Add `?bench=1` to
-the URL to activate the floating performance measurement panel (📊).
+the URL to activate the floating performance measurement panel (📊); it
+combines with `?ui=` as `?bench=1&ui=desktop`.
 
 #### 2. Anatomical volume measurement (20 cases × liver / tumor / S1–S8 / Other Organs)
 
@@ -82,6 +84,7 @@ the URL to activate the floating performance measurement panel (📊).
 | Resource | URL |
 |---|---|
 | Live snapshot (runnable) | https://meimeimei1223.github.io/LiverSurgerySimWeb/paper-volume-v1/ |
+| ↳ same snapshot, layout forced | https://meimeimei1223.github.io/LiverSurgerySimWeb/paper-volume-v1/?ui=desktop |
 | Deployed files (browsable) | https://github.com/meimeimei1223/LiverSurgerySimWeb/tree/paper-volume-v1 |
 | Git tag (commit `8fc9977`) | `git checkout paper-volume-v1` |
 | Snapshot README | [paper-volume-v1/README.md](paper-volume-v1/README.md) |
@@ -93,6 +96,16 @@ machine-readable record per case for offline aggregation.
 
 Both snapshot URLs are **bit-frozen**; the live URL at the repository root
 continues to evolve.
+
+Being frozen, the snapshots cannot pick up later fixes to how the layout is
+chosen — and a browser that reports its pointer capabilities differently from
+when the snapshot was cut will land on the wrong layout, with the data buttons
+folded into the collapsed panel in the top-left corner. VR headset browsers do
+this today. The second row of each table above is the same snapshot with
+`?ui=desktop` appended for exactly that case; use it if the page does not come
+up as expected. In these snapshots `?ui=` selects the layout and the input
+handling and nothing else, so measurements taken through either URL remain
+comparable.
 
 > ⚠️ **Research and educational use only — not a medical device.**
 > This software has not been reviewed, cleared, or approved by any regulatory
