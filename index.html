@@ -395,7 +395,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v320</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v321</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -711,15 +711,23 @@ const _hasMM = typeof window.matchMedia === 'function';
 const _primaryCoarse = _hasMM && window.matchMedia('(pointer: coarse)').matches;
 const _anyFine       = _hasMM && window.matchMedia('(any-pointer: fine)').matches;
 const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+// v321: HMD (Quest) must never take the mobile UI path. The pointer-modality test below
+//        used to put Quest on the desktop side, but Meta Browser updates changed what it
+//        reports (v316 already had to work around maxTouchPoints becoming > 0), and it now
+//        matches (pointer: coarse) with no (any-pointer: fine) -- i.e. it looks like a phone.
+//        A HMD needs the desktop layout, so gate on the UA before the media queries.
+//        Declared here (not below with isLowPowerGPU) because isMobile reads it: a const is
+//        in the temporal dead zone until its declaration is evaluated.
+const isQuest = /OculusBrowser|Quest/i.test(navigator.userAgent);
 const isMobile = _uiOverride === 'mobile'  ? true
                : _uiOverride === 'desktop' ? false
+               : isQuest                   ? false
                : _hasMM                    ? (_primaryCoarse && !_anyFine)
                : (isTouchDevice && (window.innerWidth <= 900 || window.innerHeight <= 500));
 // v298: 低スペック GPU 端末判定 (半透明 mesh 同時表示で FPS が落ちる端末群)
 //        - Touch device (phone / tablet / Surface 等) は GPU が discrete でないことが多い
 //        - Quest (OculusBrowser UA) は Adreno 740 で 3 半透明 mesh で重い
 //        - 該当端末では非 liver を 2-state (OFF/ON) に制限、liver は 3-state 維持
-const isQuest = /OculusBrowser|Quest/i.test(navigator.userAgent);
 const isLowPowerGPU = isTouchDevice || isQuest;
 console.log('[Device]', isMobile ? 'MOBILE' : 'DESKTOP',
     '| pointer:coarse=', _primaryCoarse, 'any-fine=', _anyFine,
@@ -2606,7 +2614,7 @@ function exportVolumeData() {
     const data = {
         meta: {
             exportedAt: new Date().toISOString(),
-            appVersion: 'v320',
+            appVersion: 'v321',
             useOBJSegmentation: useOBJ,
             displayMode,
             hasTumorMask: typeof sb.hasTumorOverlapMask === 'function' && sb.hasTumorOverlapMask(),
@@ -3394,7 +3402,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v320</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v321</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>

@@ -64,9 +64,21 @@ my_patient.zip
     └── gb.obj
 ```
 
-1. Drag the **`.zip` file** onto the browser window.
+1. Click the **OBJ Drop** area and pick the `.zip` file in the file picker.
 2. `fflate.min.js` automatically extracts in-browser (typically <1 s).
 3. The OBJ Drop modal appears.
+
+> **The ZIP does not show up in the picker?** A file copied over USB (`adb push`,
+> SideQuest) lands in `/sdcard/Download/` but the MediaStore row it creates is left
+> flagged `is_pending=1`, and Android hides pending rows from every other app — so
+> the file exists yet the picker cannot see it. Reboot the headset, or clear the
+> flag from a PC:
+>
+> ```
+> adb shell content call --uri content://media/external/file --method scan_file --arg /sdcard/Download/<file>.zip
+> ```
+>
+> Downloading the ZIP in the headset's own browser avoids the problem entirely.
 
 #### Android (Chrome on phone / tablet)
 

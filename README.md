@@ -30,6 +30,26 @@ advances when you press it, alongside a worked example built from screenshots.
 | Git tag | `git checkout demo-tutorial-v1` |
 | Snapshot README | [demo-tutorial-v1/README.md](demo-tutorial-v1/README.md) |
 
+#### If the layout looks wrong for your device
+
+The interface chooses the desktop or the touch layout from the pointer capabilities
+the browser reports. Some browsers change what they report between releases — VR
+headset browsers in particular — so the automatic choice can come out wrong, and the
+data buttons end up folded into the collapsed panel in the top-left corner. Append
+`?ui=` to any URL on this page to force it:
+
+| Layout | Guided demo |
+|---|---|
+| Automatic (default) | https://meimeimei1223.github.io/LiverSurgerySimWeb/demo-tutorial-v1/ |
+| Desktop / VR headset | https://meimeimei1223.github.io/LiverSurgerySimWeb/demo-tutorial-v1/?ui=desktop |
+| Phone / tablet | https://meimeimei1223.github.io/LiverSurgerySimWeb/demo-tutorial-v1/?ui=mobile |
+
+`?ui=` selects the layout and the input handling, nothing else. One exception worth
+knowing: on the continuously-updated build a forced *mobile* layout also lowers the
+solver substeps to 3, so do not use it when comparing performance. The frozen
+snapshots below are unaffected — there `?ui=` changes the layout only.
+
+
 The same tutorial is available on the live demo above from the **🎓 Tutorial**
 pill in the bottom-right corner; there it stays closed until you ask for it.
 Best on desktop — phones get the worked-example panel only, and it is hidden
@@ -209,7 +229,7 @@ Auto Seg is convenient when only `portal.obj` is available.
 |---|---|
 | Desktop (Chrome / Firefox / Edge) | Drag the **folder** onto the page |
 | Android Browser / AR | Tap the floating ➕ button → select extracted folder |
-| Quest3 Browser / VR | Drag a **ZIP archive** onto the page (folder drop unsupported on Meta Browser) |
+| Quest3 Browser / VR | Click the OBJ Drop area → pick a **ZIP archive** in the file picker (folder drop unsupported on Meta Browser) |
 
 For Quest3 ZIP format:
 
@@ -222,6 +242,14 @@ my_patient.zip
 ```
 
 After dropping, choose a [tetrahedralization preset](#tet-density-presets) and click **Generate**.
+
+> **Quest3: getting the ZIP onto the headset.** A file copied over USB (`adb push`,
+> SideQuest) lands in `/sdcard/Download/` but stays invisible to the file picker,
+> because the MediaStore row it creates is left flagged `is_pending=1` and Android
+> hides pending rows from other apps. Reboot the headset, or clear the flag with
+> `adb shell content call --uri content://media/external/file --method scan_file
+> --arg /sdcard/Download/<file>.zip`. Downloading the ZIP in the headset's own
+> browser avoids the problem entirely.
 
 ➡ Full walkthrough including OBJ Drop modal screenshots: **[USAGE.md §1](USAGE.md#1-loading-a-model--full-walkthrough)**.
 
@@ -331,7 +359,7 @@ Measured idle FPS at the standardized benchmark workflow
 ## Known Limitations (brief)
 
 - **HIGH preset on mobile / HMD**: 3–17 FPS — usable for review, not real-time interactive
-- **Quest3**: ZIP drop only (folder drop unsupported in Meta Browser)
+- **Quest3**: ZIP only, selected through the file picker (folder drop unsupported in Meta Browser)
 - **Firefox**: GPU and CPU threads spoofed by Resist Fingerprinting (same RTX 4070 hardware, same performance as Chrome)
 - **iOS Safari**: Not officially tested (WebGL2 + WebXR incomplete)
 - **AR + fullscreen (mobile)**: Browser fullscreen and WebXR `dom-overlay` are mutually exclusive on Android Chrome. The AR button is intentionally blocked while fullscreen is active; tap the ⛶ button to exit fullscreen first.

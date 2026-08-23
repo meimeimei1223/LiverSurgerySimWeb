@@ -9,6 +9,25 @@ never change; this log tracks the live root only.
 
 ---
 
+## v321 — 2026-08-23
+
+- Fixed the Quest 3 browser opening the touch layout. The desktop/touch choice
+  reads the pointer capabilities the browser reports, and Meta Browser now
+  matches `(pointer: coarse)` with no `(any-pointer: fine)` — the signature of a
+  phone. The visible symptom was that OBJ Drop, Firebase and the VR/AR buttons
+  disappeared: the touch layout folds them into the collapsed panel in the
+  top-left corner, while the landscape rule still restored the desktop side
+  panel, so the page looked almost normal with those three controls missing.
+  A headset is now identified from the user agent and always gets the desktop
+  layout. (v316 had already made the same correction for the VR button alone.)
+- `?ui=desktop` / `?ui=mobile` forces the layout on any build, including the
+  frozen snapshots, which cannot be changed. README documents this.
+- Documentation: the Quest OBJ loading instructions said to drag the ZIP onto
+  the page. Every recorded Quest benchmark run used the file picker instead, so
+  the instructions now say to click the OBJ Drop area and pick the ZIP. Added a
+  note about ZIP files copied over USB staying invisible to the picker until
+  the headset is rebooted or the MediaStore entry is scanned.
+
 ## v320 — 2026-08-15
 
 - Fixed the whole mesh shifting sideways after a cut (and snapping back on
