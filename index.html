@@ -395,7 +395,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v322</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v323</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2614,7 +2614,7 @@ function exportVolumeData() {
     const data = {
         meta: {
             exportedAt: new Date().toISOString(),
-            appVersion: 'v322',
+            appVersion: 'v323',
             useOBJSegmentation: useOBJ,
             displayMode,
             hasTumorMask: typeof sb.hasTumorOverlapMask === 'function' && sb.hasTumorOverlapMask(),
@@ -3402,7 +3402,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v322</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v323</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -5724,8 +5724,15 @@ function renderXR(time, frame) {
         const fwdY = -(2 * (qy * qz - qx * qw));
         const fwdZ = -(1 - 2 * (qx * qx + qy * qy));
         const dist = 0.4;  // 40cm 前方
+        // v323: 前方ベクトルの Y 成分も使う。
+        //   旧式は水平成分 (fwdX, fwdZ) だけで 40cm 進め、Y は -0.1 固定だった。
+        //   fwd は正規化済みなので端末を見下ろすほど水平成分が 0 に縮み、タブレットで
+        //   机を見る姿勢 (ピッチ -87°実測) ではモデルがカメラから 13cm の位置に置かれ、
+        //   23.5cm のモデルの内部に入って肝臓が背面カリングで消えていた。
+        //   「視線の 10cm 下（机の上に置いた風）」は水平に構えた時だけ効かせる。
+        const horizLen = Math.hypot(fwdX, fwdZ);
         let ox = vp.x + fwdX * dist;
-        let oy = vp.y - 0.1;  // 視線の 10cm 下（机の上に置いた風）
+        let oy = vp.y + fwdY * dist - 0.1 * horizLen;
         let oz = vp.z + fwdZ * dist;
         // モデル重心を VR_OFFSET の位置に合わせる
         if (sb) {
@@ -5736,7 +5743,7 @@ function renderXR(time, frame) {
         }
         VR_OFFSET = { x: ox, y: oy, z: oz };
         arInitialPlacePending = false;
-        console.log('[AR] Initial placement:', VR_OFFSET, 'scale=', VR_SCALE);
+        console.log('[AR] Initial placement:', VR_OFFSET, 'scale=', VR_SCALE, 'fwdY=', fwdY.toFixed(3), 'horizLen=', horizLen.toFixed(3));
     }
 
     // モバイル AR: Transform オーバーレイは常時表示 (v263)
