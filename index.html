@@ -395,7 +395,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v323</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v325</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2614,7 +2614,7 @@ function exportVolumeData() {
     const data = {
         meta: {
             exportedAt: new Date().toISOString(),
-            appVersion: 'v323',
+            appVersion: 'v325',
             useOBJSegmentation: useOBJ,
             displayMode,
             hasTumorMask: typeof sb.hasTumorOverlapMask === 'function' && sb.hasTumorOverlapMask(),
@@ -3402,7 +3402,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v323</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v325</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -4909,7 +4909,18 @@ async function startXR(mode) {
             // モバイル AR / タブレット AR: Phase 1.5 screen-locked + 既存モバイル UI 流用
             // v295: タブレット (DESKTOP判定だが isTouchDevice=true) も phone AR と同じ
             //        画面タップ AR を使う (vr-panel は HMD ハンドコントローラ前提なので不適)
-            if (isTouchDevice) {
+            // v325: 判定を「触れる端末か」から「この AR セッションに dom-overlay が実際に付いたか」へ。
+            //   v317 でここが isMobile → isTouchDevice に変わり、手トラッキングのため
+            //   isTouchDevice=true になる Quest まで画面 AR 経路に入るようになった。ところが
+            //   Quest の AR セッションは dom-overlay を付けない (Quest 3 実測 2026-09-21:
+            //   enabledFeatures に無く domOverlayState=null)。DOM の UI は合成されず、HMD 用の
+            //   vr-panel は下の枝で隠されるので、AR 中に UI が何も出ない状態だった。
+            //   スマホ・タブレットは dom-overlay が付くので、従来どおり画面 AR に入る。
+            const arHasOverlay = !!xrSession.domOverlayState ||
+                !!(xrSession.enabledFeatures && [...xrSession.enabledFeatures].includes('dom-overlay'));
+            console.log('[AR] domOverlay=', arHasOverlay, 'isTouchDevice=', isTouchDevice,
+                        '→', (isTouchDevice && arHasOverlay) ? 'screen AR' : 'HMD AR');
+            if (isTouchDevice && arHasOverlay) {
                 arMode = 'screen';
                 arPrevVRState = { scale: VR_SCALE, offset: { ...VR_OFFSET } };
                 arInitialPlacePending = true;  // 最初のフレームで配置
@@ -5714,7 +5725,10 @@ function renderXR(time, frame) {
     arLastViewOri = pose.views[0].transform.orientation;
 
     // モバイル AR / タブレット AR: 初回フレームでユーザーの正面に肝臓を配置 (screen-locked の初期位置)
-    const isPhoneAR = (xrMode === 'ar' && isTouchDevice);
+    // v325: 画面 AR かどうかは arMode で判定する (startXR が dom-overlay の有無で決める)。
+    //   isTouchDevice だけを見ると Quest の AR まで画面 AR 扱いになり、HMD 用のパネルと
+    //   ハンド描画が丸ごと抑止されてしまう。
+    const isPhoneAR = (xrMode === 'ar' && arMode === 'screen');
     if (arInitialPlacePending && xrMode === 'ar') {
         const vp = pose.views[0].transform.position;
         const ori = pose.views[0].transform.orientation;
