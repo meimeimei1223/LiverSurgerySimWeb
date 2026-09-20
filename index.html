@@ -395,7 +395,7 @@
 <div class="overlay" id="error"><h2>Error</h2><pre id="err-msg"></pre></div>
 
 <div class="overlay" id="info" style="font-size:11px;line-height:1.5;">
-    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v321</span></div>
+    <div style="color:#00d4ff;font-weight:bold;font-size:13px;margin-bottom:4px;">Liver Simulation <span style="color:#888;font-size:11px;font-weight:normal;">v322</span></div>
     <div id="xr-buttons-inline" style="display:none;margin-bottom:4px;"></div>
     <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span> FPS<br>
     <span style="color:#aaa;">LowRes:</span> <span class="v" id="lo-v">-</span> verts, <span class="v" id="lo-t">-</span> tets<br>
@@ -2614,7 +2614,7 @@ function exportVolumeData() {
     const data = {
         meta: {
             exportedAt: new Date().toISOString(),
-            appVersion: 'v321',
+            appVersion: 'v322',
             useOBJSegmentation: useOBJ,
             displayMode,
             hasTumorMask: typeof sb.hasTumorOverlapMask === 'function' && sb.hasTumorOverlapMask(),
@@ -3402,7 +3402,7 @@ function initMobileUI() {
 
         info.innerHTML = `
             <div id="mobile-info-header" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">
-                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v321</span></span>
+                <span style="color:#00d4ff;font-weight:bold;font-size:11px;">Liver Simulation <span style="color:#888;font-size:9px;font-weight:normal;">v322</span></span>
                 <span style="color:#7dff7d;font-weight:bold;" id="fps">0</span>
                 <span style="color:#888;font-size:10px;">FPS</span>
                 <span id="mobile-info-arrow" style="color:#555;font-size:10px;margin-left:auto;">&#9654;</span>
@@ -4942,6 +4942,13 @@ async function startXR(mode) {
                 // canvas DOM ポインタイベントを無効化 (XR select に流す)
                 const cv = document.getElementById('canvas');
                 if (cv) { cv.dataset.arPrevPE = cv.style.pointerEvents || ''; cv.style.pointerEvents = 'none'; }
+                // v322: AR 中は canvas 要素自体も隠す。
+                //   XR の描画は XR のフレームバッファへ行くので、canvas 要素には 2D 時に
+                //   不透明色 (0.08,0.08,0.12,1) で塗った最後の絵が残ったままになる。
+                //   domOverlay の root が body なので canvas もカメラ映像の上に合成され、
+                //   合成する版の Chrome (110 で確認) では画面が真っ暗になり、全画面 canvas が
+                //   タッチも奪う。隠しても AR の表示には影響しない (nubia Pad 3D で確認)。
+                if (cv) { cv.dataset.arPrevVis = cv.style.visibility || ''; cv.style.visibility = 'hidden'; }
                 const hov = document.getElementById('handle-overlay');
                 if (hov) { hov.dataset.arPrevPE = hov.style.pointerEvents || ''; hov.style.pointerEvents = 'none'; }
                 // AR 不要の UI を隠す
@@ -5596,6 +5603,7 @@ function onXREnd() {
     ['canvas', 'handle-overlay'].forEach(id => {
         const el = document.getElementById(id);
         if (el && 'arPrevPE' in el.dataset) { el.style.pointerEvents = el.dataset.arPrevPE; delete el.dataset.arPrevPE; }
+        if (el && 'arPrevVis' in el.dataset) { el.style.visibility = el.dataset.arPrevVis; delete el.dataset.arPrevVis; }  // v322
     });
     ['folder-drop-area', 'firebase-toggle-btn', 'firebase-load-area'].forEach(id => {
         const el = document.getElementById(id);

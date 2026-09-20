@@ -9,6 +9,23 @@ never change; this log tracks the live root only.
 
 ---
 
+## v322 — 2026-09-20
+
+- Fixed AR passthrough coming up black, with the screen unresponsive to touch,
+  on some Android browsers. The page asks for the DOM overlay with
+  `domOverlay: { root: document.body }`, so everything under `<body>` — the
+  WebGL `<canvas>` included — is composited on top of the camera feed. During
+  an AR session the scene is drawn into the XR framebuffer, not into the
+  canvas's own, so the canvas element still held the last 2D frame, which is
+  cleared to an opaque dark colour. Browsers differ in whether they composite
+  that canvas while an immersive session is running; where they do, it covered
+  the camera completely and, being full-screen, swallowed every touch. The
+  canvas element is now hidden for the duration of an AR session and restored on
+  exit. Found on a ZTE nubia Pad 3D with Chrome 110; the same page was fine on
+  newer Chrome, which is why it went unnoticed.
+
+---
+
 ## v321 — 2026-08-23
 
 - Fixed the Quest 3 browser opening the touch layout. The desktop/touch choice
