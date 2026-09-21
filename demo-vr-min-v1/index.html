@@ -4734,27 +4734,42 @@ function vrminPlaceHandles(force) {
             const d = dx*dx + dz*dz;
             if (d > best) { best = d; bx = pos[k]; by = pos[k+1]; bz = pos[k+2]; }
         }
-        // 端そのものだと尖っていて掴みにくいので、少し内側へ寄せる
-        return [cx + (bx-cx)*0.82, by, cz + (bz-cz)*0.82];
+        // 端そのものだと尖っていて掴みにくいので、ほんの少しだけ内側へ寄せる
+        return [cx + (bx-cx)*0.94, by, cz + (bz-cz)*0.94];
+    };
+
+    // 子メッシュのうち、肝臓重心から一番遠い頂点（＝肝臓から飛び出している先端）
+    const childTip = (label) => {
+        if (typeof childBuffers === 'undefined') return null;
+        for (let i = 0; i < childBuffers.length; i++) {
+            if (childBuffers[i].label !== label) continue;
+            const q = sb.getChildHighResPositions(i);
+            if (!q || q.length < 3) return null;
+            let best = -1, t = null;
+            for (let k = 0; k < q.length; k += 3) {
+                const dx = q[k]-cx, dy = q[k+1]-cy, dz = q[k+2]-cz;
+                const d = dx*dx + dy*dy + dz*dz;
+                if (d > best) { best = d; t = [q[k], q[k+1], q[k+2]]; }
+            }
+            return t;
+        }
+        return null;
     };
 
     let placed = 0;
     const log = [];
 
-    // 1. 肝静脈のところ（裏側）
+    // 1. 肝静脈のところ（裏側）— ここは現状どおり
     const ve = vrminChildCentroid('Vein');
     if (ve && aimAt(ve)) { placed++; log.push('vein'); }
 
-    // 2. 外側の端（三角間膜のあたり）
+    // 2. 肝臓のへり（向かって外側の一番端）
     const lt = lateralTip();
-    if (lt && aimAt(lt)) { placed++; log.push('lateral'); }
+    if (lt && aimAt(lt)) { placed++; log.push('lateral edge'); }
 
-    // 3. 胆嚢の横の外側
-    const gb = vrminChildCentroid('GB');
-    if (gb) {
-        const ty = gb[1] + 0.6 * (cy - gb[1]);   // 胆嚢は肝臓のほぼ真下。少し上の高さを狙う
-        if (aim(gb[0], ty, gb[2], gb[0]-cx, gb[2]-cz)) { placed++; log.push('gallbladder'); }
-    }
+    // 3. 静脈が肝臓から飛び出ているところ（左右の中間・真後ろあたり）
+    const vt = childTip('Vein');
+    if (vt && aimAt(vt)) { placed++; log.push('vein outlet'); }
 
     // 足りなければ重心狙いで埋める（形が変わっても 3 個は出す）
     for (let k = 0; placed < 3 && k < 6; k++) {
