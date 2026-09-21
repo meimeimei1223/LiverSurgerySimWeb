@@ -15,6 +15,26 @@ Real-time liver surgery simulation running in the browser via WebAssembly.
 
 **[Launch Simulator](https://meimeimei1223.github.io/LiverSurgerySimWeb/)** — latest version (continuously updated, see [CHANGELOG.md](CHANGELOG.md))
 
+### 🥽 Headset Demo — VR with nothing to learn first
+
+**[demo-vr-min-v1 (VR minimum snapshot)](https://meimeimei1223.github.io/LiverSurgerySimWeb/demo-vr-min-v1/)**
+
+A frozen copy for Quest 3 with a single pair of gestures and no modes: the right
+index pinch cuts, the left index pinch pulls a handle, and nothing else is bound.
+Three handles are already placed, cutting is fixed to the liver, a cut that splits
+the mesh keeps the larger piece on its own, and the control panel is parked behind
+your right shoulder so it stays out of the way (Reset still lives there). Built for
+the AE-CAI booth, where a visitor has ten seconds and no briefing.
+
+| Resource | URL |
+|---|---|
+| VR demo (runnable) | https://meimeimei1223.github.io/LiverSurgerySimWeb/demo-vr-min-v1/ |
+| Git tag |  |
+| Snapshot README | [demo-vr-min-v1/README.md](demo-vr-min-v1/README.md) |
+
+On a phone or tablet, open the main simulator with the tutorial instead:
+https://meimeimei1223.github.io/LiverSurgerySimWeb/?tut=1
+
 ### 🎓 Guided Demo — start here if it is your first visit
 
 **[demo-tutorial-v1 (guided snapshot)](https://meimeimei1223.github.io/LiverSurgerySimWeb/demo-tutorial-v1/)**
