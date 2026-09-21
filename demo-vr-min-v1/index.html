@@ -4644,6 +4644,66 @@ function vrminChildCentroid(label) {
     return null;
 }
 
+// モデルと一緒に回る座標系を、解剖のランドマーク（門脈・胆嚢）から作る。
+//   モデルを動かしても同じ場所を指せるようにするため。取れなければ null。
+function vrminFrame() {
+    if (!sb) return null;
+    const o = [sb.getMeshCentroidX(), sb.getMeshCentroidY(), sb.getMeshCentroidZ()];
+    const po = vrminChildCentroid('Portal'), gb = vrminChildCentroid('GB');
+    if (!po || !gb) return null;
+    let x = [po[0]-o[0], po[1]-o[1], po[2]-o[2]];
+    const xl = Math.hypot(x[0], x[1], x[2]); if (xl < 1e-4) return null;
+    x = [x[0]/xl, x[1]/xl, x[2]/xl];
+    const v = [gb[0]-o[0], gb[1]-o[1], gb[2]-o[2]];
+    let z = [x[1]*v[2]-x[2]*v[1], x[2]*v[0]-x[0]*v[2], x[0]*v[1]-x[1]*v[0]];
+    const zl = Math.hypot(z[0], z[1], z[2]); if (zl < 1e-4) return null;
+    z = [z[0]/zl, z[1]/zl, z[2]/zl];
+    const y = [z[1]*x[2]-z[2]*x[1], z[2]*x[0]-z[0]*x[2], z[0]*x[1]-z[1]*x[0]];
+    return { o, x, y, z };
+}
+
+// 今のハンドル位置を、そのフレームでの座標として覚える（最初に置けた時だけ）
+let vrminHandleLocal = null;
+function vrminRememberHandles() {
+    const f = vrminFrame();
+    if (!f || !sb || sb.getNumHandleSpheres() < 3) return;
+    const d = sb.getHandleSphereData();
+    const out = [];
+    for (let i = 0; i < d.length; i += 4) {
+        const p = [d[i]-f.o[0], d[i+1]-f.o[1], d[i+2]-f.o[2]];
+        out.push([p[0]*f.x[0]+p[1]*f.x[1]+p[2]*f.x[2],
+                  p[0]*f.y[0]+p[1]*f.y[1]+p[2]*f.y[2],
+                  p[0]*f.z[0]+p[1]*f.z[1]+p[2]*f.z[2], d[i+3]]);
+    }
+    vrminHandleLocal = out;
+    console.log('[VRMIN] remembered', out.length, 'handle positions');
+}
+
+// 覚えた位置へ置き直す。表面の点なので、重心からその点へ向かうレイで当てられる。
+function vrminRestoreHandles() {
+    if (!vrminHandleLocal || !sb) return false;
+    const f = vrminFrame();
+    if (!f) return false;
+    if (sb.getNumHandleSpheres() > 0) sb.clearHandleSpheres();
+    let ok = 0;
+    for (const L of vrminHandleLocal) {
+        const t = [f.o[0] + L[0]*f.x[0] + L[1]*f.y[0] + L[2]*f.z[0],
+                   f.o[1] + L[0]*f.x[1] + L[1]*f.y[1] + L[2]*f.z[1],
+                   f.o[2] + L[0]*f.x[2] + L[1]*f.y[2] + L[2]*f.z[2]];
+        let d = [t[0]-f.o[0], t[1]-f.o[1], t[2]-f.o[2]];
+        const dl = Math.hypot(d[0], d[1], d[2]) || 1;
+        d = [d[0]/dl, d[1]/dl, d[2]/dl];
+        const R = 6.0;
+        if (sb.addHandleSphereVR(t[0]+d[0]*R, t[1]+d[1]*R, t[2]+d[2]*R, -d[0], -d[1], -d[2], L[3] || VRMIN_HANDLE_R)) { ok++; continue; }
+        // 縦向きに近いレイは当たらないので、水平成分だけでもう一度
+        const hl = Math.hypot(d[0], d[2]) || 1;
+        const hx = d[0]/hl, hz = d[2]/hl;
+        if (sb.addHandleSphereVR(t[0]+hx*R, t[1], t[2]+hz*R, -hx, 0, -hz, L[3] || VRMIN_HANDLE_R)) ok++;
+    }
+    console.log('[VRMIN] restored', ok, '/', vrminHandleLocal.length, 'handles at their first positions');
+    return ok >= vrminHandleLocal.length;
+}
+
 // force=true なら今あるハンドルを捨てて置き直す。
 function vrminPlaceHandles(force) {
     if (!sb) return;
@@ -4791,6 +4851,8 @@ function vrminBarAction(which) {
     console.log('[VRMIN] RESET pressed');
     if (typeof doReset === 'function') doReset();   // 全 Undo + ハンドル削除 + 形状復元
     vrminHandleRetry = 0;
+    vrminHasCut = false;                            // 対象切り替えも最初の状態へ
+    cutTargetMeshIdx = -1; vrCutTargetIdx = 0;
     vrminEnsureHandles();                           // doReset がハンドルを消すので置き直す
     if (typeof setActionMode === 'function') setActionMode('freeCut');
     cutTargetMeshIdx = -1; vrCutTargetIdx = 0;
@@ -4868,12 +4930,16 @@ function drawVrminBar(V, P) {
 // ハンドルが 0〜2 個しか置けずに「リセットするとハンドルが消える」ように見えていた
 // （Quest 3 で再現、2026-09-21）。3 個そろうまで数フレームかけて置き直す。
 let vrminHandleRetry = 0;
+let vrminHasCut = false;     // 最初の 1 カットが終わったか（対象切り替えの解禁条件）
 function vrminEnsureHandles() {
     if (!sb) return;
+    // 最初に置いた位置を覚えていれば、そこへ戻す（リセットで位置が変わらないように）
+    if (vrminHandleLocal && vrminRestoreHandles()) { vrminHandleRetry = 0; return; }
     vrminPlaceHandles(true);
     if (sb.getNumHandleSpheres() >= 3) {
         if (vrminHandleRetry > 0) console.log('[VRMIN] handles settled after', vrminHandleRetry, 'retries');
         vrminHandleRetry = 0;
+        if (!vrminHandleLocal) vrminRememberHandles();   // 最初の位置を保存
         return;
     }
     if (vrminHandleRetry++ < 15) setTimeout(vrminEnsureHandles, 80);
@@ -8013,10 +8079,12 @@ function processHandTracking(frame, src, hand) {
                 cutterPlaced = true;
             }
             // 中指ピンチ = 臓器サイクル（Liver→Portal→Vein→Liver、vein 欠落時は Liver→Portal）
-            // [demo-vr-min-v1] 右手の中指ピンチで肝臓→門脈→静脈と切る対象を替える。
+            // [demo-vr-min-v1] 最初の 1 回は必ず肝臓を切らせる。対象切り替えはそのあと。
+            //   いきなり血管モードで始まると何を切っているのか分からないため（本人指定）。
             //   パネルを触らずに 4 操作（右人差し指=切る / 右中指=対象替え /
             //   左人差し指=動かす / 左中指=引っ張る）が完結するようにするため復活させた。
-            if (middleDist < 0.025 && !vrMiddlePinchDone && !vrCutterDragging) {
+            if (middleDist < 0.025 && !vrMiddlePinchDone && !vrCutterDragging
+                && (!VRMIN || vrminHasCut)) {
                 vrMiddlePinchDone = true;
                 const _vrCT = getVrCutTargets();
                 vrCutTargetIdx = (vrCutTargetIdx + 1) % _vrCT.length;
@@ -8608,6 +8676,7 @@ function vrDetectNearestOrgan(sx, sy, sz) {
 // VR Free Cut 関数
 function vrExecuteCut() {
     if (!sb || !cutterPlaced) return;
+    if (VRMIN) vrminHasCut = true;   // [demo-vr-min-v1] これ以降は中指で対象を替えられる
     let count = 0;
     if (cutTargetMeshIdx < 0) {
         sb.testCutIntersection();
