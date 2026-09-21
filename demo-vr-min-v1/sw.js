@@ -47,8 +47,12 @@ self.addEventListener('install', event => {
 // activate: 古いキャッシュ削除
 self.addEventListener('activate', event => {
   event.waitUntil(
+    // 消すのは自分の系列 (liver-sim-demo-vr-min-*) だけ。ライブ版と凍結版は同じオリジンに
+    // 同居しており、他人のキャッシュまで消すと相手がオフラインで起動できなくなる
+    // （Quest 実機で再現、2026-09-21）。
     caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
+      Promise.all(keys.filter(k => k !== CACHE_NAME && k.startsWith('liver-sim-demo-vr-min-'))
+                      .map(k => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
 });

@@ -8,7 +8,7 @@
 // Service Worker for Liver Surgery Simulator PWA
 // 軽量 fetch ハンドラ: 同一オリジン GET のみ cache-first
 // Firebase 等の別オリジン通信は素通し → FPS 影響最小
-const CACHE_NAME = 'liver-sim-v325';
+const CACHE_NAME = 'liver-sim-v326';
 const ASSETS = [
   './',
   './index.html',
@@ -45,8 +45,12 @@ self.addEventListener('install', event => {
 // activate: 古いキャッシュ削除
 self.addEventListener('activate', event => {
   event.waitUntil(
+    // 消すのは自分の系列 (liver-sim-vNNN) だけ。demo-vr-min-v1 などの凍結版は同じオリジンに
+    // 同居しており、他人のキャッシュまで消すと相手がオフラインで起動できなくなる
+    // （Quest 実機で再現、2026-09-21）。
     caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
+      Promise.all(keys.filter(k => k !== CACHE_NAME && /^liver-sim-v[0-9]+$/.test(k))
+                      .map(k => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
 });
