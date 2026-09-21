@@ -4717,11 +4717,15 @@ function vrminBarDrawCanvas() {
     c.strokeStyle = 'rgba(255,255,255,0.25)';
     c.lineWidth = 2;
     c.strokeRect(2, 2, W - 4, btnTop - 4);
+    c.textAlign = 'right';
+    c.fillStyle = 'rgba(255,255,255,0.45)';
+    c.font = '22px Arial';
+    c.fillText('pinch to use', W - 18, 22);
     const rows = [
-        ['LEFT index',   'move the liver', '#8ad8ff'],
-        ['LEFT middle',  'pull a handle',  '#8ad8ff'],
-        ['RIGHT index',  'cut',            '#ffd27d'],
-        ['RIGHT middle', 'change target',  '#ffd27d'],
+        ['LEFT index',   'move the liver',        '#8ad8ff'],
+        ['LEFT middle',  'pull / deform',         '#8ad8ff'],
+        ['RIGHT index',  'cut',                   '#ffd27d'],
+        ['RIGHT middle', 'liver / portal / vein', '#ffd27d'],
     ];
     c.textBaseline = 'middle';
     const rowH = (btnTop - 24) / rows.length;
