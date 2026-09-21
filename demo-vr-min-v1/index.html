@@ -4618,9 +4618,11 @@ const VRMIN = true;
 const VRMIN_LIVER_ALPHA  = 60;    // %。血管が透け、かつ切断面が読める値（実機で決定）
 const VRMIN_HANDLE_R     = 0.5;   // ハンドル球の半径（VR 経路の既定値と同じ）
 // パネルの初期配置: 来場者の正面視野から外し、説明員が振り向けば Reset に届く位置
-const VRMIN_PANEL_SIDE   = 0.75;  // 右へ (m)
-const VRMIN_PANEL_BACK   = 0.25;  // 後ろへ (m)
-const VRMIN_PANEL_DOWN   = 0.15;  // 下へ (m)
+const VRMIN_PANEL_SIDE   = 0.55;  // 右へ (m)
+const VRMIN_PANEL_BACK   = 0.10;  // 後ろへ (m)
+const VRMIN_PANEL_DOWN   = 0.12;  // 下へ (m)
+//   距離 0.57m / 正面から約 100 度。正面視野には入らないが、体を捻らずに手が届く。
+//   当初 0.75/0.25/0.15 (0.79m) にしたが、Visibility を操作するには遠すぎた（実機判断）。
 
 function vrminPlaceHandles() {
     if (!sb || sb.getNumHandleSpheres() > 0) return;
@@ -7980,11 +7982,12 @@ function processHandTracking(frame, src, hand) {
                 mmZ = (mp.z + tp.z) / 2;
             }
             const middlePinchL = middleDistL < 0.025;
-            // [demo-vr-min-v1] 左手は人差し指ピンチで引っ張るだけ。中指割り当てとモデル移動は殺す。
-            const doTransform = VRMIN ? false : (isPinching && !middlePinchL);
-            const doDeform    = VRMIN ? isPinching : (middlePinchL && !isPinching);
-            // 引っ張る点も人差し指側へ（FULL は中指と親指の中点）
-            if (VRMIN) { mmX = midX; mmY = midY; mmZ = midZ; }
+            // [demo-vr-min-v1] 左手は FULL と同じ割り当てのまま。
+            //   当初は人差し指を「引っ張る」に振ったが、平行移動 (Transform) が使えないと
+            //   モデルを手元へ寄せられず実用にならない（実機判断、2026-09-21）。
+            //   人差し指ピンチ = Transform（移動・回転）、中指ピンチ = ハンドルを引っ張る。
+            const doTransform = isPinching && !middlePinchL;
+            const doDeform = middlePinchL && !isPinching;
 
             if (vrLeftMode === 'transform' && !doTransform) {
                 processTransform('left', false, {x:midX,y:midY,z:midZ}, {x:wo.x,y:wo.y,z:wo.z,w:wo.w});
