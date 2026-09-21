@@ -4704,79 +4704,74 @@ function vrminRestoreHandles() {
 }
 
 // force=true なら今あるハンドルを捨てて置き直す。
+// ハンドルを付ける肝臓表面の頂点番号。メッシュは会場でも同じものなので、
+// 番号で固定すればモデルを動かしても回しても必ず同じ解剖学的位置に付く
+// （本人提案、2026-09-21）。最初に一度だけ決めて以後は使い回す。
+let vrminHandleIdx = null;
+
+function vrminPickHandleIndices() {
+    const pos = sb.getHighResPositions();
+    if (!pos || pos.length < 9) return null;
+    const nv = pos.length / 3;
+    const cx = sb.getMeshCentroidX(), cy = sb.getMeshCentroidY(), cz = sb.getMeshCentroidZ();
+    const at = (k) => [pos[k*3], pos[k*3+1], pos[k*3+2]];
+
+    // 1. 肝静脈に一番近い表面の点
+    const ve = vrminChildCentroid('Vein');
+    let i1 = 0, best1 = Infinity;
+    if (ve) {
+        for (let k = 0; k < nv; k++) {
+            const q = at(k);
+            const d = (q[0]-ve[0])**2 + (q[1]-ve[1])**2 + (q[2]-ve[2])**2;
+            if (d < best1) { best1 = d; i1 = k; }
+        }
+    }
+
+    // 2. 重心から水平に一番遠い点（肝臓のへり）
+    let i2 = 0, best2 = -1;
+    for (let k = 0; k < nv; k++) {
+        const q = at(k);
+        const d = (q[0]-cx)**2 + (q[2]-cz)**2;
+        if (d > best2) { best2 = d; i2 = k; }
+    }
+
+    // 3. その反対側の端（2 から一番遠い点）＝バウンディングボックスのもう一方の頂点
+    const q2 = at(i2);
+    let i3 = 0, best3 = -1;
+    for (let k = 0; k < nv; k++) {
+        const q = at(k);
+        const d = (q[0]-q2[0])**2 + (q[1]-q2[1])**2 + (q[2]-q2[2])**2;
+        if (d > best3) { best3 = d; i3 = k; }
+    }
+    console.log('[VRMIN] handle vertices:', i1, i2, i3, 'of', nv);
+    return [i1, i2, i3];
+}
+
 function vrminPlaceHandles(force) {
     if (!sb) return;
     const have = sb.getNumHandleSpheres();
     if (have >= 3) return;
     if (have > 0) { if (!force) return; sb.clearHandleSpheres(); }
 
+    if (!vrminHandleIdx) vrminHandleIdx = vrminPickHandleIndices();
+    if (!vrminHandleIdx) return;
+
+    const pos = sb.getHighResPositions();
     const cx = sb.getMeshCentroidX(), cy = sb.getMeshCentroidY(), cz = sb.getMeshCentroidZ();
     const R = 6.0;
-    // addHandleSphereVR は縦に近いレイでは当たらない（Quest 3 実測）。内部の点を水平に狙う。
-    const aim = (tx, ty, tz, ax, az) => {
-        const L = Math.hypot(ax, az) || 1;
-        return sb.addHandleSphereVR(tx + (ax/L)*R, ty, tz + (az/L)*R, -(ax/L), 0, -(az/L), VRMIN_HANDLE_R);
-    };
-    // ある点へ、重心から見た方位で当てにいく
-    const aimAt = (t, outward) => {
-        const ax = (outward ? 1 : 1) * (t[0] - cx), az = (t[2] - cz);
-        if (Math.hypot(ax, az) < 1e-3) return aim(t[0], t[1], t[2], 1, 0);
-        return aim(t[0], t[1], t[2], ax, az);
-    };
-
-    // 肝臓表面の「外側の端」= 重心から水平に一番遠い頂点（三角間膜のあたり）
-    const lateralTip = () => {
-        const pos = sb.getHighResPositions();
-        if (!pos || pos.length < 3) return null;
-        let best = -1, bx = 0, by = 0, bz = 0;
-        for (let k = 0; k < pos.length; k += 3) {
-            const dx = pos[k] - cx, dz = pos[k+2] - cz;
-            const d = dx*dx + dz*dz;
-            if (d > best) { best = d; bx = pos[k]; by = pos[k+1]; bz = pos[k+2]; }
-        }
-        // 端そのものだと尖っていて掴みにくいので、ほんの少しだけ内側へ寄せる
-        return [cx + (bx-cx)*0.94, by, cz + (bz-cz)*0.94];
-    };
-
-    // 子メッシュのうち、肝臓重心から一番遠い頂点（＝肝臓から飛び出している先端）
-    const childTip = (label) => {
-        if (typeof childBuffers === 'undefined') return null;
-        for (let i = 0; i < childBuffers.length; i++) {
-            if (childBuffers[i].label !== label) continue;
-            const q = sb.getChildHighResPositions(i);
-            if (!q || q.length < 3) return null;
-            let best = -1, t = null;
-            for (let k = 0; k < q.length; k += 3) {
-                const dx = q[k]-cx, dy = q[k+1]-cy, dz = q[k+2]-cz;
-                const d = dx*dx + dy*dy + dz*dz;
-                if (d > best) { best = d; t = [q[k], q[k+1], q[k+2]]; }
-            }
-            return t;
-        }
-        return null;
-    };
-
     let placed = 0;
-    const log = [];
-
-    // 1. 肝静脈のところ（裏側）— ここは現状どおり
-    const ve = vrminChildCentroid('Vein');
-    if (ve && aimAt(ve)) { placed++; log.push('vein'); }
-
-    // 2. 肝臓のへり（向かって外側の一番端）
-    const lt = lateralTip();
-    if (lt && aimAt(lt)) { placed++; log.push('lateral edge'); }
-
-    // 3. 静脈が肝臓から飛び出ているところ（左右の中間・真後ろあたり）
-    const vt = childTip('Vein');
-    if (vt && aimAt(vt)) { placed++; log.push('vein outlet'); }
-
-    // 足りなければ重心狙いで埋める（形が変わっても 3 個は出す）
-    for (let k = 0; placed < 3 && k < 6; k++) {
-        const r = (k * 60) * Math.PI / 180;
-        if (aim(cx, cy, cz, Math.cos(r), Math.sin(r))) { placed++; log.push('fallback'); }
+    for (const k of vrminHandleIdx) {
+        const t = [pos[k*3], pos[k*3+1], pos[k*3+2]];
+        // 表面の点なので、重心からその点へ向かうレイで当てられる。
+        // addHandleSphereVR は縦に近いレイでは当たらない（Quest 3 実測）ので水平でも試す。
+        let d = [t[0]-cx, t[1]-cy, t[2]-cz];
+        const dl = Math.hypot(d[0], d[1], d[2]) || 1;
+        d = [d[0]/dl, d[1]/dl, d[2]/dl];
+        if (sb.addHandleSphereVR(t[0]+d[0]*R, t[1]+d[1]*R, t[2]+d[2]*R, -d[0], -d[1], -d[2], VRMIN_HANDLE_R)) { placed++; continue; }
+        const hl = Math.hypot(d[0], d[2]) || 1;
+        if (sb.addHandleSphereVR(t[0]+(d[0]/hl)*R, t[1], t[2]+(d[2]/hl)*R, -(d[0]/hl), 0, -(d[2]/hl), VRMIN_HANDLE_R)) placed++;
     }
-    console.log('[VRMIN] handles:', placed, '/ 3', log.join(', '));
+    console.log('[VRMIN] handles placed:', placed, '/ 3 (by vertex index)');
 }
 
 // ---- [demo-vr-min-v1] 肝臓のすぐ下に出す RESET / EXIT ボタン ----------
@@ -4968,8 +4963,7 @@ let vrminHandleRetry = 0;
 let vrminHasCut = false;     // 最初の 1 カットが終わったか（対象切り替えの解禁条件）
 function vrminEnsureHandles() {
     if (!sb) return;
-    // 最初に置いた位置を覚えていれば、そこへ戻す（リセットで位置が変わらないように）
-    if (vrminHandleLocal && vrminRestoreHandles()) { vrminHandleRetry = 0; return; }
+    // 頂点番号で固定しているので、そのまま置き直せば同じ場所に戻る
     vrminPlaceHandles(true);
     if (sb.getNumHandleSpheres() >= 3) {
         if (vrminHandleRetry > 0) console.log('[VRMIN] handles settled after', vrminHandleRetry, 'retries');
