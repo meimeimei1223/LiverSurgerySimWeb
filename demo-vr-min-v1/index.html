@@ -4647,44 +4647,53 @@ function vrminPlaceHandles() {
     if (!sb || sb.getNumHandleSpheres() > 0) return;
     const cx = sb.getMeshCentroidX(), cy = sb.getMeshCentroidY(), cz = sb.getMeshCentroidZ();
     const R = 6.0;   // シミュレーション単位。モデル (4.7 x 3.5 x 3.8) の外側から撃つ
-    // 重心の外側から中心へレイを撃つ。必ず表面に当たるので座標を直接指定しなくてよい。
-    const dirs = [[-0.55, 0.35, 1.0], [0.15, 0.50, 1.0]];
+
+    // addHandleSphereVR は縦向きのレイでは当たらない（Quest 3 実測: ±X と ±Z は当たるが
+    // ±Y はどの距離でも外れる）。ワールド固定の方向で撃つとモデルを回した後に外れ、
+    // リセット後にハンドルが 1 個しか戻らなかった（2026-09-21）。
+    // そこで「メッシュ内部の点を水平に狙う」方式にする。内部を通る水平レイは必ず表面に当たる。
+    const aim = (tx, ty, tz, ax, az) => {
+        const L = Math.hypot(ax, az) || 1;
+        const ux = ax / L, uz = az / L;
+        return sb.addHandleSphereVR(tx + ux*R, ty, tz + uz*R, -ux, 0, -uz, VRMIN_HANDLE_R);
+    };
+
+    // 1本目は門脈のところ。門脈は肝臓の内部にあるので、その高さを水平に狙えば
+    // 肝臓表面のうち門脈に一番近いところに付く（本人指定、2026-09-21）。
+    const po = vrminChildCentroid('Portal');
+    let baseX = 1, baseZ = 0;
+    if (po) {
+        const dx = po[0] - cx, dz = po[2] - cz;
+        const dL = Math.hypot(dx, dz);
+        if (dL > 1e-3) { baseX = dx / dL; baseZ = dz / dL; }
+    }
     let placed = 0;
-    for (const d of dirs) {
-        const L = Math.hypot(d[0], d[1], d[2]) || 1;
-        const ux = d[0]/L, uy = d[1]/L, uz = d[2]/L;
-        if (sb.addHandleSphereVR(cx + ux*R, cy + uy*R, cz + uz*R, -ux, -uy, -uz, VRMIN_HANDLE_R)) placed++;
+    if (po && aim(po[0], po[1], po[2], baseX, baseZ)) placed++;
+    else if (aim(cx, cy, cz, baseX, baseZ)) placed++;
+
+    // 残り2本は重心を狙い、方位を 120 度ずつ回して三方から掴めるようにする
+    for (const deg of [120, 240]) {
+        const r = deg * Math.PI / 180;
+        const ax = baseX * Math.cos(r) - baseZ * Math.sin(r);
+        const az = baseX * Math.sin(r) + baseZ * Math.cos(r);
+        if (aim(cx, cy, cz, ax, az)) placed++;
     }
-    // 3個目は胆嚢の横（肝臓の外側面）。
-    //   addHandleSphereVR は縦向きのレイでは当たらない（Quest 3 で実測: ±X と ±Z は当たるが
-    //   ±Y はどの距離でも外れる）。胆嚢は肝臓のほぼ真下にあるので、重心から胆嚢への方向を
-    //   そのまま撃つと必ず外れる。水平成分だけを使い、高さは胆嚢と肝臓重心の間 (60%) を狙う。
-    const gb = vrminChildCentroid('GB');
-    if (gb) {
-        const hx = gb[0] - cx, hz = gb[2] - cz;
-        const hL = Math.hypot(hx, hz) || 1;
-        const ux = hx/hL, uz = hz/hL;
-        //   高さは胆嚢のやや上。完全に重ねると胆嚢と見分けがつかない（実機判断）。
-        const ty = gb[1] + 0.8 * (cy - gb[1]);
-        if (sb.addHandleSphereVR(gb[0] + ux*R, ty, gb[2] + uz*R, -ux, 0, -uz, VRMIN_HANDLE_R)) placed++;
-        else console.warn('[VRMIN] GB-side handle missed');
-        console.log('[VRMIN] GB centroid', gb.map(v => +v.toFixed(2)), 'aim height', +ty.toFixed(2));
-    } else {
-        console.warn('[VRMIN] GB not found; only', placed, 'handles');
-    }
-    console.log('[VRMIN] preset handles placed:', placed, '/ 3');
+    console.log('[VRMIN] preset handles placed:', placed, '/ 3',
+                po ? '(portal)' : '(no portal)');
 }
 
 // ---- [demo-vr-min-v1] 肝臓のすぐ下に出す RESET / EXIT ボタン ----------
 //   既存の 3D パネル (drawPanelCanvas / panelHitTest) には触らない。独立した板として描く。
 //   来場者が自分でやり直せる・抜けられるようにするため（実機判断、2026-09-21）。
-const VRMIN_BAR_W = 512, VRMIN_BAR_H = 128;     // キャンバス px
-const VRMIN_BAR_HW = 0.17, VRMIN_BAR_HH = 0.045; // 実寸の半分 (34cm x 9cm)
-const VRMIN_BAR_DROP = 0.24;                     // 肝臓重心の下 24cm
+const VRMIN_BAR_W = 640, VRMIN_BAR_H = 360;      // キャンバス px
+const VRMIN_BAR_HW = 0.19, VRMIN_BAR_HH = 0.107;  // 実寸の半分 (38cm x 21cm)
+const VRMIN_BAR_BTN_V = 0.66;                     // これより下がボタン帯 (0=上端, 1=下端)
+const VRMIN_BAR_DROP = 0.30;                      // 肝臓重心の下 30cm
 let vrminBarCanvas = null, vrminBarCtx = null, vrminBarTex = null;
 let bVrminBarVtx = null, bVrminBarUV = null;
 let vrminBarCenter = null, vrminBarRight = null, vrminBarUp = null;
 let vrminBarHover = -1;      // -1:なし 0:RESET 1:EXIT
+let vrminBarFixed = false;   // 一度置いたらワールド固定
 
 function vrminBarDrawCanvas() {
     if (!vrminBarCanvas) {
@@ -4699,17 +4708,47 @@ function vrminBarDrawCanvas() {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     }
     const c = vrminBarCtx, W = VRMIN_BAR_W, H = VRMIN_BAR_H, half = W / 2;
+    const btnTop = Math.round(H * VRMIN_BAR_BTN_V), btnH = H - btnTop;
     c.clearRect(0, 0, W, H);
+
+    // 操作説明（会場が国際学会なので英語）
+    c.fillStyle = 'rgba(12,16,26,0.88)';
+    c.fillRect(0, 0, W, btnTop);
+    c.strokeStyle = 'rgba(255,255,255,0.25)';
+    c.lineWidth = 2;
+    c.strokeRect(2, 2, W - 4, btnTop - 4);
+    const rows = [
+        ['LEFT index',   'move the liver', '#8ad8ff'],
+        ['LEFT middle',  'pull a handle',  '#8ad8ff'],
+        ['RIGHT index',  'cut',            '#ffd27d'],
+        ['RIGHT middle', 'change target',  '#ffd27d'],
+    ];
+    c.textBaseline = 'middle';
+    const rowH = (btnTop - 24) / rows.length;
+    rows.forEach((r, i) => {
+        const y = 18 + rowH * (i + 0.5);
+        c.textAlign = 'left';
+        c.fillStyle = r[2];
+        c.font = 'bold 29px Arial';
+        c.fillText(r[0], 20, y);
+        c.fillStyle = 'rgba(255,255,255,0.5)';
+        c.font = '25px Arial';
+        c.fillText('pinch', 224, y);
+        c.fillStyle = '#ffffff';
+        c.font = 'bold 29px Arial';
+        c.fillText(r[1], 318, y);
+    });
+
     const btn = (x, w, label, base, hot, on) => {
         c.fillStyle = on ? hot : base;
-        c.fillRect(x + 8, 8, w - 16, H - 16);
+        c.fillRect(x + 8, btnTop + 6, w - 16, btnH - 14);
         c.strokeStyle = on ? '#ffffff' : 'rgba(255,255,255,0.55)';
         c.lineWidth = on ? 6 : 3;
-        c.strokeRect(x + 8, 8, w - 16, H - 16);
+        c.strokeRect(x + 8, btnTop + 6, w - 16, btnH - 14);
         c.fillStyle = '#ffffff';
-        c.font = 'bold 54px Arial';
+        c.font = 'bold 46px Arial';
         c.textAlign = 'center'; c.textBaseline = 'middle';
-        c.fillText(label, x + w / 2, H / 2 + 2);
+        c.fillText(label, x + w / 2, btnTop + btnH / 2);
     };
     btn(0,    half, 'RESET', 'rgba(190,120,20,0.92)', 'rgba(240,160,30,0.98)', vrminBarHover === 0);
     btn(half, half, 'EXIT',  'rgba(150,40,40,0.92)',  'rgba(215,60,60,0.98)',  vrminBarHover === 1);
@@ -4727,7 +4766,10 @@ function vrminBarHitTest(fx, fy, fz) {
     const ny = vrminBarRight[2]*vrminBarUp[0] - vrminBarRight[0]*vrminBarUp[2];
     const nz = vrminBarRight[0]*vrminBarUp[1] - vrminBarRight[1]*vrminBarUp[0];
     if (Math.abs(dx*nx + dy*ny + dz*nz) > 0.06) return null;
-    if (Math.abs(lx) > VRMIN_BAR_HW * 1.15 || Math.abs(ly) > VRMIN_BAR_HH * 1.6) return null;
+    if (Math.abs(lx) > VRMIN_BAR_HW * 1.15) return null;
+    // 板の上 2/3 は説明。押せるのは下のボタン帯だけ。
+    const vv = (1 - ly / VRMIN_BAR_HH) / 2;          // 0=上端, 1=下端
+    if (vv < VRMIN_BAR_BTN_V || vv > 1.3) return null;
     return lx < 0 ? 0 : 1;
 }
 
@@ -4747,17 +4789,23 @@ function vrminBarAction(which) {
 
 function drawVrminBar(V, P) {
     if (!VRMIN || !pPanel || !LPanel || !vrHeadPos || !sb) return;
-    const vrPos = simToVR(sb.getMeshCentroidX(), sb.getMeshCentroidY(), sb.getMeshCentroidZ());
-    const by = vrPos[1] - VRMIN_BAR_DROP;
-    // 頭の方を向かせる（drawFragPopPanel と同じ作り）
-    let tx = vrHeadPos[0] - vrPos[0], ty = vrHeadPos[1] - by, tz = vrHeadPos[2] - vrPos[2];
-    const tL = Math.hypot(tx, ty, tz) || 1; tx /= tL; ty /= tL; tz /= tL;
-    let rx = tz, ry = 0, rz = -tx;
-    const rL = Math.hypot(rx, rz) || 1; rx /= rL; rz /= rL;
-    const ux = ty*rz - tz*ry, uy = tz*rx - tx*rz, uz = tx*ry - ty*rx;
-    vrminBarCenter = [vrPos[0], by, vrPos[2]];
-    vrminBarRight = [rx, ry, rz];
-    vrminBarUp = [ux, uy, uz];
+    // ワールドに固定する。肝臓に追従させると、モデルを動かすたびにボタンまで動いて
+    // どこにあるか分からなくなる（実機判断、2026-09-21）。
+    if (!vrminBarFixed) {
+        const vrPos = simToVR(sb.getMeshCentroidX(), sb.getMeshCentroidY(), sb.getMeshCentroidZ());
+        const by = vrPos[1] - VRMIN_BAR_DROP;
+        let tx = vrHeadPos[0] - vrPos[0], ty = vrHeadPos[1] - by, tz = vrHeadPos[2] - vrPos[2];
+        const tL = Math.hypot(tx, ty, tz) || 1; tx /= tL; ty /= tL; tz /= tL;
+        let r0 = tz, r1 = 0, r2 = -tx;
+        const rL = Math.hypot(r0, r2) || 1; r0 /= rL; r2 /= rL;
+        vrminBarCenter = [vrPos[0], by, vrPos[2]];
+        vrminBarRight = [r0, r1, r2];
+        vrminBarUp = [ty*r2 - tz*r1, tz*r0 - tx*r2, tx*r1 - ty*r0];
+        vrminBarFixed = true;
+        console.log('[VRMIN] bar fixed at', vrminBarCenter.map(v => +v.toFixed(2)));
+    }
+    const rx = vrminBarRight[0], ry = vrminBarRight[1], rz = vrminBarRight[2];
+    const ux = vrminBarUp[0], uy = vrminBarUp[1], uz = vrminBarUp[2];
 
     vrminBarDrawCanvas();
 
@@ -5791,6 +5839,7 @@ function onXREnd() {
         arPrevVRState = null;
     }
     arMode = null;
+    vrminBarFixed = false;   // [demo-vr-min-v1] 次のセッションで置き直す
     arInitialPlacePending = false;
     arActiveTouchSource = null;
     // Phase 2: hit-test 状態リセット
