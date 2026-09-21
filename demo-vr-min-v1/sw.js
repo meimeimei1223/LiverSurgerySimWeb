@@ -28,6 +28,8 @@ const ASSETS = [
   './data/segment_icon.png',
   './data/transform_icon.png',
   './data/reset_icon.png',
+  './data/vrmin_icon.png',
+  './manifest.json',
 ];
 
 // install: プリキャッシュ

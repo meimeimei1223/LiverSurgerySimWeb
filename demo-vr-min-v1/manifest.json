@@ -10,7 +10,7 @@
   "theme_color": "#00d4ff",
   "icons": [
     {
-      "src": "data/cut_icon.png",
+      "src": "data/vrmin_icon.png",
       "sizes": "128x128",
       "type": "image/png",
       "purpose": "any maskable"
