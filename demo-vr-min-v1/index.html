@@ -4853,6 +4853,7 @@ function vrminBarAction(which) {
     vrminHandleRetry = 0;
     vrminHasCut = false;                            // 対象切り替えも最初の状態へ
     cutTargetMeshIdx = -1; vrCutTargetIdx = 0;
+    sb.setCutterScale(cutterTargetScales.liver);    // 刃の大きさも初期値へ
     vrminEnsureHandles();                           // doReset がハンドルを消すので置き直す
     if (typeof setActionMode === 'function') setActionMode('freeCut');
     cutTargetMeshIdx = -1; vrCutTargetIdx = 0;
@@ -4954,6 +4955,9 @@ function vrminSetup() {
     cutTargetMeshIdx = -1;      // 切る対象は肝臓固定。門脈・静脈は表示のみ
     vrCutTargetIdx = 0;
     vrDeformSub = 'none'; handleMode = false; deformSub = 'none';
+    // 刃の大きさを明示しておく。設定しないと WASM 側の既定のままで、
+    // 中指で対象を替えるまで極端に小さい刃で始まってしまう（実機指摘、2026-09-21）。
+    sb.setCutterScale(cutterTargetScales.liver);
     vrminEnsureHandles();
     console.log('[VRMIN] ready: right index = cut, left index = pull, handles =',
                 sb.getNumHandleSpheres(), 'liver alpha =', VRMIN_LIVER_ALPHA + '%');
