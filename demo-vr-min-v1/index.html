@@ -6131,6 +6131,9 @@ function renderXR(time, frame) {
         //       両 panel とも DEPTH_TEST 無効なので、描画順がそのまま前後関係を決める。
         if (!isPhoneAR) drawTestCube(V, P, pose);
         if (!isPhoneAR) drawSidePanel(V, P);
+        // [demo-vr-min-v1] RESET / EXIT + 操作説明。既存パネルと同じくシーンより先に描く。
+        //   後ろで描くと深度テスト無効のため肝臓を覆ってしまう（実機指摘、2026-09-21）。
+        if (!isPhoneAR && VRMIN) drawVrminBar(V, P);
 
         // メインメッシュ + 子メッシュ描画
         drawSceneXR(M, V, P, cp);
@@ -6144,8 +6147,6 @@ function renderXR(time, frame) {
         // フラグメント選択ポップアップ（肝臓の上）
         if (vrFragmentPending) drawFragPopPanel(V, P);
 
-        // [demo-vr-min-v1] 肝臓の下の RESET / EXIT
-        if (!isPhoneAR && VRMIN) drawVrminBar(V, P);
 
         // レーザー描画（Handle Place モード時）
         if (!isPhoneAR) drawVRLaser(V, P);
