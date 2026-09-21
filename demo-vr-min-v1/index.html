@@ -7477,9 +7477,17 @@ function drawTestCube(V, P, pose) {
             //   誤ホバーを距離で解決しつつ、説明員が振り向けば Reset に手が届く。
             //   drawPanelCanvas() と panelHitTest() には触らない — 置き場所だけを変える。
             //   この関数の f は「後ろ」向き（正面は -f）。
-            const cX = p.x + rx*VRMIN_PANEL_SIDE + fx*VRMIN_PANEL_BACK - ux*VRMIN_PANEL_DOWN;
-            const cY = p.y + ry*VRMIN_PANEL_SIDE + fy*VRMIN_PANEL_BACK - uy*VRMIN_PANEL_DOWN;
-            const cZ = p.z + rz*VRMIN_PANEL_SIDE + fz*VRMIN_PANEL_BACK - uz*VRMIN_PANEL_DOWN;
+            // 基準は頭ではなく肝臓。頭を基準にすると、入った瞬間の立ち位置と向きで
+            // パネルだけが動き、AR と VR で配置が変わって見える（実機指摘、2026-09-21）。
+            // 肝臓はワールド固定なので、そこから測れば毎回同じ場所に出る。
+            let aX = p.x, aY = p.y, aZ = p.z;
+            if (VRMIN && sb) {
+                const lv = simToVR(sb.getMeshCentroidX(), sb.getMeshCentroidY(), sb.getMeshCentroidZ());
+                aX = lv[0]; aY = p.y; aZ = lv[2];   // 高さは目線に合わせる
+            }
+            const cX = aX + rx*VRMIN_PANEL_SIDE + fx*VRMIN_PANEL_BACK - ux*VRMIN_PANEL_DOWN;
+            const cY = aY + ry*VRMIN_PANEL_SIDE + fy*VRMIN_PANEL_BACK - uy*VRMIN_PANEL_DOWN;
+            const cZ = aZ + rz*VRMIN_PANEL_SIDE + fz*VRMIN_PANEL_BACK - uz*VRMIN_PANEL_DOWN;
             // 面を頭の方へ向ける（横に置いたまま元の向きだと、振り向いても板が横を向く）
             let nX = p.x - cX, nY = p.y - cY, nZ = p.z - cZ;
             const nL = Math.hypot(nX, nY, nZ) || 1; nX/=nL; nY/=nL; nZ/=nL;
