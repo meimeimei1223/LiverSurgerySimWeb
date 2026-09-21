@@ -4615,25 +4615,53 @@ let VR_OFFSET = { x: 0, y: 1.0, z: -0.5 };  // モデル位置（目の前0.5m�
 //   「装着して10秒で、説明なしに引っ張る→切るが通る」ことだけを目的にした凍結ビルド。
 //   root (FULL) には影響しない。VRMIN を false にすれば FULL と同じ挙動に戻る。
 const VRMIN = true;
-const VRMIN_LIVER_ALPHA  = 60;    // %。血管が透け、かつ切断面が読める値（実機で決定）
+const VRMIN_LIVER_ALPHA  = 100;   // %。不透明のまま始める — 切断面が一番読みやすい（実機判断）
+                                  //   血管を透かしたい時は説明員がパネルの Visibility で下げる
 const VRMIN_HANDLE_R     = 0.5;   // ハンドル球の半径（VR 経路の既定値と同じ）
 // パネルの初期配置: 来場者の正面視野から外し、説明員が振り向けば Reset に届く位置
-const VRMIN_PANEL_SIDE   = 0.55;  // 右へ (m)
-const VRMIN_PANEL_BACK   = 0.10;  // 後ろへ (m)
-const VRMIN_PANEL_DOWN   = 0.12;  // 下へ (m)
-//   距離 0.57m / 正面から約 100 度。正面視野には入らないが、体を捻らずに手が届く。
-//   当初 0.75/0.25/0.15 (0.79m) にしたが、Visibility を操作するには遠すぎた（実機判断）。
+const VRMIN_PANEL_SIDE   = 0.44;  // 右へ (m)
+const VRMIN_PANEL_BACK   = 0.06;  // 後ろへ (m)
+const VRMIN_PANEL_DOWN   = 0.10;  // 下へ (m)
+//   距離 0.45m / 正面から約 98 度。正面視野には入らないまま、腕を伸ばせば操作できる。
+//   0.79m → 0.56m → 0.45m と実機で詰めた（Visibility を触るには近い方がよい）。
+
+// 子メッシュの重心（シミュレーション座標）。ラベルで引く — 読み込み順に依存させない。
+function vrminChildCentroid(label) {
+    if (typeof childBuffers === 'undefined') return null;
+    for (let i = 0; i < childBuffers.length; i++) {
+        if (childBuffers[i].label !== label) continue;
+        const pos = sb.getChildHighResPositions(i);
+        if (!pos || pos.length < 3) return null;
+        let x = 0, y = 0, z = 0;
+        for (let k = 0; k < pos.length; k += 3) { x += pos[k]; y += pos[k+1]; z += pos[k+2]; }
+        const nv = pos.length / 3;
+        return [x/nv, y/nv, z/nv];
+    }
+    return null;
+}
 
 function vrminPlaceHandles() {
     if (!sb || sb.getNumHandleSpheres() > 0) return;
     const cx = sb.getMeshCentroidX(), cy = sb.getMeshCentroidY(), cz = sb.getMeshCentroidZ();
+    const R = 6.0;   // シミュレーション単位。モデル (4.7 x 3.5 x 3.8) の外側から撃つ
     // 重心の外側から中心へレイを撃つ。必ず表面に当たるので座標を直接指定しなくてよい。
-    const dirs = [[-0.55, 0.35, 1.0], [0.15, 0.50, 1.0], [0.80, 0.25, 1.0]];
+    const dirs = [[-0.55, 0.35, 1.0], [0.15, 0.50, 1.0]];
+    // 3個目は胆嚢の横（肝臓の外側面）に固定する。胆嚢の重心方向へ撃てば、
+    // 肝臓の表面のうち胆嚢に一番近いところに当たる（実機判断、2026-09-21）。
+    const gb = vrminChildCentroid('GB');
+    if (gb) {
+        const gx = gb[0]-cx, gy = gb[1]-cy, gz = gb[2]-cz;
+        const gL = Math.hypot(gx, gy, gz) || 1;
+        dirs.push([gx/gL, gy/gL, gz/gL]);
+        console.log('[VRMIN] GB centroid', gb.map(v => +v.toFixed(2)));
+    } else {
+        dirs.push([0.80, 0.25, 1.0]);   // 胆嚢が読めなかった時の従来値
+        console.warn('[VRMIN] GB not found, falling back to a fixed direction');
+    }
     let placed = 0;
     for (const d of dirs) {
         const L = Math.hypot(d[0], d[1], d[2]) || 1;
         const ux = d[0]/L, uy = d[1]/L, uz = d[2]/L;
-        const R = 6.0;   // シミュレーション単位。モデル (4.7 x 3.5 x 3.8) の外側
         if (sb.addHandleSphereVR(cx + ux*R, cy + uy*R, cz + uz*R, -ux, -uy, -uz, VRMIN_HANDLE_R)) placed++;
     }
     console.log('[VRMIN] preset handles placed:', placed, '/', dirs.length);
