@@ -3267,7 +3267,9 @@ function drawHandleSpheres3D(M, V, P, cp) {
     for (let i = 0; i < data.length; i += 4) {
         const cx = data[i], cy = data[i+1], cz = data[i+2], r = data[i+3];
         const idx = (i/4) % HANDLE_COLORS_F.length;
-        const c = HANDLE_COLORS_F[idx];
+        // [demo-vr-min-v1] 既定の赤→緑→青は肝臓 (赤) や静脈 (シアン) と同化して見つけにくい。
+        //   3 個とも黄色にして「黄色い球を引っ張る」と一目で分かるようにする（実機判断）。
+        const c = VRMIN ? [1.0, 0.95, 0.15] : HANDLE_COLORS_F[idx];
 
         // モデル行列: translate(cx,cy,cz) * scale(r)
         const sm = [
@@ -4662,7 +4664,8 @@ function vrminPlaceHandles() {
         const hx = gb[0] - cx, hz = gb[2] - cz;
         const hL = Math.hypot(hx, hz) || 1;
         const ux = hx/hL, uz = hz/hL;
-        const ty = gb[1] + 0.6 * (cy - gb[1]);
+        //   高さは胆嚢のやや上。完全に重ねると胆嚢と見分けがつかない（実機判断）。
+        const ty = gb[1] + 0.8 * (cy - gb[1]);
         if (sb.addHandleSphereVR(gb[0] + ux*R, ty, gb[2] + uz*R, -ux, 0, -uz, VRMIN_HANDLE_R)) placed++;
         else console.warn('[VRMIN] GB-side handle missed');
         console.log('[VRMIN] GB centroid', gb.map(v => +v.toFixed(2)), 'aim height', +ty.toFixed(2));
@@ -4670,6 +4673,137 @@ function vrminPlaceHandles() {
         console.warn('[VRMIN] GB not found; only', placed, 'handles');
     }
     console.log('[VRMIN] preset handles placed:', placed, '/ 3');
+}
+
+// ---- [demo-vr-min-v1] 肝臓のすぐ下に出す RESET / EXIT ボタン ----------
+//   既存の 3D パネル (drawPanelCanvas / panelHitTest) には触らない。独立した板として描く。
+//   来場者が自分でやり直せる・抜けられるようにするため（実機判断、2026-09-21）。
+const VRMIN_BAR_W = 512, VRMIN_BAR_H = 128;     // キャンバス px
+const VRMIN_BAR_HW = 0.17, VRMIN_BAR_HH = 0.045; // 実寸の半分 (34cm x 9cm)
+const VRMIN_BAR_DROP = 0.24;                     // 肝臓重心の下 24cm
+let vrminBarCanvas = null, vrminBarCtx = null, vrminBarTex = null;
+let bVrminBarVtx = null, bVrminBarUV = null;
+let vrminBarCenter = null, vrminBarRight = null, vrminBarUp = null;
+let vrminBarHover = -1;      // -1:なし 0:RESET 1:EXIT
+
+function vrminBarDrawCanvas() {
+    if (!vrminBarCanvas) {
+        vrminBarCanvas = document.createElement('canvas');
+        vrminBarCanvas.width = VRMIN_BAR_W; vrminBarCanvas.height = VRMIN_BAR_H;
+        vrminBarCtx = vrminBarCanvas.getContext('2d');
+        vrminBarTex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, vrminBarTex);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    }
+    const c = vrminBarCtx, W = VRMIN_BAR_W, H = VRMIN_BAR_H, half = W / 2;
+    c.clearRect(0, 0, W, H);
+    const btn = (x, w, label, base, hot, on) => {
+        c.fillStyle = on ? hot : base;
+        c.fillRect(x + 8, 8, w - 16, H - 16);
+        c.strokeStyle = on ? '#ffffff' : 'rgba(255,255,255,0.55)';
+        c.lineWidth = on ? 6 : 3;
+        c.strokeRect(x + 8, 8, w - 16, H - 16);
+        c.fillStyle = '#ffffff';
+        c.font = 'bold 54px Arial';
+        c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillText(label, x + w / 2, H / 2 + 2);
+    };
+    btn(0,    half, 'RESET', 'rgba(190,120,20,0.92)', 'rgba(240,160,30,0.98)', vrminBarHover === 0);
+    btn(half, half, 'EXIT',  'rgba(150,40,40,0.92)',  'rgba(215,60,60,0.98)',  vrminBarHover === 1);
+    gl.bindTexture(gl.TEXTURE_2D, vrminBarTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, vrminBarCanvas);
+}
+
+// 指先がバーの上にあるか。戻り値は 0:RESET 1:EXIT null:外れ
+function vrminBarHitTest(fx, fy, fz) {
+    if (!vrminBarCenter || !vrminBarRight || !vrminBarUp) return null;
+    const dx = fx - vrminBarCenter[0], dy = fy - vrminBarCenter[1], dz = fz - vrminBarCenter[2];
+    const lx = dx*vrminBarRight[0] + dy*vrminBarRight[1] + dz*vrminBarRight[2];
+    const ly = dx*vrminBarUp[0]    + dy*vrminBarUp[1]    + dz*vrminBarUp[2];
+    const nx = vrminBarRight[1]*vrminBarUp[2] - vrminBarRight[2]*vrminBarUp[1];
+    const ny = vrminBarRight[2]*vrminBarUp[0] - vrminBarRight[0]*vrminBarUp[2];
+    const nz = vrminBarRight[0]*vrminBarUp[1] - vrminBarRight[1]*vrminBarUp[0];
+    if (Math.abs(dx*nx + dy*ny + dz*nz) > 0.06) return null;
+    if (Math.abs(lx) > VRMIN_BAR_HW * 1.15 || Math.abs(ly) > VRMIN_BAR_HH * 1.6) return null;
+    return lx < 0 ? 0 : 1;
+}
+
+function vrminBarAction(which) {
+    if (which === 1) {
+        console.log('[VRMIN] EXIT pressed');
+        if (xrSession) xrSession.end();
+        return;
+    }
+    console.log('[VRMIN] RESET pressed');
+    if (typeof doReset === 'function') doReset();   // 全 Undo + ハンドル削除 + 形状復元
+    vrminPlaceHandles();                            // doReset がハンドルを消すので置き直す
+    if (typeof setActionMode === 'function') setActionMode('freeCut');
+    cutTargetMeshIdx = -1; vrCutTargetIdx = 0;
+    vrActiveAction = 'freecut';
+}
+
+function drawVrminBar(V, P) {
+    if (!VRMIN || !pPanel || !LPanel || !vrHeadPos || !sb) return;
+    const vrPos = simToVR(sb.getMeshCentroidX(), sb.getMeshCentroidY(), sb.getMeshCentroidZ());
+    const by = vrPos[1] - VRMIN_BAR_DROP;
+    // 頭の方を向かせる（drawFragPopPanel と同じ作り）
+    let tx = vrHeadPos[0] - vrPos[0], ty = vrHeadPos[1] - by, tz = vrHeadPos[2] - vrPos[2];
+    const tL = Math.hypot(tx, ty, tz) || 1; tx /= tL; ty /= tL; tz /= tL;
+    let rx = tz, ry = 0, rz = -tx;
+    const rL = Math.hypot(rx, rz) || 1; rx /= rL; rz /= rL;
+    const ux = ty*rz - tz*ry, uy = tz*rx - tx*rz, uz = tx*ry - ty*rx;
+    vrminBarCenter = [vrPos[0], by, vrPos[2]];
+    vrminBarRight = [rx, ry, rz];
+    vrminBarUp = [ux, uy, uz];
+
+    vrminBarDrawCanvas();
+
+    const hw = VRMIN_BAR_HW, hh = VRMIN_BAR_HH;
+    const cx = vrminBarCenter[0], cy = vrminBarCenter[1], cz = vrminBarCenter[2];
+    const v = new Float32Array([
+        cx-rx*hw+ux*hh, cy-ry*hw+uy*hh, cz-rz*hw+uz*hh,
+        cx+rx*hw+ux*hh, cy+ry*hw+uy*hh, cz+rz*hw+uz*hh,
+        cx+rx*hw-ux*hh, cy+ry*hw-uy*hh, cz+rz*hw-uz*hh,
+        cx-rx*hw+ux*hh, cy-ry*hw+uy*hh, cz-rz*hw+uz*hh,
+        cx+rx*hw-ux*hh, cy+ry*hw-uy*hh, cz+rz*hw-uz*hh,
+        cx-rx*hw-ux*hh, cy-ry*hw-uy*hh, cz-rz*hw-uz*hh,
+    ]);
+    const uv = new Float32Array([0,0, 1,0, 1,1, 0,0, 1,1, 0,1]);
+    if (!bVrminBarVtx) bVrminBarVtx = gl.createBuffer();
+    if (!bVrminBarUV) bVrminBarUV = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, bVrminBarVtx);
+    gl.bufferData(gl.ARRAY_BUFFER, v, gl.DYNAMIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, bVrminBarUV);
+    gl.bufferData(gl.ARRAY_BUFFER, uv, gl.STATIC_DRAW);
+
+    const I = new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
+    gl.disable(gl.DEPTH_TEST);
+    gl.disable(gl.CULL_FACE);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.useProgram(pPanel);
+    gl.uniformMatrix4fv(LPanel.uM, false, I);
+    gl.uniformMatrix4fv(LPanel.uV, false, V);
+    gl.uniformMatrix4fv(LPanel.uP, false, P);
+    gl.uniform1f(LPanel.uAlpha, 0.98);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, vrminBarTex);
+    gl.uniform1i(LPanel.uTex, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, bVrminBarVtx);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, bVrminBarUV);
+    gl.enableVertexAttribArray(1);
+    gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    gl.disableVertexAttribArray(0);
+    gl.disableVertexAttribArray(1);
+    gl.enable(gl.DEPTH_TEST);
+    gl.enable(gl.CULL_FACE);
+    gl.disable(gl.BLEND);
 }
 
 function vrminSetup() {
@@ -5960,6 +6094,9 @@ function renderXR(time, frame) {
 
         // フラグメント選択ポップアップ（肝臓の上）
         if (vrFragmentPending) drawFragPopPanel(V, P);
+
+        // [demo-vr-min-v1] 肝臓の下の RESET / EXIT
+        if (!isPhoneAR && VRMIN) drawVrminBar(V, P);
 
         // レーザー描画（Handle Place モード時）
         if (!isPhoneAR) drawVRLaser(V, P);
@@ -7778,7 +7915,21 @@ function processHandTracking(frame, src, hand) {
         // 中指が開いた（8cm以上）→ ロック解除
         if (middleDist > 0.08) vrMiddlePinchDone = false;
 
-        if (actionMode === 'freeCut' && !nearPanel && !vrFragmentPending) {
+        // [demo-vr-min-v1] 肝臓の下の RESET / EXIT。カッターより先に処理し、
+        //   バーの上ではカッターを出さない（押すつもりが切ってしまうのを防ぐ）。
+        let onVrminBar = false;
+        if (VRMIN) {
+            const hit = vrminBarHitTest(ip.x, ip.y, ip.z);
+            vrminBarHover = (hit === null) ? -1 : hit;
+            onVrminBar = (hit !== null);
+            if (onVrminBar && isPinching && panelPinchReleased) {
+                panelPinchReleased = false;
+                vrminBarAction(hit);
+                return;
+            }
+        }
+
+        if (actionMode === 'freeCut' && !nearPanel && !onVrminBar && !vrFragmentPending) {
             // ピンチなし → カッターを人差指先端に追従（プレビュー）
             if (!isPinching && !vrCutterDragging) {
                 const simPos = vrToSim(ip.x, ip.y, ip.z);
