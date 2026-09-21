@@ -828,7 +828,8 @@ let segSelectMode = null;  // null, 'liver', 'portal'
 let cutTargetMeshIdx = -1; // -1=liver, 0..N=child
 let cutterPlaced = false;
 // C++ TargetScales 準拠: 臓器別カッタースケール保持
-const cutterTargetScales = { liver: 1.0, vessel: 0.5 };
+// [demo-vr-min-v1] 会場デモでは血管も肝臓と同じ大きさの刃で切らせる（本人指定 2026-09-21）。
+const cutterTargetScales = { liver: 1.0, vessel: 1.0 };
 let cutterDragging = false;  // right drag = move
 let cutterRotating = false;  // left drag = rotate
 let cutterYaw = 0, cutterPitch = 0;
@@ -4643,8 +4644,12 @@ function vrminChildCentroid(label) {
     return null;
 }
 
-function vrminPlaceHandles() {
-    if (!sb || sb.getNumHandleSpheres() > 0) return;
+// force=true なら今あるハンドルを捨てて置き直す。
+function vrminPlaceHandles(force) {
+    if (!sb) return;
+    const have = sb.getNumHandleSpheres();
+    if (have >= 3) return;
+    if (have > 0) { if (!force) return; sb.clearHandleSpheres(); }
     const cx = sb.getMeshCentroidX(), cy = sb.getMeshCentroidY(), cz = sb.getMeshCentroidZ();
     const R = 6.0;   // シミュレーション単位。モデル (4.7 x 3.5 x 3.8) の外側から撃つ
 
@@ -4785,7 +4790,8 @@ function vrminBarAction(which) {
     }
     console.log('[VRMIN] RESET pressed');
     if (typeof doReset === 'function') doReset();   // 全 Undo + ハンドル削除 + 形状復元
-    vrminPlaceHandles();                            // doReset がハンドルを消すので置き直す
+    vrminHandleRetry = 0;
+    vrminEnsureHandles();                           // doReset がハンドルを消すので置き直す
     if (typeof setActionMode === 'function') setActionMode('freeCut');
     cutTargetMeshIdx = -1; vrCutTargetIdx = 0;
     vrActiveAction = 'freecut';
@@ -4858,6 +4864,22 @@ function drawVrminBar(V, P) {
     gl.disable(gl.BLEND);
 }
 
+// リセット直後はメッシュ側のキャッシュが更新されるまでレイが外れることがあり、
+// ハンドルが 0〜2 個しか置けずに「リセットするとハンドルが消える」ように見えていた
+// （Quest 3 で再現、2026-09-21）。3 個そろうまで数フレームかけて置き直す。
+let vrminHandleRetry = 0;
+function vrminEnsureHandles() {
+    if (!sb) return;
+    vrminPlaceHandles(true);
+    if (sb.getNumHandleSpheres() >= 3) {
+        if (vrminHandleRetry > 0) console.log('[VRMIN] handles settled after', vrminHandleRetry, 'retries');
+        vrminHandleRetry = 0;
+        return;
+    }
+    if (vrminHandleRetry++ < 15) setTimeout(vrminEnsureHandles, 80);
+    else { console.warn('[VRMIN] could not place 3 handles'); vrminHandleRetry = 0; }
+}
+
 function vrminSetup() {
     if (!sb) return;
     if (typeof onLiverAlphaSlider === 'function') onLiverAlphaSlider(VRMIN_LIVER_ALPHA);
@@ -4866,7 +4888,7 @@ function vrminSetup() {
     cutTargetMeshIdx = -1;      // 切る対象は肝臓固定。門脈・静脈は表示のみ
     vrCutTargetIdx = 0;
     vrDeformSub = 'none'; handleMode = false; deformSub = 'none';
-    vrminPlaceHandles();
+    vrminEnsureHandles();
     console.log('[VRMIN] ready: right index = cut, left index = pull, handles =',
                 sb.getNumHandleSpheres(), 'liver alpha =', VRMIN_LIVER_ALPHA + '%');
 }
